@@ -50,6 +50,9 @@ dist/
 # Secrets - NEVER commit these!
 discord-bot/.env
 discord-bot/config.json
+**/config.json
+**/.env
+*.env
 
 # Data files that may contain user info
 discord-bot/data/*.json
@@ -57,3 +60,13 @@ discord-bot/data/*.json
 
 # Windows shortcuts
 *.lnk
+
+# Virtual environments (additional patterns)
+**/venv/
+**/env/
+**/.venv/
+
+# Temporary files
+*.tmp
+*.bak
+*.cache
