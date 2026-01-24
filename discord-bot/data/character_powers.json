@@ -1,0 +1,13 @@
+{
+  "🌑┋𝐒𝐞𝐭𝐡": {
+    "power2": {
+      "name": "BING BANG",
+      "description": "seth une 2 esferas de materia y anti materia las cuales se empiezan a aniquilar entre sí, expulsando una gran energía gamma que muta a todo ser que no sea seth o sus aliados, que al terminarse la aniquilación, este no destruye **ELIMINA** todo rastro de materia del lugar afectado",
+      "type": "destructive",
+      "cooldown": 200,
+      "effect": "damage:600",
+      "image_url": null,
+      "trigger_phrase": null
+    }
+  }
+}

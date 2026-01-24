@@ -1,0 +1,20 @@
+# NLP Action Detection System Dependencies
+# Install with: pip install -r requirements_nlp.txt
+
+# Core NLP
+spacy>=3.7.0
+spacy-langdetect>=0.2.0
+
+# Web Dashboard
+flask>=3.0.0
+flask-socketio>=5.3.0
+flask-cors>=4.0.0
+python-socketio>=5.10.0
+eventlet>=0.33.3
+
+# Additional utilities
+python-dotenv>=1.0.0
+
+# Note: After installing, download spaCy language models:
+# python -m spacy download en_core_web_sm
+# python -m spacy download es_core_news_sm

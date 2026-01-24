@@ -1,0 +1,17 @@
+{
+  "judgement_slash": {
+    "triggers": ["judgement slash", "judgment cut"],
+    "damage": 50,
+    "effect": "stun"
+  },
+  "gojo_red": {
+    "triggers": ["red", "kyoshiki: sai"],
+    "damage": 75,
+    "effect": "area_of_effect"
+  },
+  "scorpion_spear": {
+    "triggers": ["get over here", "spear"],
+    "damage": 20,
+    "effect": "pull"
+  }
+}
