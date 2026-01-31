@@ -1,0 +1,17 @@
+{
+  "character_name": "\"𝕋𝕣𝕦𝕖 𝕡𝕠𝕥𝕖𝕟𝕥𝕚𝕒𝕝\" - 𝒜𝓃𝑜𝓂𝒶𝓁𝓎 SU14Y-U",
+  "evade_chance": 0.4,
+  "counter_chance": 0.2,
+  "counter_damage": 15,
+  "counter_gifs": [],
+  "evade_gifs": [],
+  "abilities": {},
+  "domain": {
+    "name": "sepa",
+    "type": "stun",
+    "duration": 30,
+    "effect_value": 15,
+    "gif": null
+  },
+  "status_inflict": {}
+}

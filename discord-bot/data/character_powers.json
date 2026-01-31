@@ -1,0 +1,146 @@
+{
+  "🌑┋𝐒𝐞𝐭𝐡": {
+    "power2": {
+      "name": "BING BANG",
+      "description": "seth une 2 esferas de materia y anti materia las cuales se empiezan a aniquilar entre sí, expulsando una gran energía gamma que muta a todo ser que no sea seth o sus aliados, que al terminarse la aniquilación, este no destruye **ELIMINA** todo rastro de materia del lugar afectado",
+      "type": "destructive",
+      "cooldown": 200,
+      "effect": "damage:600",
+      "image_url": null,
+      "trigger_phrase": null
+    },
+    "power1": {
+      "name": "golpe cargado",
+      "description": "Golpe cargado de materia la cual destruye a nivel atómico la parte afectada del rival",
+      "type": "destructive",
+      "cooldown": 30,
+      "effect": "damage:100",
+      "image_url": "https://cdn.discordapp.com/ephemeral-attachments/1427369080230248564/1464770525078229057/6014951b182e97ac2ee596bb58d384ae_2.jpg?ex=6976ad5b&is=69755bdb&hm=ab628e06c4ff43c551a3362e35fa676f0adacec09f2f1495b08eac8b420d8c8d&",
+      "trigger_phrase": null
+    }
+  },
+  "TidalPhonkAcheronWaveThinkingAeternusII": {
+    "power1": {
+      "name": "SpaceUK",
+      "description": "I verified the golden lets go",
+      "type": "defend",
+      "cooldown": 360,
+      "effect": "damage:40",
+      "image_url": null,
+      "trigger_phrase": null
+    },
+    "power2": {
+      "name": "Mamut",
+      "description": "Sabes porque los mamuts se extinguieron? Porque faltaban paputs",
+      "type": "destructive",
+      "cooldown": 400,
+      "effect": "damage:60",
+      "image_url": null,
+      "trigger_phrase": null
+    }
+  },
+  "Johnny J.  Raison D'etre 🖤": {
+    "power1": {
+      "name": "RYOUKEN ENSHOOOO—!!",
+      "description": "johnny despierta su lado dragon y obtiene una forma única, básicamente teniendo un cuerno que representan la aceptación completa de si mismo y su destino para así poder disparar un poderoso ataque combinando su técnica más inicial junto su poder dragonico y energía maldita disparando un \" GRAN REY CERO \" que corta incluso la capa de realidad circundante, para así salvar a sus compañeros",
+      "type": "destructive",
+      "cooldown": 1,
+      "effect": "damage:700",
+      "image_url": "https://cdn.discordapp.com/ephemeral-attachments/1427369080230248564/1466635799993778296/im-sorry-but-this-is-the-coolest-ichigo-has-ever-looked-v0-y3msrh6w8o5d1.jpg?ex=697d7687&is=697c2507&hm=930d0a7b0b188c404d1d6a1833646408086e2663f3b0ed2a9a4d529478bddaa6&",
+      "trigger_phrase": null
+    },
+    "power2": {
+      "name": "AIKA JŪJISHŌ—!!",
+      "description": "johnny al despertar su poder esta usa su Zanpakuto verdadero dos representaciones puras de si mismo, una cuchillo largo pastelero y una espátula offset, la verdadera forma de su alma la cual le permite liberar llamas que representan la realidad misma intentando eliminar su presencia, pero en vez de eso johnny usa esta fuerza que intenta destrozarlo para disparar una ráfaga de llamaradas que se detienen en el aire como si acomodara un pastel y después cortando por en medio creando en forma de dos medialunas que cortan destruyen todo a su paso",
+      "type": "destructive",
+      "cooldown": 1,
+      "effect": "damage:600",
+      "image_url": "https://cdn.discordapp.com/ephemeral-attachments/1427369080230248564/1466641947761316064/c9735e184ab4df97e0eb98e1bd93eb09.jpg?ex=697d7c41&is=697c2ac1&hm=c6ddecf3f3230406aec14849aaeb34a66144af0b7e3af2c94fde2ff9ee085ac1&",
+      "trigger_phrase": null
+    }
+  },
+  "Doom": {
+    "power1": {
+      "name": "Blackflash critico",
+      "description": "Este es un blackflash que ataca más halla de lo físico ataca directamente al alma capaz de aturdir a los jefes (también le permite cada golpe aumentar su potencia)",
+      "type": "destructive",
+      "cooldown": 60,
+      "effect": "damage:800",
+      "image_url": "https://cdn.discordapp.com/ephemeral-attachments/1427369080230248564/1466990880379637853/the-last-black-flash-of-jujutsu-kaisen-yuji-itadori-colored-v0-a5ktns3pxtkd1.jpg?ex=697ec139&is=697d6fb9&hm=779336e2cb0780b29f414bf1182b6e7cb504c1e64f9b1ea2b56b2889b8a3edea&",
+      "trigger_phrase": null
+    }
+  },
+  "pablo": {
+    "power1": {
+      "name": "machetaso",
+      "description": "este lanza su machete al enemigo haciendo que este se corte, luego este vuelve hacia pablo para no dejarlo indefenso estilo bumerang",
+      "type": "control",
+      "cooldown": 15,
+      "effect": "Damage:37",
+      "image_url": null,
+      "trigger_phrase": null
+    },
+    "power2": {
+      "name": "dividido",
+      "description": "este lanza al aire su machete, se divide en cuatro, se vuelven mas pequeños y es lanzado a su enemigo, para que estos se clavaran alrededor de el, perforando y entrando cada ves mas a su cuerpo, luego de esto, los machetes vuelven donde Pablo y se unen de nuevo, perforando todo lo que se les ponga adelante",
+      "type": "destructive",
+      "cooldown": 45,
+      "effect": "damage:70",
+      "image_url": null,
+      "trigger_phrase": null
+    }
+  },
+  "💮  «𝓢𝓲𝓵𝓪𝓼 | 𝓔𝓽𝓮𝓻𝓷𝓪𝓵 𝓢𝓹𝓻𝓲𝓷𝓰» 💮": {
+    "power2": {
+      "name": "Tanglecleaver [快刀亂麻]",
+      "description": "Ataque poderoso empuñando la Tiantui Starblade, usando Shin & Mang",
+      "type": "destructive",
+      "cooldown": 100,
+      "effect": "damage:100",
+      "image_url": "https://cdn.discordapp.com/ephemeral-attachments/1427369080230248564/1465158120455016578/IMG_0104.gif?ex=69781655&is=6976c4d5&hm=359a30ff974fbb622e0d0af07365e4159b24fd0b14e79954705c86b658765604&",
+      "trigger_phrase": "tanglecleaver [快刀亂麻]"
+    }
+  },
+  "M͉̅ͮ͒ͤư̡͕̭̇l̙͖̑̾ͣt̲̂̓ͩ̑ỉ͔͖̜͌p̞̈͑̚͞ḣ̖̻͛̓ẹ̿͋̒̕x̛̘̠̹͋": {
+    "power1": {
+      "name": "My Shattered Memory",
+      "description": "Una habilidad de memoria sacada de un vidrio que almacena esta habilidad, un ataque de fuego proveniente de algun \"IDIOTA\" de por hay, nadie lo va recordar.",
+      "type": "destructive",
+      "cooldown": 500,
+      "effect": "damage:55",
+      "image_url": "https://cdn.discordapp.com/ephemeral-attachments/1427369080230248564/1465180782401421415/artworks-Ltyy3kpcGFkG54iE-scyf3g-t500x500.jpg?ex=69782b70&is=6976d9f0&hm=a23d467aaa0c3849c87cb740b4072797c2880884f6e2255e349a055204cdbaca&",
+      "trigger_phrase": "\"estoy enojado con una tal lyra\" dijo antes de morir."
+    }
+  },
+  "Multiphex": {
+    "power2": {
+      "name": "\"Memory\"",
+      "description": "Un cristal unico conteniendo el poder de alguien del pasado, contiene una de sus habilidades que mas le servian, el cristal brilla de un color rojizo fuego... Nadie lo recordara cierto?",
+      "type": "destructive",
+      "cooldown": 400,
+      "effect": "buff:defense",
+      "image_url": "https://cdn.discordapp.com/ephemeral-attachments/1427369080230248564/1465190702932824064/artworks-Ltyy3kpcGFkG54iE-scyf3g-t500x500.jpg?ex=697834ad&is=6976e32d&hm=281acb255020d40ebefce0b9de89769d2799cca54e4ee13d303f8e18e5ba0ea7&",
+      "trigger_phrase": "\"estoy enojado con una tal lyra.\" dijo antes de morir."
+    },
+    "power1": {
+      "name": "\"What\" The Cat",
+      "description": "If you were given the chance to be reborn, and come out into the world as your true self, what would you want to be? Me...? I wanted to be everything. All the good parts, all the bad parts... They're important to me. All of it. I'd left a lot behind, but I know I wouldn't be here without it. I hope you'll find the strength to be reborn, too.",
+      "type": "destructive",
+      "cooldown": 1212,
+      "effect": "damage:121",
+      "image_url": "https://cdn.discordapp.com/ephemeral-attachments/1427369080230248564/1465191172715839571/Video_sin_titulo_Hecho_con_Microsoft_Clipchamp_3.gif?ex=6978351d&is=6976e39d&hm=4c40cac5cc13e15630a8e5cfdbaf0a8c3bcdc4895cf384b443a9e5009ddb9a8f&",
+      "trigger_phrase": "(trans rights)"
+    }
+  },
+  "\"𝐼𝓁𝓎𝓇𝒾𝓈𝒾𝓈\" GOX7-T": {
+    "power1": {
+      "name": "**Reversal Technique: Pulling dismantle.**",
+      "description": "Usando la logica del azul, Se genera un tipo de bala contenida que condensa la fuerza cortadora del desmantelar usando la manipulacion de la gravedad, resultando en una bala que siempre atraviesa y destroza todo a su paso",
+      "type": "destructive",
+      "cooldown": 60,
+      "effect": "damage: 1200",
+      "image_url": "https://cdn.discordapp.com/ephemeral-attachments/1425672497424236606/1465215533853970473/Screenshot_20260123_211551-2.png?ex=69784bcd&is=6976fa4d&hm=6f4db7e932a660e74f7f6cebf5055335a7d3cf14e69b441a12355f8471924af7&",
+      "trigger_phrase": null
+    }
+  }
+}

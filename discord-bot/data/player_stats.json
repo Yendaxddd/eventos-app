@@ -1,0 +1,29 @@
+{
+  "1389975939252883489": {
+    "reflect_active": false,
+    "reflect_end_time": 1769833021.9736567,
+    "reflect_multiplier": 2.0
+  },
+  "1102073491316023347": {
+    "total_attempts": 1,
+    "successful": 0,
+    "failed": 2,
+    "evades": 1,
+    "parries": 0,
+    "saves": 0,
+    "adapts": 0,
+    "best_time": 6.618384,
+    "avg_time": 6.618384,
+    "times": [
+      6.618384
+    ],
+    "current_streak": 0,
+    "best_streak": 0,
+    "parry_streak": 0,
+    "best_parry_streak": 0,
+    "evade_streak": 0,
+    "best_evade_streak": 0,
+    "black_flash_chance": 0.02,
+    "black_flashes": 0
+  }
+}

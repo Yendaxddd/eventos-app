@@ -54,9 +54,8 @@ discord-bot/config.json
 **/.env
 *.env
 
-# Data files that may contain user info
-discord-bot/data/*.json
-!discord-bot/data/.gitkeep
+# Keep data files in git for deployment (volume persists changes)
+# Data JSON files are now tracked for initial Railway deployment
 
 # Windows shortcuts
 *.lnk
