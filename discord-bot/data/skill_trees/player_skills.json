@@ -1,0 +1,22 @@
+{
+  "_comment": "Player skill tree progress - {user_id: {skill_id: rank, skill_points: X}}",
+  "_version": "1.0",
+  "752599251787448330": {
+    "skill_points": 81
+  },
+  "984522852898320424": {
+    "skill_points": 40
+  },
+  "954834739607535709": {
+    "skill_points": 51
+  },
+  "1102073491316023347": {
+    "skill_points": 29
+  },
+  "654071438030143488": {
+    "skill_points": 20
+  },
+  "1389975939252883489": {
+    "skill_points": 25
+  }
+}

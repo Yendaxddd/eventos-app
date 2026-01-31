@@ -169,6 +169,10 @@ def resolve_data_dir():
 
 DATA_DIR = resolve_data_dir()
 
+# Resolve assets directory (same folder as the script)
+ASSETS_DIR = pathlib.Path(__file__).parent / "assets"
+log.info(f"Using assets directory: {ASSETS_DIR}")
+
 def load_data(name, default):
     """Load JSON data from file"""
     try:
@@ -254,6 +258,13 @@ class AdvancedQTEBot:
         self.user_counter_gifs = load_data("user_counter_gifs", {})  # User custom counter GIFs (now supports arrays)
         self.boss_defeat_gifs = load_data("boss_defeat_gifs", [])  # Boss defeat celebration GIFs (list)
         self.player_buffs = load_data("player_buffs", {})  # Active buffs: {user_id: {buff_type: {value, expires}}}
+        
+        # ========== SKILL TREE & ACHIEVEMENTS ==========
+        self.player_skills = load_data("skill_trees/player_skills", {})  # {user_id: {skill_id: rank, skill_points: X}}
+        self.player_achievements = load_data("achievements/player_achievements", {})  # {user_id: {achievement_id: {unlocked, date}}}
+        self.skill_tree_config = self.load_skill_tree_config()
+        self.achievements_config = self.load_achievements_config()
+        # ================================================
 
         console.print(f"[yellow]✓ Loaded {len(self.character_registry)} character registrations[/yellow]")
         console.print(f"[yellow]✓ Loaded stats for {len(self.player_stats)} players[/yellow]")
@@ -331,6 +342,28 @@ class AdvancedQTEBot:
         self.counter_streaks = {}  # {user_id: streak_count} - for stun scaling
         # ======================================
         
+        # ========== DOMAIN EXPANSION SYSTEM ==========
+        self.domain_casting = {}  # {user_id: {"domain_id": str, "start_time": float, "task": asyncio.Task}}
+        self.domain_cooldowns = {}  # {user_id: {"domain_id": timestamp}} - when domain was last used
+        self.active_domain_caster = None  # user_id of current domain caster (for clash detection)
+        self.active_domain_config = None  # config of currently active domain
+        self.active_domain_end_time = None  # when active domain expires
+        # =============================================
+        
+        # ========== DOMAIN CLASH SYSTEM ==========
+        self.domain_clash_active = False
+        self.domain_clash_data = {
+            "challenger1": None,  # {"user_id": int, "domain_config": dict, "score": 0}
+            "challenger2": None,
+            "current_word": None,
+            "word_start_time": None,
+            "words_completed": 0,
+            "max_words": 5,
+            "clash_channel": None
+        }
+        self.domain_clash_gif = str(ASSETS_DIR / "Domain clash.gif")  # Local domain clash GIF
+        # =========================================
+        
         # ========== BOSS DEFEAT ANIMATION ==========
         self.default_boss_defeat_gif = "https://media1.tenor.com/m/DQZQ0cXHkjgAAAAd/one-punch-man-saitama.gif"  # Default fallback
         # boss_defeat_gifs is loaded from file - list of custom GIFs
@@ -386,6 +419,115 @@ class AdvancedQTEBot:
         # Track users who have been warned about max adaptation (prevent spam)
         self.max_adaptation_warned = {}  # {user_id: {obj_id: {difficulty: bool}}}
         # ======================================================
+        
+        # ========== TUPPERBOX BOSS SYSTEM ==========
+        # When enabled, a Tupperbox character can control the boss with manual abilities
+        self.tupperbox_boss_mode = False  # If True, boss uses Tupperbox controls instead of static
+        self.tupperbox_boss_config = load_data("tupperbox_boss_config", {
+            "character_name": None,  # Tupperbox character name controlling the boss
+            "evade_chance": 0.15,    # 15% chance to evade player attacks
+            "counter_chance": 0.20,  # 20% chance to counter after evading
+            "counter_damage": 15,    # Base damage for boss counter
+            "counter_gifs": [],      # List of counter GIFs for boss
+            "evade_gifs": [],        # List of evade GIFs for boss
+            "abilities": {},         # {ability_name: {damage, cooldown, effect, gif}}
+            "domain": None,          # Boss domain config
+            "status_inflict": {}     # {ability_name: {status: type, chance: 0-100, duration: seconds}}
+        })
+        # ============================================
+        
+        # ========== QTE VARIATIONS SYSTEM ==========
+        # New QTE types beyond standard evade/parry
+        self.qte_variations = {
+            "standard": {"weight": 60},   # Normal evade/parry QTE
+            "combo": {"weight": 15},      # Multiple button sequence
+            "direction": {"weight": 15},  # Arrow direction input
+            "fake": {"weight": 10}        # Trap - evading causes damage!
+        }
+        # Current QTE mode - can be cycled with ALT+R or *qtemode*
+        self.current_qte_mode = "standard"  # standard (evade/parry), combo, direction
+        self.qte_mode_options = ["standard", "combo", "direction"]  # Cycles: normal -> combo -> arrows
+        self.combo_qte_sequences = [
+            ["evade", "parry"],
+            ["evade", "evade", "parry"],
+            ["parry", "evade"],
+            ["evade", "parry", "evade"],
+            ["parry", "parry"]
+        ]
+        self.direction_arrows = ["⬆️", "⬇️", "⬅️", "➡️"]
+        self.direction_commands = {
+            "⬆️": ["*up*", "*u*", "*^*"],
+            "⬇️": ["*down*", "*d*", "*v*"],
+            "⬅️": ["*left*", "*l*", "*<*"],
+            "➡️": ["*right*", "*r*", "*>*"]
+        }
+        # ============================================
+        
+        # ========== STATUS EFFECTS SYSTEM ==========
+        # Active status effects on players/boss
+        self.player_status_effects = {}  # {user_id: {effect_type: {stacks, damage_per_tick, tick_interval, end_time, source}}}
+        self.boss_status_effects = {}    # Same structure but for boss
+        self.status_effect_types = {
+            "bleed": {
+                "name": "Bleed",
+                "icon": "🩸",
+                "stackable": True,
+                "max_stacks": 10,
+                "base_damage": 2,       # Per stack per tick
+                "tick_interval": 1.0,   # Seconds between ticks
+                "description": "Takes damage over time, stacks increase damage"
+            },
+            "burn": {
+                "name": "Burn",
+                "icon": "🔥",
+                "stackable": False,
+                "max_stacks": 1,
+                "base_damage": 4,
+                "tick_interval": 1.0,
+                "description": "Takes consistent fire damage over time"
+            },
+            "poison": {
+                "name": "Poison",
+                "icon": "☠️",
+                "stackable": True,
+                "max_stacks": 5,
+                "base_damage": 1,
+                "tick_interval": 2.0,
+                "description": "Slow but persistent damage"
+            },
+            "weakened": {
+                "name": "Weakened",
+                "icon": "💔",
+                "stackable": False,
+                "max_stacks": 1,
+                "base_damage": 0,
+                "tick_interval": 0,
+                "damage_reduction": 0.5,  # Deal 50% less damage
+                "description": "Reduces outgoing damage by 50%"
+            },
+            "stunned": {
+                "name": "Stunned",
+                "icon": "💫",
+                "stackable": False,
+                "max_stacks": 1,
+                "base_damage": 0,
+                "tick_interval": 0,
+                "skip_qte": True,  # Auto-fail QTEs while stunned
+                "description": "Cannot respond to QTEs"
+            },
+            "cursed": {
+                "name": "Cursed",
+                "icon": "☯️",
+                "stackable": True,
+                "max_stacks": 3,
+                "base_damage": 0,
+                "tick_interval": 0,
+                "ult_charge_reduction": 0.25,  # 25% less ult charge per stack
+                "description": "Reduces ultimate charge gain"
+            }
+        }
+        self._status_tick_task = None  # Background task for status effect ticks
+        # ============================================
         
         # ========== FAITH SYSTEM (LYRA'S SAFEGUARD) ==========
         self.faith_used_players = set()  # Track who used FAITH this event
@@ -529,6 +671,8 @@ class AdvancedQTEBot:
         save_data("user_counter_gifs", self.user_counter_gifs)  # User custom counter GIFs
         save_data("boss_defeat_gifs", self.boss_defeat_gifs)  # Boss defeat celebration GIFs
         save_data("player_buffs", self.player_buffs)  # Active buffs
+        save_data("skill_trees/player_skills", self.player_skills)  # Skill tree progress
+        save_data("achievements/player_achievements", self.player_achievements)  # Achievements
         
         # Save special objects tracking data
         self.special_objects_manager.save_tracking()
@@ -536,6 +680,21 @@ class AdvancedQTEBot:
         self._last_save_time = current_time
         self._pending_save = False
         console.print("[green]💾 Data saved to disk[/green]")
+    
+    def is_admin(self, user) -> bool:
+        """Check if a user has admin privileges (has admin role or is server administrator)"""
+        # Check if user has the designated admin role
+        if self.admin_role_id:
+            if hasattr(user, 'roles'):
+                if self.admin_role_id in [role.id for role in user.roles]:
+                    return True
+        
+        # Also check for Discord administrator permission
+        if hasattr(user, 'guild_permissions'):
+            if user.guild_permissions.administrator:
+                return True
+        
+        return False
     
     async def periodic_save(self):
         """Periodically save pending data - call from event loop"""
@@ -734,6 +893,816 @@ Your response (1-2 sentences max):"""
                         # Convert list to tuple if needed
                         self.damage_ranges[diff] = tuple(dmg) if isinstance(dmg, list) else dmg
             console.print("[cyan]✓ Loaded custom QTE settings[/cyan]")
+    
+    # ========== STATUS EFFECTS METHODS ==========
+    
+    async def apply_status_effect(self, target_id, effect_type: str, duration: float, stacks: int = 1, source: str = "unknown"):
+        """Apply a status effect to a player or boss"""
+        try:
+            effect_config = self.status_effect_types.get(effect_type)
+            if not effect_config:
+                log.warning(f"Unknown status effect: {effect_type}")
+                return False
+            
+            # Determine if target is boss or player
+            is_boss = target_id == "boss" or (self.active_boss and target_id == self.active_boss.get('name'))
+            effects_dict = self.boss_status_effects if is_boss else self.player_status_effects
+            
+            if target_id not in effects_dict:
+                effects_dict[target_id] = {}
+            
+            current_time = time.time()
+            end_time = current_time + duration
+            
+            if effect_type in effects_dict[target_id]:
+                # Effect already exists
+                existing = effects_dict[target_id][effect_type]
+                if effect_config.get("stackable", False):
+                    # Add stacks up to max
+                    max_stacks = effect_config.get("max_stacks", 1)
+                    existing["stacks"] = min(existing["stacks"] + stacks, max_stacks)
+                    existing["end_time"] = max(existing["end_time"], end_time)
+                else:
+                    # Refresh duration
+                    existing["end_time"] = max(existing["end_time"], end_time)
+            else:
+                # New effect
+                effects_dict[target_id][effect_type] = {
+                    "stacks": min(stacks, effect_config.get("max_stacks", 1)),
+                    "end_time": end_time,
+                    "last_tick": current_time,
+                    "source": source
+                }
+            
+            # Start tick task if not running
+            if self._status_tick_task is None or self._status_tick_task.done():
+                self._status_tick_task = asyncio.create_task(self._status_tick_loop())
+            
+            # Announce effect
+            icon = effect_config.get("icon", "⚠️")
+            name = effect_config.get("name", effect_type)
+            channel = self.bot.get_channel(self.qte_channel_id)
+            if channel:
+                target_name = "the boss" if is_boss else f"<@{target_id}>"
+                stack_text = f" (x{effects_dict[target_id][effect_type]['stacks']})" if effect_config.get("stackable") else ""
+                await channel.send(f"{icon} **{name}** applied to {target_name}{stack_text}! ({duration:.0f}s)")
+            
+            console.print(f"[magenta]{icon} Status effect {effect_type} applied to {target_id} for {duration}s[/magenta]")
+            return True
+            
+        except Exception as e:
+            log.error(f"Error applying status effect: {e}")
+            return False
+    
+    async def remove_status_effect(self, target_id, effect_type: str, announce: bool = True):
+        """Remove a status effect from a target"""
+        is_boss = target_id == "boss" or (self.active_boss and target_id == self.active_boss.get('name'))
+        effects_dict = self.boss_status_effects if is_boss else self.player_status_effects
+        
+        if target_id in effects_dict and effect_type in effects_dict[target_id]:
+            del effects_dict[target_id][effect_type]
+            
+            if announce:
+                effect_config = self.status_effect_types.get(effect_type, {})
+                icon = effect_config.get("icon", "✓")
+                name = effect_config.get("name", effect_type)
+                channel = self.bot.get_channel(self.qte_channel_id)
+                if channel:
+                    target_name = "the boss" if is_boss else f"<@{target_id}>"
+                    await channel.send(f"✓ **{name}** wore off on {target_name}")
+    
+    def get_active_status_effects(self, target_id) -> dict:
+        """Get all active status effects on a target"""
+        is_boss = target_id == "boss" or (self.active_boss and target_id == self.active_boss.get('name'))
+        effects_dict = self.boss_status_effects if is_boss else self.player_status_effects
+        
+        current_time = time.time()
+        active = {}
+        
+        if target_id in effects_dict:
+            for effect_type, data in effects_dict[target_id].items():
+                if data["end_time"] > current_time:
+                    active[effect_type] = data
+        
+        return active
+    
+    def has_status_effect(self, target_id, effect_type: str) -> bool:
+        """Check if target has a specific status effect"""
+        effects = self.get_active_status_effects(target_id)
+        return effect_type in effects
+    
+    def get_damage_modifier(self, user_id) -> float:
+        """Get damage modifier based on status effects (for weakened, etc)"""
+        effects = self.get_active_status_effects(user_id)
+        modifier = 1.0
+        
+        if "weakened" in effects:
+            config = self.status_effect_types.get("weakened", {})
+            reduction = config.get("damage_reduction", 0.5)
+            modifier *= (1 - reduction)
+        
+        return modifier
+    
+    def get_ult_charge_modifier(self, user_id) -> float:
+        """Get ultimate charge modifier based on status effects (for cursed, etc)"""
+        effects = self.get_active_status_effects(user_id)
+        modifier = 1.0
+        
+        if "cursed" in effects:
+            config = self.status_effect_types.get("cursed", {})
+            stacks = effects["cursed"]["stacks"]
+            reduction = config.get("ult_charge_reduction", 0.25) * stacks
+            modifier *= (1 - min(reduction, 0.75))  # Cap at 75% reduction
+        
+        return modifier
+    
+    async def _status_tick_loop(self):
+        """Background loop to process status effect ticks (DoT damage)"""
+        try:
+            while True:
+                await asyncio.sleep(0.5)  # Check every 0.5 seconds
+                
+                current_time = time.time()
+                effects_to_remove = []
+                
+                # Process player status effects
+                for user_id, effects in list(self.player_status_effects.items()):
+                    for effect_type, data in list(effects.items()):
+                        # Check expiry
+                        if data["end_time"] <= current_time:
+                            effects_to_remove.append((user_id, effect_type, False))
+                            continue
+                        
+                        # Process tick damage
+                        effect_config = self.status_effect_types.get(effect_type, {})
+                        tick_interval = effect_config.get("tick_interval", 0)
+                        base_damage = effect_config.get("base_damage", 0)
+                        
+                        if tick_interval > 0 and base_damage > 0:
+                            time_since_tick = current_time - data.get("last_tick", 0)
+                            if time_since_tick >= tick_interval:
+                                # Apply tick damage
+                                stacks = data.get("stacks", 1)
+                                tick_damage = base_damage * stacks
+                                
+                                # Apply damage silently (no big message)
+                                if user_id in self.player_hp:
+                                    old_hp = self.player_hp[user_id]['current']
+                                    self.player_hp[user_id]['current'] = max(0, old_hp - tick_damage)
+                                    data["last_tick"] = current_time
+                                    
+                                    icon = effect_config.get("icon", "💀")
+                                    console.print(f"[red]{icon} {effect_type} tick: {user_id} takes {tick_damage} damage[/red]")
+                                    
+                                    # Update HP bar
+                                    asyncio.create_task(self.update_hp_bar_display(user_id, is_boss=False))
+                
+                # Process boss status effects
+                if self.active_boss:
+                    boss_name = self.active_boss.get('name', 'boss')
+                    for effect_type, data in list(self.boss_status_effects.get(boss_name, {}).items()):
+                        if data["end_time"] <= current_time:
+                            effects_to_remove.append((boss_name, effect_type, True))
+                            continue
+                        
+                        effect_config = self.status_effect_types.get(effect_type, {})
+                        tick_interval = effect_config.get("tick_interval", 0)
+                        base_damage = effect_config.get("base_damage", 0)
+                        
+                        if tick_interval > 0 and base_damage > 0:
+                            time_since_tick = current_time - data.get("last_tick", 0)
+                            if time_since_tick >= tick_interval:
+                                stacks = data.get("stacks", 1)
+                                tick_damage = base_damage * stacks
+                                
+                                await self.damage_boss(boss_name, tick_damage)
+                                data["last_tick"] = current_time
+                                
+                                icon = effect_config.get("icon", "💀")
+                                console.print(f"[red]{icon} {effect_type} tick: Boss takes {tick_damage} damage[/red]")
+                
+                # Remove expired effects
+                for target_id, effect_type, is_boss in effects_to_remove:
+                    await self.remove_status_effect(target_id, effect_type, announce=True)
+                
+                # Check if any effects remain
+                has_effects = bool(self.player_status_effects) or bool(self.boss_status_effects)
+                if not has_effects:
+                    break  # Stop loop if no effects active
+                    
+        except asyncio.CancelledError:
+            pass
+        except Exception as e:
+            log.error(f"Error in status tick loop: {e}")
+    
+    # ========== QTE VARIATION METHODS ==========
+    
+    def select_qte_variation(self) -> str:
+        """Select a QTE variation based on current mode or weights"""
+        # If a specific mode is set (not random), use it
+        if self.current_qte_mode != "random" and self.current_qte_mode in self.qte_variations:
+            return self.current_qte_mode
+        # Random mode - use weighted selection
+        variations = list(self.qte_variations.keys())
+        weights = [self.qte_variations[v]["weight"] for v in variations]
+        return random.choices(variations, weights=weights)[0]
+    
+    def cycle_qte_mode(self) -> str:
+        """Cycle to next QTE mode and return new mode name"""
+        current_index = self.qte_mode_options.index(self.current_qte_mode)
+        next_index = (current_index + 1) % len(self.qte_mode_options)
+        self.current_qte_mode = self.qte_mode_options[next_index]
+        return self.current_qte_mode
+    
+    def generate_combo_sequence(self) -> list:
+        """Generate a combo QTE sequence"""
+        return random.choice(self.combo_qte_sequences)
+    
+    def generate_direction_sequence(self, length: int = 1) -> list:
+        """Generate direction arrows for direction QTE"""
+        return [random.choice(self.direction_arrows) for _ in range(length)]
+    
+    def check_direction_input(self, content: str, expected_arrow: str) -> bool:
+        """Check if user input matches the expected direction"""
+        content = content.lower()
+        valid_inputs = self.direction_commands.get(expected_arrow, [])
+        return any(cmd in content for cmd in valid_inputs)
+    
+    # ========== QTE VARIATION HANDLERS ==========
+    
+    async def trigger_combo_qte(self, difficulty: str, target_member, is_targeted: bool = False):
+        """Trigger a Combo QTE - 5 sequential QTEs targeting one person"""
+        try:
+            channel = self.bot.get_channel(self.qte_channel_id)
+            if not channel:
+                return
+            
+            combo_length = 5  # 5 QTEs in sequence
+            
+            qte_id = self.qte_counter
+            self.qte_counter += 1
+            
+            self.active_qtes[qte_id] = {
+                'difficulty': difficulty,
+                'mode': 'combo',
+                'variation': 'combo',
+                'start': datetime.now(timezone.utc),
+                'target': target_member,
+                'combo_index': 0,
+                'combo_length': combo_length,
+                'combo_sequence': [],  # Will store the commands needed
+                'participants': {},
+                'responses': set(),
+                'is_targeted': is_targeted
+            }
+            
+            self.session_stats['qtes_triggered'] += 1
+            
+            # Generate the combo sequence (alternating evade/parry)
+            sequence = []
+            for i in range(combo_length):
+                sequence.append('evade' if random.random() > 0.5 else 'parry')
+            self.active_qtes[qte_id]['combo_sequence'] = sequence
+            
+            emoji = self.difficulty_emoji.get(difficulty, '⚡')
+            
+            await self.webhook_send(
+                content=f"# 🔥 **COMBO QTE!** 🔥\n"
+                       f"**{difficulty.upper()}** {emoji} | {target_member.mention}\n"
+                       f"⚡ Complete **{combo_length} QTEs** in sequence!\n"
+                       f"**First:** `*{sequence[0]}*`"
+            )
+            
+            console.print(Panel.fit(
+                f"[bold red]🔥 COMBO QTE TRIGGERED[/bold red]\n"
+                f"[yellow]Target: {target_member.name}[/yellow]\n"
+                f"[cyan]Sequence: {' → '.join(sequence)}[/cyan]",
+                border_style="red"
+            ))
+            
+            # Timeout for full combo (longer than normal)
+            asyncio.create_task(self.combo_qte_timeout(qte_id, difficulty, target_member))
+            
+        except Exception as e:
+            console.print(f"[red]✗ Error triggering combo QTE: {e}[/red]")
+    
+    async def combo_qte_timeout(self, qte_id: int, difficulty: str, target_member):
+        """Handle combo QTE timeout"""
+        await asyncio.sleep(15)  # 15 seconds for full combo
+        
+        if qte_id not in self.active_qtes:
+            return
+        
+        qte_data = self.active_qtes.pop(qte_id, None)
+        if qte_data:
+            completed = qte_data.get('combo_index', 0)
+            total = qte_data.get('combo_length', 5)
+            channel = self.bot.get_channel(self.qte_channel_id)
+            
+            if completed < total:
+                await channel.send(f"❌ **COMBO FAILED!** {target_member.mention} only completed {completed}/{total}!")
+                await self.damage_player(target_member.id, difficulty)
+    
+    async def trigger_direction_qte(self, difficulty: str, target_member, is_targeted: bool = False):
+        """Trigger a Direction QTE - input OPPOSITE arrow"""
+        try:
+            channel = self.bot.get_channel(self.qte_channel_id)
+            if not channel:
+                return
+            
+            # Pick a random arrow
+            shown_arrow = random.choice(self.direction_arrows)
+            
+            # Determine correct answer (OPPOSITE direction)
+            opposite_map = {
+                "⬆️": "⬇️",
+                "⬇️": "⬆️",
+                "⬅️": "➡️",
+                "➡️": "⬅️"
+            }
+            correct_arrow = opposite_map.get(shown_arrow, "⬇️")
+            
+            qte_id = self.qte_counter
+            self.qte_counter += 1
+            
+            self.active_qtes[qte_id] = {
+                'difficulty': difficulty,
+                'mode': 'direction',
+                'variation': 'direction',
+                'start': datetime.now(timezone.utc),
+                'target': target_member,
+                'shown_arrow': shown_arrow,
+                'correct_arrow': correct_arrow,
+                'participants': {},
+                'responses': set(),
+                'is_targeted': is_targeted
+            }
+            
+            self.session_stats['qtes_triggered'] += 1
+            
+            emoji = self.difficulty_emoji.get(difficulty, '⚡')
+            
+            await self.webhook_send(
+                content=f"# 🎯 **DIRECTION QTE!** 🎯\n"
+                       f"**{difficulty.upper()}** {emoji} | {target_member.mention}\n"
+                       f"# {shown_arrow}\n"
+                       f"⚠️ **INPUT THE OPPOSITE DIRECTION!**\n"
+                       f"_Commands: `*up*` `*down*` `*left*` `*right*`_"
+            )
+            
+            console.print(Panel.fit(
+                f"[bold blue]🎯 DIRECTION QTE TRIGGERED[/bold blue]\n"
+                f"[yellow]Target: {target_member.name}[/yellow]\n"
+                f"[cyan]Shown: {shown_arrow} | Correct: {correct_arrow}[/cyan]",
+                border_style="blue"
+            ))
+            
+            asyncio.create_task(self.direction_qte_timeout(qte_id, difficulty, target_member))
+            
+        except Exception as e:
+            console.print(f"[red]✗ Error triggering direction QTE: {e}[/red]")
+    
+    async def direction_qte_timeout(self, qte_id: int, difficulty: str, target_member):
+        """Handle direction QTE timeout"""
+        timing = self.qte_times.get(difficulty, {'timeout': 3.0})
+        await asyncio.sleep(timing.get('timeout', 3.0) + 1.0)  # +1s for direction
+        
+        if qte_id not in self.active_qtes:
+            return
+        
+        qte_data = self.active_qtes.pop(qte_id, None)
+        if qte_data:
+            channel = self.bot.get_channel(self.qte_channel_id)
+            await channel.send(f"❌ **DIRECTION QTE FAILED!** {target_member.mention} didn't respond!")
+            await self.damage_player(target_member.id, difficulty)
+    
+    async def trigger_fake_qte(self, difficulty: str, target_member, is_targeted: bool = False):
+        """Trigger a Fake QTE - NO PING, any response = instant fail!"""
+        try:
+            channel = self.bot.get_channel(self.qte_channel_id)
+            if not channel:
+                return
+            
+            qte_id = self.qte_counter
+            self.qte_counter += 1
+            
+            self.active_qtes[qte_id] = {
+                'difficulty': difficulty,
+                'mode': 'fake',
+                'variation': 'fake',
+                'start': datetime.now(timezone.utc),
+                'target': target_member,
+                'participants': {},
+                'responses': set(),
+                'is_targeted': is_targeted
+            }
+            
+            self.session_stats['qtes_triggered'] += 1
+            
+            emoji = self.difficulty_emoji.get(difficulty, '⚡')
+            
+            # IMPORTANT: No mention/ping! Just a general QTE message
+            # The target is tracked internally but not pinged
+            await self.webhook_send(
+                content=f"⚡ **{difficulty.upper()} QTE** {emoji}"
+            )
+            
+            console.print(Panel.fit(
+                f"[bold purple]👻 FAKE QTE TRIGGERED[/bold purple]\n"
+                f"[yellow]Target (hidden): {target_member.name}[/yellow]\n"
+                f"[red]ANY RESPONSE = INSTANT FAIL![/red]",
+                border_style="purple"
+            ))
+            
+            asyncio.create_task(self.fake_qte_timeout(qte_id, difficulty, target_member))
+            
+        except Exception as e:
+            console.print(f"[red]✗ Error triggering fake QTE: {e}[/red]")
+    
+    async def fake_qte_timeout(self, qte_id: int, difficulty: str, target_member):
+        """Handle fake QTE timeout - success if no one responded!"""
+        timing = self.qte_times.get(difficulty, {'timeout': 3.0})
+        await asyncio.sleep(timing.get('timeout', 3.0))
+        
+        if qte_id not in self.active_qtes:
+            return  # Someone failed it already
+        
+        # Success! No one fell for it
+        qte_data = self.active_qtes.pop(qte_id, None)
+        if qte_data:
+            channel = self.bot.get_channel(self.qte_channel_id)
+            await channel.send(f"✅ **FAKE QTE!** No one fell for it! 👻")
+            console.print(f"[green]👻 Fake QTE passed - no responses[/green]")
+    
+    # ========== END QTE VARIATION HANDLERS ==========
+    
+    # ========== TUPPERBOX BOSS METHODS ==========
+    
+    def save_tupperbox_boss_config(self):
+        """Save Tupperbox boss configuration"""
+        save_data("tupperbox_boss_config", self.tupperbox_boss_config)
+    
+    async def boss_try_evade(self):
+        """Roll for boss evade chance. Returns (did_evade, gif_url or None)"""
+        if not self.tupperbox_boss_mode:
+            return False, None
+        
+        evade_chance = self.tupperbox_boss_config.get("evade_chance", 0.15)
+        if random.random() < evade_chance:
+            gifs = self.tupperbox_boss_config.get("evade_gifs", [])
+            gif = random.choice(gifs) if gifs else None
+            return True, gif
+        return False, None
+    
+    async def boss_try_counter(self):
+        """Roll for boss counter after evading. Returns (did_counter, damage, gif_url or None)"""
+        if not self.tupperbox_boss_mode:
+            return False, 0, None
+        
+        counter_chance = self.tupperbox_boss_config.get("counter_chance", 0.20)
+        if random.random() < counter_chance:
+            damage = self.tupperbox_boss_config.get("counter_damage", 15)
+            gifs = self.tupperbox_boss_config.get("counter_gifs", [])
+            gif = random.choice(gifs) if gifs else None
+            return True, damage, gif
+        return False, 0, None
+    
+    async def boss_use_ability(self, ability_name: str, targets=None) -> dict:
+        """Boss uses a configured ability"""
+        abilities = self.tupperbox_boss_config.get("abilities", {})
+        if ability_name not in abilities:
+            return {"success": False, "error": "Unknown ability"}
+        
+        ability = abilities[ability_name]
+        result = {
+            "success": True,
+            "name": ability_name,
+            "damage": ability.get("damage", 0),
+            "effect": ability.get("effect", None),
+            "gif": ability.get("gif", None),
+            "targets_hit": []
+        }
+        
+        # Apply to targets
+        if targets:
+            for target_id in targets:
+                if result["damage"] > 0:
+                    await self.damage_player(target_id, result["damage"])
+                    result["targets_hit"].append(target_id)
+                
+                # Apply status effect if configured
+                status_config = self.tupperbox_boss_config.get("status_inflict", {}).get(ability_name, {})
+                if status_config:
+                    status_type = status_config.get("status")
+                    chance = status_config.get("chance", 100)
+                    duration = status_config.get("duration", 60)
+                    
+                    if random.randint(1, 100) <= chance:
+                        await self.apply_status_effect(target_id, status_type, duration, source=ability_name)
+        
+        return result
+    
+    async def trigger_boss_domain(self, channel, domain_config: dict):
+        """Trigger the boss domain expansion"""
+        try:
+            boss_name = self.tupperbox_boss_config.get("character_name", "The Boss")
+            domain_name = domain_config.get("name", "Boss Domain")
+            domain_type = domain_config.get("type", "simple")
+            duration = domain_config.get("duration", 30)
+            effect_value = domain_config.get("effect_value", 10)
+            gif = domain_config.get("gif")
+            
+            # Create domain embed
+            embed = discord.Embed(
+                title=f"🌌 DOMAIN EXPANSION 🌌",
+                description=f"**{boss_name}** expands their domain!\n\n"
+                           f"*\"{domain_name}\"*",
+                color=discord.Color.dark_purple()
+            )
+            
+            if domain_type == "dps":
+                embed.add_field(
+                    name="☠️ Domain Effect",
+                    value=f"All players take **{effect_value} damage/second** for {duration}s!",
+                    inline=False
+                )
+            elif domain_type == "stun":
+                embed.add_field(
+                    name="🔒 Domain Effect", 
+                    value=f"All players **stunned** (auto-fail QTEs) for {effect_value}s!",
+                    inline=False
+                )
+            else:
+                embed.add_field(
+                    name="⚡ Domain Effect",
+                    value=f"Duration: {duration}s",
+                    inline=False
+                )
+            
+            if gif:
+                embed.set_image(url=gif)
+            
+            await channel.send(embed=embed)
+            
+            # Apply effects based on type
+            targets = list(self.player_hp.keys())
+            
+            if domain_type == "dps":
+                # Create a DPS task for the domain
+                asyncio.create_task(self._boss_domain_dps_loop(targets, effect_value, duration, channel))
+                
+            elif domain_type == "stun":
+                # Apply stun to all players
+                for target_id in targets:
+                    await self.apply_status_effect(target_id, "stunned", effect_value, source=domain_name)
+            
+            console.print(f"[dark_violet]🌌 Boss Domain '{domain_name}' triggered by {boss_name}[/dark_violet]")
+            return True
+            
+        except Exception as e:
+            log.error(f"Error triggering boss domain: {e}")
+            return False
+    
+    async def _boss_domain_dps_loop(self, targets: list, damage_per_second: int, duration: int, channel):
+        """Background loop for boss domain DPS"""
+        try:
+            end_time = time.time() + duration
+            tick_interval = 1.0
+            
+            while time.time() < end_time:
+                await asyncio.sleep(tick_interval)
+                
+                for target_id in targets:
+                    if target_id in self.player_hp:
+                        old_hp = self.player_hp[target_id]['current']
+                        new_hp = max(0, old_hp - damage_per_second)
+                        self.player_hp[target_id]['current'] = new_hp
+                        
+                        if old_hp != new_hp:
+                            asyncio.create_task(self.update_hp_bar_display(target_id, is_boss=False))
+                
+                console.print(f"[red]🌌 Boss Domain tick: {damage_per_second} damage to all players[/red]")
+            
+            # Domain ended
+            await channel.send("🌌 **Boss Domain Collapse!** The domain fades...")
+            console.print(f"[dark_violet]🌌 Boss domain expired[/dark_violet]")
+            
+        except asyncio.CancelledError:
+            pass
+        except Exception as e:
+            log.error(f"Error in boss domain DPS loop: {e}")
+    
+    # =============================================
+    
+    def load_skill_tree_config(self):
+        """Load skill tree definitions from JSON files"""
+        skill_trees = {}
+        tree_dir = pathlib.Path(DATA_DIR) / "skill_trees" / "templates"
+        if tree_dir.exists():
+            for tree_file in tree_dir.glob("*.json"):
+                if tree_file.name.startswith("_"):
+                    continue
+                try:
+                    with open(tree_file, 'r', encoding='utf-8') as f:
+                        tree_data = json.load(f)
+                        tree_id = tree_data.get("id", tree_file.stem)
+                        skill_trees[tree_id] = tree_data
+                        console.print(f"[cyan]✓ Loaded skill tree: {tree_data.get('name', tree_id)}[/cyan]")
+                except Exception as e:
+                    log.error(f"Failed to load skill tree {tree_file}: {e}")
+        return skill_trees
+    
+    def load_achievements_config(self):
+        """Load achievement definitions from JSON"""
+        config = load_data("achievements/achievements_config", {})
+        if config and "achievements" in config:
+            console.print(f"[gold1]✓ Loaded {len(config['achievements'])} achievements[/gold1]")
+        return config
+
+    async def check_achievements(self, user_id: int, trigger_type: str, trigger_value: int):
+        """Check if a player has earned any achievements based on a trigger.
+        
+        Args:
+            user_id: The Discord user ID
+            trigger_type: The type of trigger (e.g., 'evade_streak', 'evade_count', 'parry_count')
+            trigger_value: The current value of the trigger
+        """
+        try:
+            config = self.achievements_config
+            if not config or "achievements" not in config:
+                return
+            
+            user_id_str = str(user_id)
+            player_achievements = self.player_achievements.get(user_id_str, {})
+            
+            for ach_id, ach_data in config["achievements"].items():
+                # Skip if already unlocked
+                if ach_id in player_achievements:
+                    continue
+                
+                # Parse trigger: "evade_streak:5" -> type=evade_streak, required=5
+                trigger = ach_data.get("trigger", "")
+                if ":" not in trigger:
+                    continue
+                    
+                ach_trigger_type, ach_required = trigger.split(":", 1)
+                try:
+                    ach_required = int(ach_required)
+                except ValueError:
+                    continue
+                
+                # Check if this trigger matches
+                if ach_trigger_type != trigger_type:
+                    continue
+                
+                # Check if requirement is met
+                # Special handling for "less than" triggers
+                if ach_trigger_type == 'low_hp_parry':
+                    # For low_hp_parry, trigger_value is current HP, ach_required is threshold
+                    # Award if current HP < threshold
+                    if trigger_value < ach_required:
+                        await self.award_achievement(user_id, ach_id)
+                elif trigger_value >= ach_required:
+                    await self.award_achievement(user_id, ach_id)
+                    
+        except Exception as e:
+            console.print(f"[red]✗ Error checking achievements: {e}[/red]")
+            import traceback
+            console.print(f"[red]{traceback.format_exc()}[/red]")
+    
+    async def award_achievement(self, user_id: int, achievement_id: str):
+        """Award an achievement to a player and apply rewards."""
+        try:
+            config = self.achievements_config
+            if not config or achievement_id not in config.get("achievements", {}):
+                console.print(f"[red]Achievement {achievement_id} not found in config[/red]")
+                return False
+            
+            ach_data = config["achievements"][achievement_id]
+            user_id_str = str(user_id)
+            
+            # Initialize player achievements if needed
+            if user_id_str not in self.player_achievements:
+                self.player_achievements[user_id_str] = {}
+            
+            # Mark as unlocked
+            self.player_achievements[user_id_str][achievement_id] = {
+                "unlocked": True,
+                "date": time.strftime("%Y-%m-%d %H:%M:%S"),
+                "timestamp": time.time()
+            }
+            
+            # Apply rewards
+            reward = ach_data.get("reward", {})
+            reward_text = []
+            
+            # Skill points
+            if "skill_points" in reward:
+                sp = reward["skill_points"]
+                if user_id_str not in self.player_skills:
+                    self.player_skills[user_id_str] = {"skill_points": 0}
+                self.player_skills[user_id_str]["skill_points"] = self.player_skills[user_id_str].get("skill_points", 0) + sp
+                reward_text.append(f"**+{sp} Skill Points**")
+            
+            # Title - ADD to list (can have multiple, switch active from dashboard)
+            if "title" in reward:
+                title = reward["title"]
+                if "titles" not in self.player_achievements[user_id_str]:
+                    self.player_achievements[user_id_str]["titles"] = []
+                if title not in self.player_achievements[user_id_str]["titles"]:
+                    self.player_achievements[user_id_str]["titles"].append(title)
+                # Auto-set as active if first title
+                if "active_title" not in self.player_achievements[user_id_str]:
+                    self.player_achievements[user_id_str]["active_title"] = title
+                reward_text.append(f"**Title: {title}**")
+            
+            # Domain expansion unlock - ADD to list (can have multiple, switch active from dashboard)
+            if "domain" in reward:
+                domain_id = reward["domain"]
+                if "domains" not in self.player_achievements[user_id_str]:
+                    self.player_achievements[user_id_str]["domains"] = []
+                if domain_id not in self.player_achievements[user_id_str]["domains"]:
+                    self.player_achievements[user_id_str]["domains"].append(domain_id)
+                    
+                    # Get domain name for reward text
+                    domain_config = config.get("domains", {}).get(domain_id, {})
+                    domain_name = domain_config.get("name", domain_id)
+                    reward_text.append(f"**🌌 DOMAIN EXPANSION: {domain_name.upper()}**")
+                
+                # Auto-set as active if first domain
+                if "active_domain" not in self.player_achievements[user_id_str]:
+                    self.player_achievements[user_id_str]["active_domain"] = domain_id
+            
+            # Save data
+            save_data("achievements/player_achievements", self.player_achievements)
+            save_data("skill_trees/player_skills", self.player_skills)
+            
+            # Send achievement to DM instead of channel
+            try:
+                user = await self.bot.fetch_user(user_id)
+                if user:
+                    embed = discord.Embed(
+                        title=f"{ach_data.get('icon', '🏆')} ACHIEVEMENT UNLOCKED!",
+                        description=f"**{ach_data['name']}**\n\n*{ach_data.get('description', '')}*",
+                        color=discord.Color.gold()
+                    )
+                    
+                    if reward_text:
+                        embed.add_field(name="Rewards", value="\n".join(reward_text), inline=False)
+                    
+                    await user.send(embed=embed)
+                    console.print(f"[gold1]📬 Achievement DM sent to {user.display_name}[/gold1]")
+            except Exception as dm_error:
+                console.print(f"[yellow]⚠️ Could not DM achievement to {user_id}: {dm_error}[/yellow]")
+                # Fallback: Send to channel if DM fails
+                if ach_data.get("announce", True):
+                    channel = self.bot.get_channel(self.qte_channel_id)
+                    if channel:
+                        embed = discord.Embed(
+                            title=f"{ach_data.get('icon', '🏆')} ACHIEVEMENT UNLOCKED!",
+                            description=f"<@{user_id}> unlocked **{ach_data['name']}**!\n\n*{ach_data.get('description', '')}*",
+                            color=discord.Color.gold()
+                        )
+                        if reward_text:
+                            embed.add_field(name="Rewards", value="\n".join(reward_text), inline=False)
+                        await self.webhook_send(embed=embed)
+            
+            console.print(Panel.fit(
+                f"[gold1]🏆 ACHIEVEMENT UNLOCKED[/gold1]\n"
+                f"[yellow]User {user_id}: {ach_data['name']}[/yellow]\n"
+                f"[cyan]Rewards: {', '.join(reward_text) if reward_text else 'None'}[/cyan]",
+                border_style="gold1"
+            ))
+            
+            return True
+            
+        except Exception as e:
+            console.print(f"[red]✗ Error awarding achievement: {e}[/red]")
+            import traceback
+            console.print(f"[red]{traceback.format_exc()}[/red]")
+            return False
+    
+    async def _announce_domain_interrupt(self, user_id: int, damage_taken: int):
+        """Announce that a domain expansion was interrupted."""
+        try:
+            channel = self.bot.get_channel(self.qte_channel_id)
+            if not channel:
+                return
+                
+            member = channel.guild.get_member(user_id)
+            player_name = member.mention if member else f"<@{user_id}>"
+            
+            embed = discord.Embed(
+                title="🌌❌ DOMAIN INTERRUPTED!",
+                description=f"{player_name}'s Domain Expansion was **BROKEN**!\n\n"
+                           f"*Took {damage_taken} damage during the handsign formation!*",
+                color=discord.Color.red()
+            )
+            
+            await self.webhook_send(embed=embed)
+            
+        except Exception as e:
+            console.print(f"[red]Error announcing domain interrupt: {e}[/red]")
 
     def prompt_reset_hp_and_charges(self):
         """Ask operator whether to keep HP/charges or reset on startup"""
@@ -1358,6 +2327,28 @@ Your response (1-2 sentences max):"""
                 console.print("[yellow]✓ HP thread cleared and data reset[/yellow]")
             # ================================================
 
+            # ========== OLLAMA AI INITIALIZATION ==========
+            try:
+                # Check Ollama connection and load elbot model
+                console.print("[cyan]🤖 Initializing Ollama AI...[/cyan]")
+                models = await self.ollama_list_models()
+                if models:
+                    console.print(f"[green]✓ Ollama connected! Available models: {', '.join(models[:5])}[/green]")
+                    # Check if elbot is available
+                    if any('elbot' in m.lower() for m in models):
+                        self.ai_model = "elbot"  # Use our custom model
+                        self.ai_enabled = True
+                        # Pre-load the model
+                        await self.ollama_load_model("elbot")
+                        console.print("[green]✓ El Bot AI loaded and ready![/green]")
+                    else:
+                        console.print("[yellow]⚠️ 'elbot' model not found. Run: ollama create elbot -f Modelfile[/yellow]")
+                else:
+                    console.print("[yellow]⚠️ Ollama not responding. AI features disabled.[/yellow]")
+            except Exception as e:
+                console.print(f"[yellow]⚠️ Ollama init error: {e}[/yellow]")
+            # ==============================================
+
             try:
                 # Force sync slash commands to all guilds
                 synced_count = 0
@@ -1410,6 +2401,16 @@ Your response (1-2 sentences max):"""
             content = message.content
             content_lower = content.lower()
             
+            # ========== FINAL JUDGEMENT RESPONSE CHECK ==========
+            if await self.handle_final_judgement_response(message):
+                return  # Message consumed by Final Judgement tug-of-war
+            
+            # ========== DOMAIN CLASH RESPONSE CHECK ==========
+            if self.domain_clash_active:
+                handled = await self.handle_domain_clash_response(message)
+                if handled:
+                    return  # Don't process further if it was a clash response
+            
             # ========== AI PROMPT HANDLING (-- prefix) ==========
             if content.startswith('--') and len(content) > 2:
                 prompt = content[2:].strip()
@@ -1437,6 +2438,27 @@ Your response (1-2 sentences max):"""
                             await self.handle_ai_auto_response(message.channel, context)
                             self.ai_message_counter[channel_id] = 0
 
+            # QTE mode cycling is done via ALT+R keybind in console, not a command
+            # Modes: standard (normal evade/parry) -> combo -> direction (arrows)
+
+            # Handle *ult1* for VAR mode or Executioner Sword spammable attack
+            if '*ult1*' in content_lower:
+                user_id = message.author.id
+                if self.is_var_mode_active(user_id):
+                    await self.handle_var_ult1(message)
+                    return
+                elif self.player_stats.get(user_id, {}).get('executioner_sword_active'):
+                    await self.handle_executioner_ult1(message)
+                    return
+                # Otherwise fall through to normal power handling
+            
+            # Handle *ult2* for Executioner Sword only
+            if '*ult2*' in content_lower:
+                user_id = message.author.id
+                if self.player_stats.get(user_id, {}).get('executioner_sword_active'):
+                    await self.handle_executioner_ult2(message)
+                    return
+
             # Handle *attack* counter command
             if '*attack*' in content_lower:
                 await self.handle_counter_attack(message)
@@ -1454,6 +2476,45 @@ Your response (1-2 sentences max):"""
             elif '*power2*' in content_lower:
                 await self.handle_power_activation(message, 2)
                 return
+            
+            # Handle *domain* / *power3* - Domain Expansion (achievement-unlocked)
+            if '*domain*' in content_lower or '*power3*' in content_lower or '*ult3*' in content_lower:
+                await self.handle_domain_expansion(message)
+                return
+            
+            # Handle *var* - Infinite Void quick variant
+            if '*var*' in content_lower:
+                await self.handle_domain_expansion_var(message)
+                return
+            
+            # Handle spec attacks (Cursed Partners domain)
+            # *spec* (no number) randomly picks 1/2/3
+            if '*spec*' in content_lower and '*spec1*' not in content_lower and '*spec2*' not in content_lower and '*spec3*' not in content_lower:
+                random_spec = random.choice([1, 2, 3])
+                await self.handle_spec_attack(message, random_spec)
+                return
+            elif '*spec1*' in content_lower:
+                await self.handle_spec_attack(message, 1)
+                return
+            elif '*spec2*' in content_lower:
+                await self.handle_spec_attack(message, 2)
+                return
+            elif '*spec3*' in content_lower:
+                await self.handle_spec_attack(message, 3)
+                return
+            
+            # Handle Jacob's Ladder (Cursed Partners finisher)
+            if '*jacobs*' in content_lower or '*jacobsladder*' in content_lower:
+                await self.handle_jacobs_ladder(message)
+                return
+            
+            # Handle court trial responses - check if this user is expected to respond
+            if hasattr(self, 'player_stats'):
+                for trial_owner_id, stats in self.player_stats.items():
+                    if stats.get('court_waiting_response') and stats.get('court_awaiting_user') == message.author.id:
+                        handled = await self.handle_court_response(message, trial_owner_id)
+                        if handled:
+                            return
             
             # Check for trigger phrases (text in quotes)
             if '"' in message.content:
@@ -2206,6 +3267,239 @@ Your response (1-2 sentences max):"""
             async def skill_button(self, interaction: discord.Interaction, button: discord.ui.Button):
                 modal = SkillBuilderModal(self.bot_instance)
                 await interaction.response.send_modal(modal)
+            
+            @discord.ui.button(label="🏆 Achievements", style=discord.ButtonStyle.success, row=2)
+            async def achievements_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+                user_id = str(interaction.user.id)
+                player_ach = self.bot_instance.player_achievements.get(user_id, {})
+                config = self.bot_instance.achievements_config
+                
+                if not config or "achievements" not in config:
+                    await interaction.response.send_message("❌ Achievement system not configured!", ephemeral=True)
+                    return
+                
+                total_achievements = len(config["achievements"])
+                unlocked_count = len([a for a in player_ach if a in config["achievements"]])
+                
+                embed = discord.Embed(
+                    title="🏆 Your Achievements",
+                    description=f"Unlocked: **{unlocked_count}** / **{total_achievements}**",
+                    color=discord.Color.gold()
+                )
+                
+                # Group by category
+                categories = config.get("categories", {})
+                for cat_id, cat_data in categories.items():
+                    cat_achievements = [
+                        (ach_id, ach_data) for ach_id, ach_data in config["achievements"].items()
+                        if ach_data.get("category") == cat_id
+                    ]
+                    
+                    if not cat_achievements:
+                        continue
+                    
+                    field_text = ""
+                    for ach_id, ach_data in cat_achievements:
+                        # Skip hidden achievements if not unlocked
+                        if ach_data.get("hidden", False) and ach_id not in player_ach:
+                            continue
+                        
+                        icon = ach_data.get("icon", "🏆")
+                        name = ach_data.get("name", ach_id)
+                        
+                        if ach_id in player_ach:
+                            field_text += f"✅ {icon} **{name}**\n"
+                        else:
+                            field_text += f"⬜ {icon} {name}\n"
+                    
+                    if field_text:
+                        cat_icon = cat_data.get("icon", "📁")
+                        cat_name = cat_data.get("name", cat_id)
+                        embed.add_field(name=f"{cat_icon} {cat_name}", value=field_text, inline=True)
+                
+                # Show titles
+                titles = player_ach.get("titles", [])
+                if titles:
+                    embed.add_field(
+                        name="🎖️ Titles Earned",
+                        value="\n".join(f"• {t}" for t in titles),
+                        inline=False
+                    )
+                
+                # Show domains
+                domains = player_ach.get("domains", [])
+                if domains:
+                    domain_text = ""
+                    for d_id in domains:
+                        d_config = config.get("domains", {}).get(d_id, {})
+                        d_name = d_config.get("name", d_id)
+                        domain_text += f"• 🌌 **{d_name}** (*{d_id}*)\n"
+                    embed.add_field(
+                        name="♾️ Domain Expansions Unlocked",
+                        value=domain_text + "\n*Use `*domain*` or `*ult3*` to activate!*",
+                        inline=False
+                    )
+                
+                await interaction.response.send_message(embed=embed, ephemeral=True)
+            
+            @discord.ui.button(label="🎖️ Select Title", style=discord.ButtonStyle.secondary, row=2)
+            async def title_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+                user_id = str(interaction.user.id)
+                player_ach = self.bot_instance.player_achievements.get(user_id, {})
+                titles = player_ach.get("titles", [])
+                
+                if not titles:
+                    await interaction.response.send_message(
+                        "❌ You haven't earned any titles yet!\n*Unlock achievements to earn titles.*",
+                        ephemeral=True
+                    )
+                    return
+                
+                # Create a select menu for titles
+                view = TitleSelectView(self.bot_instance, titles, interaction.user.id)
+                embed = discord.Embed(
+                    title="🎖️ Select Your Title",
+                    description="Choose a title to display with your actions!\n\n"
+                               f"**Available titles:** {len(titles)}",
+                    color=discord.Color.purple()
+                )
+                
+                current_title = player_ach.get("active_title", None)
+                if current_title:
+                    embed.add_field(name="Current Title", value=f"**{current_title}**", inline=False)
+                
+                await interaction.response.send_message(embed=embed, view=view, ephemeral=True)
+            
+            @discord.ui.button(label="🌌 Select Domain", style=discord.ButtonStyle.danger, row=2)
+            async def domain_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+                user_id = str(interaction.user.id)
+                player_ach = self.bot_instance.player_achievements.get(user_id, {})
+                domains = player_ach.get("domains", [])
+                config = self.bot_instance.achievements_config
+                
+                if not domains:
+                    await interaction.response.send_message(
+                        "❌ You haven't unlocked any Domain Expansions yet!\n"
+                        "*Complete domain achievements to unlock them.*\n\n"
+                        "**Hint:** Dodge 5 attacks in a row to unlock **Infinity**!",
+                        ephemeral=True
+                    )
+                    return
+                
+                # Create a select menu for domains
+                view = DomainSelectView(self.bot_instance, domains, interaction.user.id)
+                embed = discord.Embed(
+                    title="🌌 Select Your Domain Expansion",
+                    description="Choose which domain to use when activating `*domain*` or `*ult3*`!\n\n"
+                               f"**Available domains:** {len(domains)}",
+                    color=discord.Color.dark_purple()
+                )
+                
+                current_domain = player_ach.get("active_domain", None)
+                if current_domain:
+                    d_config = config.get("domains", {}).get(current_domain, {})
+                    d_name = d_config.get("name", current_domain)
+                    embed.add_field(name="Current Domain", value=f"🌌 **{d_name}**", inline=False)
+                
+                # Show domain descriptions
+                domain_info = ""
+                for d_id in domains:
+                    d_config = config.get("domains", {}).get(d_id, {})
+                    d_name = d_config.get("name", d_id)
+                    d_type = d_config.get("type", "simple")
+                    d_desc = d_config.get("description", "No description")[:100]
+                    active = "**[ACTIVE]** " if d_id == current_domain else ""
+                    domain_info += f"{active}🌌 **{d_name}** ({d_type})\n*{d_desc}*\n\n"
+                
+                if domain_info:
+                    embed.add_field(name="Your Domains", value=domain_info, inline=False)
+                
+                await interaction.response.send_message(embed=embed, view=view, ephemeral=True)
+        
+        class DomainSelectView(discord.ui.View):
+            def __init__(self, bot_instance, domains, user_id):
+                super().__init__(timeout=60)
+                self.bot_instance = bot_instance
+                self.user_id = user_id
+                config = bot_instance.achievements_config
+                
+                # Create select menu with domains
+                options = []
+                for d_id in domains[:25]:  # Max 25 options
+                    d_config = config.get("domains", {}).get(d_id, {})
+                    d_name = d_config.get("name", d_id)
+                    d_type = d_config.get("type", "simple")
+                    d_icon = {"simple": "♾️", "pachinko": "🎰", "reflect": "🌙", "dps": "⛩️"}.get(d_type, "🌌")
+                    options.append(discord.SelectOption(
+                        label=f"{d_icon} {d_name}",
+                        value=d_id,
+                        description=f"Type: {d_type.capitalize()}"
+                    ))
+                
+                self.select = discord.ui.Select(
+                    placeholder="Choose a domain...",
+                    options=options
+                )
+                self.select.callback = self.on_select
+                self.add_item(self.select)
+            
+            async def on_select(self, interaction: discord.Interaction):
+                selected = self.select.values[0]
+                user_id_str = str(self.user_id)
+                config = self.bot_instance.achievements_config
+                
+                if user_id_str not in self.bot_instance.player_achievements:
+                    self.bot_instance.player_achievements[user_id_str] = {}
+                
+                self.bot_instance.player_achievements[user_id_str]["active_domain"] = selected
+                
+                # Get domain name for response
+                d_config = config.get("domains", {}).get(selected, {})
+                d_name = d_config.get("name", selected)
+                
+                await interaction.response.send_message(
+                    f"✅ Active domain set to: 🌌 **{d_name}**\n\n"
+                    f"*Use `*domain*` or `*ult3*` to activate it!*",
+                    ephemeral=True
+                )
+                
+                # Save
+                save_data("achievements/player_achievements", self.bot_instance.player_achievements)
+        
+        class TitleSelectView(discord.ui.View):
+            def __init__(self, bot_instance, titles, user_id):
+                super().__init__(timeout=60)
+                self.bot_instance = bot_instance
+                self.user_id = user_id
+                
+                # Create select menu with titles
+                options = [discord.SelectOption(label="[No Title]", value="none", description="Remove your title")]
+                for title in titles[:24]:  # Max 25 options
+                    options.append(discord.SelectOption(label=title, value=title))
+                
+                self.select = discord.ui.Select(
+                    placeholder="Choose a title...",
+                    options=options
+                )
+                self.select.callback = self.on_select
+                self.add_item(self.select)
+            
+            async def on_select(self, interaction: discord.Interaction):
+                selected = self.select.values[0]
+                user_id_str = str(self.user_id)
+                
+                if user_id_str not in self.bot_instance.player_achievements:
+                    self.bot_instance.player_achievements[user_id_str] = {}
+                
+                if selected == "none":
+                    self.bot_instance.player_achievements[user_id_str].pop("active_title", None)
+                    await interaction.response.send_message("✅ Title removed!", ephemeral=True)
+                else:
+                    self.bot_instance.player_achievements[user_id_str]["active_title"] = selected
+                    await interaction.response.send_message(f"✅ Title set to: **{selected}**", ephemeral=True)
+                
+                # Save
+                save_data("achievements/player_achievements", self.bot_instance.player_achievements)
         
         class SkillBuilderModal(discord.ui.Modal):
             def __init__(self, bot_instance):
@@ -2322,6 +3616,525 @@ Your response (1-2 sentences max):"""
             except Exception as e:
                 log.error(f"Error in dashboard command: {e}")
                 await interaction.response.send_message("❌ An error occurred.", ephemeral=True)
+
+        # ========== BOSS DASHBOARD (GM ONLY) ==========
+        
+        class BossDashboardView(discord.ui.View):
+            def __init__(self, bot_instance):
+                super().__init__(timeout=300)
+                self.bot_instance = bot_instance
+            
+            def build_embed(self):
+                config = self.bot_instance.tupperbox_boss_config
+                mode_status = "🟢 ACTIVE" if self.bot_instance.tupperbox_boss_mode else "🔴 INACTIVE"
+                
+                # Check if tupper boss is spawned as actual boss
+                boss_spawned = False
+                boss_hp_text = "*Not Spawned*"
+                if self.bot_instance.active_boss and self.bot_instance.tupperbox_boss_mode:
+                    boss_spawned = True
+                    hp_cur = self.bot_instance.active_boss.get('hp_current', 0)
+                    hp_max = self.bot_instance.active_boss.get('hp_max', 1000)
+                    boss_hp_text = f"**{hp_cur}/{hp_max}** HP"
+                
+                embed = discord.Embed(
+                    title="👹 Boss Control Dashboard",
+                    description=f"**Tupperbox Boss Mode:** {mode_status}\n"
+                               f"**Boss Spawned:** {'🟢 YES' if boss_spawned else '🔴 NO'} - {boss_hp_text}\n\n"
+                               f"Configure your Tupperbox-controlled boss here.",
+                    color=discord.Color.dark_red()
+                )
+                
+                # Basic config
+                char_name = config.get("character_name") or "*Not Set*"
+                boss_hp = config.get("boss_hp", 1000)
+                evade = config.get("evade_chance", 0.15) * 100
+                counter = config.get("counter_chance", 0.20) * 100
+                counter_dmg = config.get("counter_damage", 15)
+                
+                embed.add_field(
+                    name="⚙️ Basic Settings",
+                    value=f"**Character:** {char_name}\n"
+                          f"**Boss HP:** {boss_hp}\n"
+                          f"**Evade Chance:** {evade:.0f}%\n"
+                          f"**Counter Chance:** {counter:.0f}%\n"
+                          f"**Counter Damage:** {counter_dmg}",
+                    inline=True
+                )
+                
+                # Abilities
+                abilities = config.get("abilities", {})
+                if abilities:
+                    ability_text = ""
+                    for name, data in list(abilities.items())[:5]:
+                        dmg = data.get("damage", 0)
+                        ability_text += f"• **{name}** ({dmg} dmg)\n"
+                    embed.add_field(name="⚔️ Abilities", value=ability_text or "*None*", inline=True)
+                else:
+                    embed.add_field(name="⚔️ Abilities", value="*None configured*", inline=True)
+                
+                # GIFs
+                evade_gifs = len(config.get("evade_gifs", []))
+                counter_gifs = len(config.get("counter_gifs", []))
+                embed.add_field(
+                    name="🎬 GIFs",
+                    value=f"Evade GIFs: **{evade_gifs}**\nCounter GIFs: **{counter_gifs}**",
+                    inline=True
+                )
+                
+                # Domain
+                domain = config.get("domain")
+                if domain:
+                    d_name = domain.get("name", "Unknown")
+                    d_type = domain.get("type", "simple")
+                    embed.add_field(name="🌌 Boss Domain", value=f"**{d_name}** ({d_type})", inline=False)
+                
+                embed.set_footer(text="GM Only | Use buttons to configure")
+                return embed
+            
+            @discord.ui.button(label="🔄 Toggle Mode", style=discord.ButtonStyle.success, row=0)
+            async def toggle_mode(self, interaction: discord.Interaction, button: discord.ui.Button):
+                if not self.bot_instance.is_admin(interaction.user):
+                    await interaction.response.send_message("❌ GM only!", ephemeral=True)
+                    return
+                
+                self.bot_instance.tupperbox_boss_mode = not self.bot_instance.tupperbox_boss_mode
+                status = "ENABLED" if self.bot_instance.tupperbox_boss_mode else "DISABLED"
+                
+                embed = self.build_embed()
+                await interaction.response.edit_message(embed=embed, view=self)
+                await interaction.followup.send(f"✅ Tupperbox Boss Mode **{status}**!", ephemeral=True)
+            
+            @discord.ui.button(label="👹 Spawn Boss", style=discord.ButtonStyle.success, row=0)
+            async def spawn_boss_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+                if not self.bot_instance.is_admin(interaction.user):
+                    await interaction.response.send_message("❌ GM only!", ephemeral=True)
+                    return
+                
+                config = self.bot_instance.tupperbox_boss_config
+                boss_name = config.get("character_name")
+                
+                if not boss_name:
+                    await interaction.response.send_message("❌ Set a character name first!", ephemeral=True)
+                    return
+                
+                # Spawn the tupper as an actual boss entity
+                boss_hp = config.get("boss_hp", 1000)
+                
+                self.bot_instance.active_boss = {
+                    'name': boss_name,
+                    'hp_current': boss_hp,
+                    'hp_max': boss_hp,
+                    'participants': set(),
+                    'tupperbox_controlled': True  # Mark as tupper-controlled
+                }
+                self.bot_instance.tupperbox_boss_mode = True
+                self.bot_instance.fight_active = True
+                self.bot_instance.fight_start_time = time.time()
+                
+                # Resume cooldowns
+                self.bot_instance._resume_ultimate_cooldowns()
+                
+                embed = self.build_embed()
+                await interaction.response.edit_message(embed=embed, view=self)
+                
+                # Announce in channel
+                channel = self.bot_instance.bot.get_channel(self.bot_instance.qte_channel_id)
+                if channel:
+                    spawn_embed = discord.Embed(
+                        title="👹 BOSS APPEARS!",
+                        description=f"**{boss_name}** has entered the battlefield!\n\n"
+                                   f"❤️ **HP:** {boss_hp}\n"
+                                   f"⚔️ *The fight begins!*",
+                        color=discord.Color.dark_red()
+                    )
+                    await channel.send(embed=spawn_embed)
+                    
+                    # Create HP bar
+                    await self.bot_instance.update_hp_bar_display(boss_name, is_boss=True)
+                
+                await interaction.followup.send(f"✅ **{boss_name}** spawned as boss with **{boss_hp} HP**!", ephemeral=True)
+            
+            @discord.ui.button(label="⚙️ Basic Settings", style=discord.ButtonStyle.primary, row=1)
+            async def settings_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+                if not self.bot_instance.is_admin(interaction.user):
+                    await interaction.response.send_message("❌ GM only!", ephemeral=True)
+                    return
+                modal = BossSettingsModal(self.bot_instance, self)
+                await interaction.response.send_modal(modal)
+            
+            @discord.ui.button(label="⚔️ Add Ability", style=discord.ButtonStyle.primary, row=1)
+            async def ability_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+                if not self.bot_instance.is_admin(interaction.user):
+                    await interaction.response.send_message("❌ GM only!", ephemeral=True)
+                    return
+                modal = BossAbilityModal(self.bot_instance, self)
+                await interaction.response.send_modal(modal)
+            
+            @discord.ui.button(label="🎬 Add Evade GIF", style=discord.ButtonStyle.secondary, row=2)
+            async def evade_gif_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+                if not self.bot_instance.is_admin(interaction.user):
+                    await interaction.response.send_message("❌ GM only!", ephemeral=True)
+                    return
+                modal = BossGifModal(self.bot_instance, self, "evade")
+                await interaction.response.send_modal(modal)
+            
+            @discord.ui.button(label="🎬 Add Counter GIF", style=discord.ButtonStyle.secondary, row=2)
+            async def counter_gif_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+                if not self.bot_instance.is_admin(interaction.user):
+                    await interaction.response.send_message("❌ GM only!", ephemeral=True)
+                    return
+                modal = BossGifModal(self.bot_instance, self, "counter")
+                await interaction.response.send_modal(modal)
+            
+            @discord.ui.button(label="🌌 Set Domain", style=discord.ButtonStyle.danger, row=2)
+            async def domain_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+                if not self.bot_instance.is_admin(interaction.user):
+                    await interaction.response.send_message("❌ GM only!", ephemeral=True)
+                    return
+                modal = BossDomainModal(self.bot_instance, self)
+                await interaction.response.send_modal(modal)
+            
+            @discord.ui.button(label="💥 Use Ability", style=discord.ButtonStyle.danger, row=3)
+            async def use_ability_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+                if not self.bot_instance.is_admin(interaction.user):
+                    await interaction.response.send_message("❌ GM only!", ephemeral=True)
+                    return
+                
+                abilities = self.bot_instance.tupperbox_boss_config.get("abilities", {})
+                if not abilities:
+                    await interaction.response.send_message("❌ No abilities configured!", ephemeral=True)
+                    return
+                
+                view = BossAbilitySelectView(self.bot_instance, list(abilities.keys()))
+                await interaction.response.send_message("Select an ability to use:", view=view, ephemeral=True)
+            
+            @discord.ui.button(label="🌀 Expand Domain", style=discord.ButtonStyle.danger, row=3)
+            async def expand_domain_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+                if not self.bot_instance.is_admin(interaction.user):
+                    await interaction.response.send_message("❌ GM only!", ephemeral=True)
+                    return
+                
+                domain = self.bot_instance.tupperbox_boss_config.get("domain")
+                if not domain:
+                    await interaction.response.send_message("❌ No boss domain configured!", ephemeral=True)
+                    return
+                
+                # Trigger boss domain expansion
+                channel = self.bot_instance.bot.get_channel(self.bot_instance.qte_channel_id)
+                if channel:
+                    await self.bot_instance.trigger_boss_domain(channel, domain)
+                    await interaction.response.send_message(f"🌌 Boss Domain **{domain.get('name')}** expanded!", ephemeral=True)
+                else:
+                    await interaction.response.send_message("❌ QTE channel not found!", ephemeral=True)
+        
+        class BossSettingsModal(discord.ui.Modal):
+            def __init__(self, bot_instance, parent_view):
+                super().__init__(title="⚙️ Boss Basic Settings")
+                self.bot_instance = bot_instance
+                self.parent_view = parent_view
+                
+                config = bot_instance.tupperbox_boss_config
+                
+                self.char_name = discord.ui.TextInput(
+                    label="Tupperbox Character Name",
+                    placeholder="Exact name of the Tupper",
+                    default=config.get("character_name") or "",
+                    required=False,
+                    max_length=100
+                )
+                self.add_item(self.char_name)
+                
+                self.boss_hp = discord.ui.TextInput(
+                    label="Boss HP",
+                    placeholder="1000",
+                    default=str(config.get("boss_hp", 1000)),
+                    max_length=6
+                )
+                self.add_item(self.boss_hp)
+                
+                self.evade_chance = discord.ui.TextInput(
+                    label="Evade Chance (0-100%)",
+                    placeholder="15",
+                    default=str(int(config.get("evade_chance", 0.15) * 100)),
+                    max_length=3
+                )
+                self.add_item(self.evade_chance)
+                
+                self.counter_chance = discord.ui.TextInput(
+                    label="Counter Chance (0-100%)",
+                    placeholder="20",
+                    default=str(int(config.get("counter_chance", 0.20) * 100)),
+                    max_length=3
+                )
+                self.add_item(self.counter_chance)
+            
+            async def on_submit(self, interaction: discord.Interaction):
+                config = self.bot_instance.tupperbox_boss_config
+                
+                if self.char_name.value:
+                    config["character_name"] = self.char_name.value
+                
+                try:
+                    config["boss_hp"] = max(1, int(self.boss_hp.value))
+                except:
+                    pass
+                
+                try:
+                    config["evade_chance"] = max(0, min(100, int(self.evade_chance.value))) / 100
+                except:
+                    pass
+                
+                try:
+                    config["counter_chance"] = max(0, min(100, int(self.counter_chance.value))) / 100
+                except:
+                    pass
+                
+                self.bot_instance.save_tupperbox_boss_config()
+                
+                embed = self.parent_view.build_embed()
+                await interaction.response.edit_message(embed=embed, view=self.parent_view)
+        
+        class BossAbilityModal(discord.ui.Modal):
+            def __init__(self, bot_instance, parent_view):
+                super().__init__(title="⚔️ Add Boss Ability")
+                self.bot_instance = bot_instance
+                self.parent_view = parent_view
+                
+                self.ability_name = discord.ui.TextInput(
+                    label="Ability Name",
+                    placeholder="Cleave, Roar, Dark Pulse, etc.",
+                    max_length=50
+                )
+                self.add_item(self.ability_name)
+                
+                self.ability_damage = discord.ui.TextInput(
+                    label="Damage",
+                    placeholder="25",
+                    default="25",
+                    max_length=4
+                )
+                self.add_item(self.ability_damage)
+                
+                self.ability_gif = discord.ui.TextInput(
+                    label="GIF URL (optional)",
+                    placeholder="https://...",
+                    required=False,
+                    max_length=500
+                )
+                self.add_item(self.ability_gif)
+                
+                self.status_effect = discord.ui.TextInput(
+                    label="Status Effect (optional: type:chance:duration)",
+                    placeholder="bleed:50:60 or burn:100:120",
+                    required=False,
+                    max_length=50
+                )
+                self.add_item(self.status_effect)
+            
+            async def on_submit(self, interaction: discord.Interaction):
+                config = self.bot_instance.tupperbox_boss_config
+                
+                if "abilities" not in config:
+                    config["abilities"] = {}
+                
+                name = self.ability_name.value.strip()
+                try:
+                    damage = int(self.ability_damage.value)
+                except:
+                    damage = 25
+                
+                config["abilities"][name] = {
+                    "damage": damage,
+                    "gif": self.ability_gif.value if self.ability_gif.value else None
+                }
+                
+                # Parse status effect if provided
+                if self.status_effect.value:
+                    parts = self.status_effect.value.split(":")
+                    if len(parts) >= 3:
+                        if "status_inflict" not in config:
+                            config["status_inflict"] = {}
+                        config["status_inflict"][name] = {
+                            "status": parts[0],
+                            "chance": int(parts[1]) if parts[1].isdigit() else 100,
+                            "duration": int(parts[2]) if parts[2].isdigit() else 60
+                        }
+                
+                self.bot_instance.save_tupperbox_boss_config()
+                
+                embed = self.parent_view.build_embed()
+                await interaction.response.edit_message(embed=embed, view=self.parent_view)
+                await interaction.followup.send(f"✅ Ability **{name}** added!", ephemeral=True)
+        
+        class BossGifModal(discord.ui.Modal):
+            def __init__(self, bot_instance, parent_view, gif_type):
+                super().__init__(title=f"🎬 Add {gif_type.capitalize()} GIF")
+                self.bot_instance = bot_instance
+                self.parent_view = parent_view
+                self.gif_type = gif_type
+                
+                self.gif_url = discord.ui.TextInput(
+                    label="GIF URL",
+                    placeholder="https://...",
+                    max_length=500
+                )
+                self.add_item(self.gif_url)
+            
+            async def on_submit(self, interaction: discord.Interaction):
+                config = self.bot_instance.tupperbox_boss_config
+                key = f"{self.gif_type}_gifs"
+                
+                if key not in config:
+                    config[key] = []
+                
+                if self.gif_url.value not in config[key]:
+                    config[key].append(self.gif_url.value)
+                
+                self.bot_instance.save_tupperbox_boss_config()
+                
+                embed = self.parent_view.build_embed()
+                await interaction.response.edit_message(embed=embed, view=self.parent_view)
+                await interaction.followup.send(f"✅ {self.gif_type.capitalize()} GIF added!", ephemeral=True)
+        
+        class BossDomainModal(discord.ui.Modal):
+            def __init__(self, bot_instance, parent_view):
+                super().__init__(title="🌌 Set Boss Domain")
+                self.bot_instance = bot_instance
+                self.parent_view = parent_view
+                
+                domain = bot_instance.tupperbox_boss_config.get("domain") or {}
+                
+                self.domain_name = discord.ui.TextInput(
+                    label="Domain Name",
+                    placeholder="Malevolent Shrine",
+                    default=domain.get("name", ""),
+                    max_length=100
+                )
+                self.add_item(self.domain_name)
+                
+                self.domain_type = discord.ui.TextInput(
+                    label="Type (simple/dps/stun)",
+                    placeholder="dps",
+                    default=domain.get("type", "simple"),
+                    max_length=20
+                )
+                self.add_item(self.domain_type)
+                
+                self.domain_duration = discord.ui.TextInput(
+                    label="Duration (seconds)",
+                    placeholder="30",
+                    default=str(domain.get("duration", 30)),
+                    max_length=4
+                )
+                self.add_item(self.domain_duration)
+                
+                self.domain_effect = discord.ui.TextInput(
+                    label="Effect (damage/stun_duration)",
+                    placeholder="10 (dps) or 5 (stun seconds)",
+                    default=str(domain.get("effect_value", 10)),
+                    max_length=10
+                )
+                self.add_item(self.domain_effect)
+                
+                self.domain_gif = discord.ui.TextInput(
+                    label="Domain GIF URL",
+                    placeholder="https://...",
+                    default=domain.get("gif", ""),
+                    required=False,
+                    max_length=500
+                )
+                self.add_item(self.domain_gif)
+            
+            async def on_submit(self, interaction: discord.Interaction):
+                config = self.bot_instance.tupperbox_boss_config
+                
+                try:
+                    duration = int(self.domain_duration.value)
+                except:
+                    duration = 30
+                
+                try:
+                    effect_value = int(self.domain_effect.value)
+                except:
+                    effect_value = 10
+                
+                config["domain"] = {
+                    "name": self.domain_name.value,
+                    "type": self.domain_type.value.lower(),
+                    "duration": duration,
+                    "effect_value": effect_value,
+                    "gif": self.domain_gif.value if self.domain_gif.value else None
+                }
+                
+                self.bot_instance.save_tupperbox_boss_config()
+                
+                embed = self.parent_view.build_embed()
+                await interaction.response.edit_message(embed=embed, view=self.parent_view)
+                await interaction.followup.send(f"✅ Boss Domain **{self.domain_name.value}** configured!", ephemeral=True)
+        
+        class BossAbilitySelectView(discord.ui.View):
+            def __init__(self, bot_instance, abilities):
+                super().__init__(timeout=60)
+                self.bot_instance = bot_instance
+                
+                options = [discord.SelectOption(label=name, value=name) for name in abilities[:25]]
+                
+                self.select = discord.ui.Select(
+                    placeholder="Select ability...",
+                    options=options
+                )
+                self.select.callback = self.on_select
+                self.add_item(self.select)
+            
+            async def on_select(self, interaction: discord.Interaction):
+                ability_name = self.select.values[0]
+                
+                # Get targets (all players with HP)
+                targets = list(self.bot_instance.player_hp.keys())
+                
+                if not targets:
+                    await interaction.response.send_message("❌ No valid targets!", ephemeral=True)
+                    return
+                
+                result = await self.bot_instance.boss_use_ability(ability_name, targets)
+                
+                if result["success"]:
+                    channel = self.bot_instance.bot.get_channel(self.bot_instance.qte_channel_id)
+                    if channel:
+                        embed = discord.Embed(
+                            title=f"👹💥 Boss uses **{ability_name}**!",
+                            description=f"Damage: **{result['damage']}**\n"
+                                       f"Targets hit: **{len(result['targets_hit'])}**",
+                            color=discord.Color.dark_red()
+                        )
+                        if result.get("gif"):
+                            embed.set_image(url=result["gif"])
+                        await channel.send(embed=embed)
+                    
+                    await interaction.response.send_message(f"✅ Used **{ability_name}**!", ephemeral=True)
+                else:
+                    await interaction.response.send_message(f"❌ {result.get('error', 'Failed')}", ephemeral=True)
+        
+        @self.bot.tree.command(
+            name="bossdashboard",
+            description="[GM Only] Open the Tupperbox Boss control dashboard"
+        )
+        async def bossdashboard_command(interaction: discord.Interaction):
+            try:
+                if not self.is_admin(interaction.user):
+                    await interaction.response.send_message("❌ This command is for GMs only!", ephemeral=True)
+                    return
+                
+                view = BossDashboardView(self)
+                embed = view.build_embed()
+                await interaction.response.send_message(embed=embed, view=view, ephemeral=True)
+                
+            except Exception as e:
+                log.error(f"Error in bossdashboard command: {e}")
+                await interaction.response.send_message("❌ An error occurred.", ephemeral=True)
+        
+        # ========== END BOSS DASHBOARD ==========
 
         @self.bot.tree.command(
             name="unregister",
@@ -2548,13 +4361,18 @@ Your response (1-2 sentences max):"""
                     'hp_current': hp,
                     'hp_max': hp,
                     'gif_url': gif_url,
-                    'participants': []
+                    'participants': set()  # Track who participates for achievements
                 }
                 
                 # ========== AUTO-START FIGHT ==========
                 # Automatically start the fight when a boss is registered!
                 self.fight_active = True
                 self.fight_start_time = time.time()
+                
+                # Reset all players' fight-specific stats
+                for user_id in self.player_stats:
+                    self.player_stats[user_id]['damage_taken_this_fight'] = 0
+                    self.player_stats[user_id]['critical_counters_this_fight'] = 0
                 
                 # Resume any paused ultimate cooldowns
                 self._resume_ultimate_cooldowns()
@@ -2961,6 +4779,463 @@ Your response (1-2 sentences max):"""
             except Exception as e:
                 log.error(f"Error in registerpower command: {e}")
                 await interaction.response.send_message("❌ An error occurred.", ephemeral=True)
+
+        # ========== SKILL TREE COMMANDS ==========
+        @self.bot.tree.command(
+            name="skills",
+            description="View your skill tree and available skills"
+        )
+        async def skills_command(interaction: discord.Interaction):
+            try:
+                user_id = str(interaction.user.id)
+                
+                # Initialize player skills if needed
+                if user_id not in self.player_skills:
+                    self.player_skills[user_id] = {"skill_points": 0, "skills": {}}
+                
+                player_data = self.player_skills[user_id]
+                skill_points = player_data.get("skill_points", 0)
+                unlocked_skills = player_data.get("skills", {})
+                
+                embed = discord.Embed(
+                    title="🌳 Skill Tree",
+                    description=f"**Skill Points:** {skill_points} ⭐\n\n"
+                               f"Use `/learnsk <skill_id>` to learn a skill!",
+                    color=discord.Color.green()
+                )
+                
+                # Show skill trees
+                for tree_id, tree_data in self.skill_tree_config.items():
+                    branches_text = []
+                    for branch_id, branch in tree_data.get("branches", {}).items():
+                        branch_icon = branch.get("icon", "📌")
+                        branch_name = branch.get("name", branch_id)
+                        skill_count = len(branch.get("skills", []))
+                        unlocked_in_branch = sum(1 for s in branch.get("skills", []) 
+                                                  if s["id"] in unlocked_skills)
+                        branches_text.append(f"{branch_icon} **{branch_name}** ({unlocked_in_branch}/{skill_count})")
+                    
+                    embed.add_field(
+                        name=f"📖 {tree_data.get('name', tree_id)}",
+                        value="\n".join(branches_text) if branches_text else "No branches",
+                        inline=False
+                    )
+                
+                embed.set_footer(text="Use /skillbranch <branch> to view skills in a branch")
+                await interaction.response.send_message(embed=embed, ephemeral=True)
+                
+            except Exception as e:
+                log.error(f"Error in skills command: {e}")
+                await interaction.response.send_message("❌ An error occurred.", ephemeral=True)
+
+        @self.bot.tree.command(
+            name="skillbranch",
+            description="View skills in a specific branch"
+        )
+        @app_commands.describe(branch="Branch name (combat, defense, utility)")
+        async def skillbranch_command(interaction: discord.Interaction, branch: str):
+            try:
+                user_id = str(interaction.user.id)
+                branch = branch.lower()
+                
+                # Find the branch
+                branch_data = None
+                for tree_id, tree_data in self.skill_tree_config.items():
+                    if branch in tree_data.get("branches", {}):
+                        branch_data = tree_data["branches"][branch]
+                        break
+                
+                if not branch_data:
+                    await interaction.response.send_message(f"❌ Branch '{branch}' not found!", ephemeral=True)
+                    return
+                
+                player_data = self.player_skills.get(user_id, {"skills": {}})
+                unlocked_skills = player_data.get("skills", {})
+                
+                embed = discord.Embed(
+                    title=f"{branch_data.get('icon', '📌')} {branch_data.get('name', branch)}",
+                    description=branch_data.get("description", ""),
+                    color=discord.Color.from_str(branch_data.get("color", "#FFFFFF"))
+                )
+                
+                for skill in branch_data.get("skills", []):
+                    skill_id = skill["id"]
+                    current_rank = unlocked_skills.get(skill_id, 0)
+                    max_rank = skill.get("max_rank", 1)
+                    cost = skill.get("cost", 1)
+                    prereqs = skill.get("prerequisites", [])
+                    
+                    # Check if prerequisites are met
+                    prereqs_met = all(unlocked_skills.get(p, 0) > 0 for p in prereqs)
+                    
+                    status = "✅" if current_rank >= max_rank else ("🔓" if prereqs_met else "🔒")
+                    rank_display = f"[{current_rank}/{max_rank}]" if max_rank > 1 else ("✓" if current_rank > 0 else "")
+                    
+                    embed.add_field(
+                        name=f"{status} {skill['name']} {rank_display}",
+                        value=f"{skill['description']}\n*Cost: {cost} SP | ID: `{skill_id}`*",
+                        inline=False
+                    )
+                
+                embed.set_footer(text="Use /learnsk <skill_id> to learn a skill")
+                await interaction.response.send_message(embed=embed, ephemeral=True)
+                
+            except Exception as e:
+                log.error(f"Error in skillbranch command: {e}")
+                await interaction.response.send_message("❌ An error occurred.", ephemeral=True)
+
+        @self.bot.tree.command(
+            name="learnsk",
+            description="Learn or upgrade a skill from the skill tree"
+        )
+        @app_commands.describe(skill_id="The skill ID to learn (shown in /skillbranch)")
+        async def learnsk_command(interaction: discord.Interaction, skill_id: str):
+            try:
+                user_id = str(interaction.user.id)
+                
+                # Initialize player skills if needed
+                if user_id not in self.player_skills:
+                    self.player_skills[user_id] = {"skill_points": 0, "skills": {}}
+                
+                player_data = self.player_skills[user_id]
+                skill_points = player_data.get("skill_points", 0)
+                unlocked_skills = player_data.get("skills", {})
+                
+                # Find the skill
+                skill_data = None
+                for tree_id, tree_data in self.skill_tree_config.items():
+                    for branch_id, branch in tree_data.get("branches", {}).items():
+                        for skill in branch.get("skills", []):
+                            if skill["id"] == skill_id:
+                                skill_data = skill
+                                break
+                
+                if not skill_data:
+                    await interaction.response.send_message(f"❌ Skill '{skill_id}' not found!", ephemeral=True)
+                    return
+                
+                # Check prerequisites
+                prereqs = skill_data.get("prerequisites", [])
+                missing_prereqs = [p for p in prereqs if unlocked_skills.get(p, 0) == 0]
+                if missing_prereqs:
+                    await interaction.response.send_message(
+                        f"❌ Missing prerequisites: {', '.join(missing_prereqs)}", ephemeral=True
+                    )
+                    return
+                
+                # Check rank limit
+                current_rank = unlocked_skills.get(skill_id, 0)
+                max_rank = skill_data.get("max_rank", 1)
+                if current_rank >= max_rank:
+                    await interaction.response.send_message(f"❌ Skill already maxed!", ephemeral=True)
+                    return
+                
+                # Check skill points
+                cost = skill_data.get("cost", 1)
+                if skill_points < cost:
+                    await interaction.response.send_message(
+                        f"❌ Not enough skill points! Need {cost}, have {skill_points}", ephemeral=True
+                    )
+                    return
+                
+                # Learn the skill!
+                player_data["skill_points"] -= cost
+                if "skills" not in player_data:
+                    player_data["skills"] = {}
+                player_data["skills"][skill_id] = current_rank + 1
+                
+                self.save_all_data()
+                
+                embed = discord.Embed(
+                    title="✨ Skill Learned!",
+                    description=f"**{skill_data['name']}** upgraded to rank {current_rank + 1}/{max_rank}!\n\n"
+                               f"*{skill_data['description']}*\n\n"
+                               f"Remaining SP: {player_data['skill_points']}",
+                    color=discord.Color.green()
+                )
+                await interaction.response.send_message(embed=embed)
+                console.print(f"[green]✓ {interaction.user.name} learned {skill_id} (rank {current_rank + 1})[/green]")
+                
+            except Exception as e:
+                log.error(f"Error in learnsk command: {e}")
+                await interaction.response.send_message("❌ An error occurred.", ephemeral=True)
+
+        @self.bot.tree.command(
+            name="giveskillpoints",
+            description="[GM] Give skill points to a player"
+        )
+        @app_commands.describe(
+            user="The player to give skill points to",
+            amount="Number of skill points to give"
+        )
+        async def giveskillpoints_command(interaction: discord.Interaction, user: discord.Member, amount: int):
+            try:
+                if not self.is_admin(interaction.user):
+                    await interaction.response.send_message("❌ GM only!", ephemeral=True)
+                    return
+                
+                user_id = str(user.id)
+                if user_id not in self.player_skills:
+                    self.player_skills[user_id] = {"skill_points": 0, "skills": {}}
+                
+                self.player_skills[user_id]["skill_points"] = self.player_skills[user_id].get("skill_points", 0) + amount
+                self.save_all_data()
+                
+                await interaction.response.send_message(
+                    f"✅ Gave **{amount} skill points** to {user.mention}!\n"
+                    f"They now have **{self.player_skills[user_id]['skill_points']} SP**"
+                )
+                console.print(f"[gold1]⭐ GM gave {amount} SP to {user.name}[/gold1]")
+                
+            except Exception as e:
+                log.error(f"Error in giveskillpoints command: {e}")
+                await interaction.response.send_message("❌ An error occurred.", ephemeral=True)
+
+        # ========== ACHIEVEMENT AUTOCOMPLETE ==========
+        async def achievement_autocomplete(interaction: discord.Interaction, current: str) -> list[app_commands.Choice[str]]:
+            """Autocomplete for achievement IDs"""
+            config = self.achievements_config
+            if not config or "achievements" not in config:
+                return []
+            
+            choices = []
+            for ach_id, ach_data in config["achievements"].items():
+                name = ach_data.get("name", ach_id)
+                icon = ach_data.get("icon", "🏆")
+                hidden = "[H] " if ach_data.get("hidden") else ""
+                display_name = f"{icon} {hidden}{name}"
+                
+                # Filter by current input
+                if current.lower() in ach_id.lower() or current.lower() in name.lower():
+                    choices.append(app_commands.Choice(name=display_name[:100], value=ach_id))
+            
+            return choices[:25]  # Discord max 25 choices
+        # ===================================================
+
+        @self.bot.tree.command(
+            name="giveachievement",
+            description="[GM] Grant an achievement to a player"
+        )
+        @app_commands.describe(
+            user="The player to give the achievement to",
+            achievement_id="The achievement ID to grant"
+        )
+        @app_commands.autocomplete(achievement_id=achievement_autocomplete)
+        async def giveachievement_command(interaction: discord.Interaction, user: discord.Member, achievement_id: str):
+            try:
+                if not self.is_admin(interaction.user):
+                    await interaction.response.send_message("❌ GM only!", ephemeral=True)
+                    return
+                
+                # Check if achievement exists
+                config = self.achievements_config
+                if not config or achievement_id not in config.get("achievements", {}):
+                    available = ", ".join(config.get("achievements", {}).keys()) if config else "None"
+                    await interaction.response.send_message(
+                        f"❌ Achievement `{achievement_id}` not found!\n\n**Available:** {available}",
+                        ephemeral=True
+                    )
+                    return
+                
+                # Award the achievement
+                success = await self.award_achievement(user.id, achievement_id)
+                
+                if success:
+                    ach_data = config["achievements"][achievement_id]
+                    await interaction.response.send_message(
+                        f"✅ Granted **{ach_data['name']}** to {user.mention}!",
+                        ephemeral=True
+                    )
+                    console.print(f"[gold1]🏆 GM granted {achievement_id} to {user.name}[/gold1]")
+                else:
+                    await interaction.response.send_message("❌ Failed to grant achievement (may already be unlocked)", ephemeral=True)
+                
+            except Exception as e:
+                log.error(f"Error in giveachievement command: {e}")
+                await interaction.response.send_message("❌ An error occurred.", ephemeral=True)
+
+        @self.bot.tree.command(
+            name="removeachievement",
+            description="[GM] Remove an achievement from a player"
+        )
+        @app_commands.describe(
+            user="The player to remove the achievement from",
+            achievement_id="The achievement ID to remove"
+        )
+        @app_commands.autocomplete(achievement_id=achievement_autocomplete)
+        async def removeachievement_command(interaction: discord.Interaction, user: discord.Member, achievement_id: str):
+            try:
+                if not self.is_admin(interaction.user):
+                    await interaction.response.send_message("❌ GM only!", ephemeral=True)
+                    return
+                
+                user_id_str = str(user.id)
+                
+                if user_id_str not in self.player_achievements or achievement_id not in self.player_achievements[user_id_str]:
+                    await interaction.response.send_message(
+                        f"❌ {user.mention} doesn't have achievement `{achievement_id}`!",
+                        ephemeral=True
+                    )
+                    return
+                
+                # Get achievement data for rewards to remove
+                config = self.achievements_config
+                ach_data = config.get("achievements", {}).get(achievement_id, {})
+                reward = ach_data.get("reward", {})
+                
+                # Remove the achievement
+                del self.player_achievements[user_id_str][achievement_id]
+                
+                # Remove rewards
+                removed_rewards = []
+                
+                # Remove title if it was granted by this achievement
+                if "title" in reward:
+                    title = reward["title"]
+                    titles = self.player_achievements[user_id_str].get("titles", [])
+                    if title in titles:
+                        titles.remove(title)
+                        removed_rewards.append(f"Title: {title}")
+                        # Clear active title if it was this one
+                        if self.player_achievements[user_id_str].get("active_title") == title:
+                            self.player_achievements[user_id_str].pop("active_title", None)
+                            # Set another title as active if available
+                            if titles:
+                                self.player_achievements[user_id_str]["active_title"] = titles[0]
+                
+                # Remove domain if it was granted by this achievement
+                if "domain" in reward:
+                    domain_id = reward["domain"]
+                    domains = self.player_achievements[user_id_str].get("domains", [])
+                    if domain_id in domains:
+                        domains.remove(domain_id)
+                        removed_rewards.append(f"Domain: {domain_id}")
+                        # Clear active domain if it was this one
+                        if self.player_achievements[user_id_str].get("active_domain") == domain_id:
+                            self.player_achievements[user_id_str].pop("active_domain", None)
+                            # Set another domain as active if available
+                            if domains:
+                                self.player_achievements[user_id_str]["active_domain"] = domains[0]
+                
+                # Note: We don't remove skill points (they're spent)
+                
+                # Save
+                save_data("achievements/player_achievements", self.player_achievements)
+                
+                reward_text = f"\n**Removed rewards:** {', '.join(removed_rewards)}" if removed_rewards else ""
+                await interaction.response.send_message(
+                    f"✅ Removed achievement **{ach_data.get('name', achievement_id)}** from {user.mention}!{reward_text}",
+                    ephemeral=True
+                )
+                console.print(f"[red]🏆 GM removed {achievement_id} from {user.name}[/red]")
+                
+            except Exception as e:
+                log.error(f"Error in removeachievement command: {e}")
+                await interaction.response.send_message("❌ An error occurred.", ephemeral=True)
+
+        @self.bot.tree.command(
+            name="listachievements",
+            description="[GM] List all available achievements and their IDs"
+        )
+        async def listachievements_command(interaction: discord.Interaction):
+            try:
+                if not self.is_admin(interaction.user):
+                    await interaction.response.send_message("❌ GM only!", ephemeral=True)
+                    return
+                
+                config = self.achievements_config
+                if not config or "achievements" not in config:
+                    await interaction.response.send_message("❌ No achievements configured!", ephemeral=True)
+                    return
+                
+                embed = discord.Embed(
+                    title="🏆 All Achievements (GM View)",
+                    description="Use `/giveachievement` with these IDs",
+                    color=discord.Color.gold()
+                )
+                
+                for ach_id, ach_data in config["achievements"].items():
+                    trigger = ach_data.get("trigger", "manual")
+                    reward = ach_data.get("reward", {})
+                    reward_text = []
+                    if "skill_points" in reward:
+                        reward_text.append(f"+{reward['skill_points']} SP")
+                    if "title" in reward:
+                        reward_text.append(f"Title: {reward['title']}")
+                    if "domain" in reward:
+                        reward_text.append(f"Domain: {reward['domain']}")
+                    
+                    embed.add_field(
+                        name=f"{ach_data.get('icon', '🏆')} {ach_data['name']} (`{ach_id}`)",
+                        value=f"*{ach_data.get('description', 'No description')}*\n"
+                              f"**Trigger:** `{trigger}`\n"
+                              f"**Rewards:** {', '.join(reward_text) if reward_text else 'None'}",
+                        inline=False
+                    )
+                
+                # Also show domains
+                domains = config.get("domains", {})
+                if domains:
+                    domain_text = ""
+                    for d_id, d_data in domains.items():
+                        domain_text += f"• `{d_id}` - **{d_data.get('name', d_id)}**\n"
+                    embed.add_field(name="🌌 Available Domains", value=domain_text, inline=False)
+                
+                await interaction.response.send_message(embed=embed, ephemeral=True)
+                
+            except Exception as e:
+                log.error(f"Error in listachievements command: {e}")
+                await interaction.response.send_message("❌ An error occurred.", ephemeral=True)
+
+        # ========== ACHIEVEMENTS COMMAND ==========
+        @self.bot.tree.command(
+            name="achievements",
+            description="View your unlocked achievements"
+        )
+        async def achievements_command(interaction: discord.Interaction):
+            try:
+                user_id = str(interaction.user.id)
+                player_achievements = self.player_achievements.get(user_id, {})
+                config = self.achievements_config
+                
+                if not config or "achievements" not in config:
+                    await interaction.response.send_message("❌ No achievements configured!", ephemeral=True)
+                    return
+                
+                embed = discord.Embed(
+                    title="🏆 Achievements",
+                    description=f"Unlocked: **{len(player_achievements)}** / **{len(config['achievements'])}**",
+                    color=discord.Color.gold()
+                )
+                
+                # Group by category
+                categories = config.get("categories", {})
+                for cat_id, cat_data in categories.items():
+                    achievements_in_cat = []
+                    for ach_id, ach_data in config["achievements"].items():
+                        if ach_data.get("category") != cat_id:
+                            continue
+                        if ach_data.get("hidden", False) and ach_id not in player_achievements:
+                            achievements_in_cat.append("❓ ???")
+                        elif ach_id in player_achievements:
+                            achievements_in_cat.append(f"✅ {ach_data.get('icon', '🏆')} {ach_data['name']}")
+                        else:
+                            achievements_in_cat.append(f"⬜ {ach_data.get('icon', '🏆')} {ach_data['name']}")
+                    
+                    if achievements_in_cat:
+                        embed.add_field(
+                            name=f"{cat_data.get('icon', '📌')} {cat_data.get('name', cat_id)}",
+                            value="\n".join(achievements_in_cat[:10]),  # Limit display
+                            inline=False
+                        )
+                
+                embed.set_footer(text="Achievements grant skill points and titles!")
+                await interaction.response.send_message(embed=embed, ephemeral=True)
+                
+            except Exception as e:
+                log.error(f"Error in achievements command: {e}")
+                await interaction.response.send_message("❌ An error occurred.", ephemeral=True)
+        # ==========================================
 
         @self.bot.tree.command(
             name="support",
@@ -4441,13 +6716,62 @@ Your response (1-2 sentences max):"""
     
     def get_bf_boost(self, user_id):
         """Get black flash chance boost for user"""
+        boost = 0.0
+        
+        # From buffs
         buff = self.get_active_buff(user_id, "bf_boost")
         if buff:
             # Consume if instant
             if buff.get("expires", 0) == 0:
                 self.consume_buff(user_id, "bf_boost")
-            return buff["value"] / 100.0  # Convert percent to decimal
-        return 0.0
+            boost += buff["value"] / 100.0  # Convert percent to decimal
+        
+        # From skill tree
+        boost += self.get_skill_bonus(user_id, "bf_chance_bonus")
+        
+        return boost
+    
+    def get_skill_bonus(self, user_id, effect_type):
+        """Get cumulative bonus from skill tree for a specific effect type"""
+        user_id_str = str(user_id)
+        if user_id_str not in self.player_skills:
+            return 0.0
+        
+        player_data = self.player_skills[user_id_str]
+        unlocked_skills = player_data.get("skills", {})
+        total_bonus = 0.0
+        
+        for tree_id, tree_data in self.skill_tree_config.items():
+            for branch_id, branch in tree_data.get("branches", {}).items():
+                for skill in branch.get("skills", []):
+                    skill_id = skill["id"]
+                    current_rank = unlocked_skills.get(skill_id, 0)
+                    if current_rank > 0:
+                        effect = skill.get("effect", "")
+                        if effect.startswith(f"{effect_type}:"):
+                            try:
+                                bonus_per_rank = float(effect.split(":")[1])
+                                total_bonus += bonus_per_rank * current_rank
+                            except (IndexError, ValueError):
+                                pass
+        
+        return total_bonus
+    
+    def get_evade_window_bonus(self, user_id):
+        """Get evade window bonus from skills"""
+        return self.get_skill_bonus(user_id, "evade_window_bonus")
+    
+    def get_parry_window_bonus(self, user_id):
+        """Get parry window bonus from skills"""
+        return self.get_skill_bonus(user_id, "parry_window_bonus")
+    
+    def get_damage_reduction(self, user_id):
+        """Get damage reduction percentage from skills"""
+        return self.get_skill_bonus(user_id, "damage_reduction")
+    
+    def get_cooldown_reduction(self, user_id):
+        """Get cooldown reduction percentage from skills"""
+        return self.get_skill_bonus(user_id, "cooldown_reduction")
     
     async def apply_support_effect(self, caster_id, target_id, effect_string):
         """Parse and apply a support skill effect
@@ -4514,6 +6838,13 @@ Your response (1-2 sentences max):"""
 
     async def damage_player(self, user_id, difficulty):
         """Deal damage to a player based on difficulty"""
+        # ========== COURT TRIAL IMMUNITY ==========
+        # Players in an active court trial cannot be damaged
+        if self.is_player_in_court_trial(user_id):
+            console.print(f"[yellow]⚖️ Player {user_id} immune - in court trial[/yellow]")
+            return False
+        # ==========================================
+        
         # Initialize if needed
         if user_id not in self.player_hp:
             await self.initialize_player_hp(user_id)
@@ -4524,6 +6855,75 @@ Your response (1-2 sentences max):"""
 
         # Calculate variable damage
         damage = self.calculate_damage(difficulty)
+        
+        # ========== REFLECT DOMAIN CHECK (Time Cell Moon Palace) ==========
+        # Check for domain-wide reflect (affects ALL players, not just caster)
+        reflect_active = False
+        multiplier = 2.0
+        
+        # Check domain-wide reflect first
+        if hasattr(self, 'active_reflect_domain') and self.active_reflect_domain:
+            if self.active_reflect_domain.get('active') and time.time() < self.active_reflect_domain.get('end_time', 0):
+                reflect_active = True
+                multiplier = self.active_reflect_domain.get('multiplier', 2.0)
+        
+        # Also check individual player reflect (backwards compatibility)
+        if not reflect_active and user_id in self.player_stats and self.player_stats[user_id].get('reflect_active'):
+            reflect_end = self.player_stats[user_id].get('reflect_end_time', 0)
+            if time.time() < reflect_end:
+                reflect_active = True
+                multiplier = self.player_stats[user_id].get('reflect_multiplier', 2.0)
+            else:
+                self.player_stats[user_id]['reflect_active'] = False
+        
+        if reflect_active and self.active_boss:
+            reflected_damage = int(damage * multiplier)
+            
+            # Deal reflected damage to boss
+            old_boss_hp = self.active_boss['hp_current']
+            self.active_boss['hp_current'] = max(0, self.active_boss['hp_current'] - reflected_damage)
+            
+            console.print(f"[cyan]🌙 REFLECT! {damage} damage x{multiplier} = {reflected_damage} to boss![/cyan]")
+            
+            # Grant ult charge for ALL damage during reflect domain
+            if user_id not in self.power_charges:
+                self.power_charges[user_id] = {"power1": 0, "power2": 0}
+            charge_gain = min(damage * 0.5, 25)  # 0.5% per damage, max 25% per hit
+            self.power_charges[user_id]["power1"] = min(100, self.power_charges[user_id].get("power1", 0) + charge_gain)
+            self.power_charges[user_id]["power2"] = min(100, self.power_charges[user_id].get("power2", 0) + charge_gain)
+            
+            # Notify channel
+            channel = self.bot.get_channel(self.qte_channel_id)
+            if channel:
+                asyncio.create_task(channel.send(
+                    f"🌙 **REFLECTED!** {damage} damage → **{reflected_damage}** to **{self.active_boss['name']}**! ⚡+{charge_gain:.0f}% ult"
+                ))
+            
+            # Update boss HP display
+            asyncio.create_task(self.update_hp_bar_display(self.active_boss['name'], is_boss=True))
+            
+            # Check boss death
+            if self.active_boss['hp_current'] <= 0:
+                asyncio.create_task(self.damage_boss(self.active_boss['name'], 0))
+            
+            return True  # Player took no damage due to reflect
+        # ==================================================================
+        
+        # ========== JACKPOT HEALING CHECK (Idle Death Gamble) ==========
+        # During jackpot, player has infinite healing - auto-heal after taking damage
+        if user_id in self.player_stats and self.player_stats[user_id].get('jackpot_active'):
+            jackpot_end = self.player_stats[user_id].get('jackpot_end_time', 0)
+            if time.time() < jackpot_end:
+                console.print(f"[purple]🎰 JACKPOT - Auto-healing {user_id} (infinite heal active)[/purple]")
+                # Heal to full
+                hp_data["current"] = hp_data["max"]
+                await self.update_hp_bar_display(user_id)
+                # Notify channel
+                channel = self.bot.get_channel(self.qte_channel_id)
+                if channel:
+                    asyncio.create_task(channel.send(f"🎰💚 **JACKPOT HEAL!** <@{user_id}> auto-healed to full HP!"))
+                return True  # Player took no real damage due to jackpot heal
+        # ================================================================
         
         # ========== SPECIAL OBJECTS: DAMAGE REDUCTION ==========
         # Uses INVENTORY-based system now (no character names needed)
@@ -4546,6 +6946,42 @@ Your response (1-2 sentences max):"""
         # Reset counter streak on taking damage
         if user_id in self.counter_streaks:
             self.counter_streaks[user_id] = 0
+        
+        # Reset evade streak on taking damage (important for Infinity achievement)
+        if user_id in self.player_stats:
+            old_streak = self.player_stats[user_id].get('evade_streak', 0)
+            if old_streak > 0:
+                self.player_stats[user_id]['evade_streak'] = 0
+                console.print(f"[yellow]♾️ Evade streak reset (took damage) - was {old_streak}[/yellow]")
+            
+            # ========== TRACK DAMAGE FOR FLAWLESS VICTORY ACHIEVEMENT ==========
+            # Track damage taken during this fight (for Shrine achievement)
+            if self.fight_active:
+                self.player_stats[user_id]['damage_taken_this_fight'] = self.player_stats[user_id].get('damage_taken_this_fight', 0) + actual_damage
+                # Add player to participants list for this boss fight
+                if self.active_boss and 'participants' in self.active_boss:
+                    self.active_boss['participants'].add(user_id)
+            # ===================================================================
+            
+            # ========== SHRINE DURATION REDUCTION ON HIT ==========
+            # If Malevolent Shrine is active and caster takes damage, reduce remaining duration by 5s
+            if self.player_stats[user_id].get('shrine_active'):
+                old_duration = self.player_stats[user_id].get('shrine_remaining_duration', 0)
+                new_duration = max(0, old_duration - 5)
+                self.player_stats[user_id]['shrine_remaining_duration'] = new_duration
+                console.print(f"[red]⛩️ SHRINE - Caster hit! Duration reduced: {old_duration}s → {new_duration}s[/red]")
+                
+                channel = self.bot.get_channel(self.qte_channel_id)
+                if channel:
+                    asyncio.create_task(channel.send(f"⛩️ **SHRINE** interrupted! Duration -5s (remaining: **{new_duration}s**)"))
+            # =====================================================
+        
+        # Cancel domain expansion cast if in progress
+        if user_id in self.domain_casting:
+            casting_data = self.domain_casting.pop(user_id)
+            console.print(f"[red]🌌 DOMAIN INTERRUPTED - {user_id} took damage during cast![/red]")
+            # Notify in channel
+            asyncio.create_task(self._announce_domain_interrupt(user_id, actual_damage))
         
         # ===== PHASE 5: ADD CHARGE FROM DAMAGE TAKEN =====
         self.add_charge_from_damage_taken(user_id, actual_damage)
@@ -5045,6 +7481,56 @@ Your response (1-2 sentences max):"""
                 console.print(f"[yellow]⏸️ FIGHT ENDED - Ultimate cooldowns PAUSED![/yellow]")
                 # ================================================
                 
+                # ========== CANCEL ALL ACTIVE DOMAINS & JACKPOTS ==========
+                channel = self.bot.get_channel(self.qte_channel_id)
+                
+                # Cancel any active domains
+                if self.domain_casting:
+                    for caster_id in list(self.domain_casting.keys()):
+                        self.domain_casting.pop(caster_id, None)
+                    if channel:
+                        await channel.send("🌌❌ **All Domain Expansions have collapsed!** The boss has been defeated!")
+                    console.print(f"[magenta]🌌 All domains cancelled due to boss death[/magenta]")
+                
+                # Cancel any active jackpots
+                jackpot_cancelled = False
+                for user_id_check, stats in self.player_stats.items():
+                    if isinstance(stats, dict) and stats.get('jackpot_active'):
+                        stats['jackpot_active'] = False
+                        stats['jackpot_end_time'] = 0
+                        jackpot_cancelled = True
+                        console.print(f"[purple]🎰 Jackpot cancelled for {user_id_check} due to boss death[/purple]")
+                
+                if jackpot_cancelled and channel:
+                    await channel.send("🎰❌ **Jackpot cancelled!** The boss fight has ended!")
+                
+                # Clear enemy stun (boss is dead)
+                self.enemy_stunned = False
+                self.stun_end_time = None
+                
+                # Clear infinity domain amplifiers
+                for user_id_check, stats in self.player_stats.items():
+                    if isinstance(stats, dict):
+                        stats['infinity_domain_active'] = False
+                # ==========================================================
+                
+                # ========== ACHIEVEMENT: CHECK FLAWLESS VICTORY & RESET FIGHT STATS ==========
+                # Check participants for flawless victory and reset fight-specific stats
+                participants = boss.get('participants', set())
+                for participant_id in participants:
+                    stats = self.player_stats.get(participant_id, {})
+                    
+                    # Check if player took NO damage this fight (flawless)
+                    damage_taken_this_fight = stats.get('damage_taken_this_fight', 0)
+                    if damage_taken_this_fight == 0:
+                        asyncio.create_task(self.check_achievements(participant_id, 'flawless_boss_victory', 1))
+                        console.print(f"[gold1]⛩️ {participant_id} achieved FLAWLESS VICTORY![/gold1]")
+                    
+                    # Reset fight-specific counters
+                    stats['critical_counters_this_fight'] = 0
+                    stats['damage_taken_this_fight'] = 0
+                # ================================================================================
+                
                 # ========== BOSS DEFEAT ANIMATION ==========
                 # Select random GIF from user-defined list or use default
                 if self.boss_defeat_gifs and len(self.boss_defeat_gifs) > 0:
@@ -5053,7 +7539,6 @@ Your response (1-2 sentences max):"""
                     defeat_gif = self.default_boss_defeat_gif
                 # ===========================================
                 
-                channel = self.bot.get_channel(self.qte_channel_id)
                 if channel:
                     # Dramatic delay before victory announcement
                     await asyncio.sleep(0.5)
@@ -5216,10 +7701,10 @@ Your response (1-2 sentences max):"""
         """Add charge when player lands a counter"""
         self.initialize_power_charges(user_id)
         
-        # 15% charge for counter
-        charge_gain = 15.0
+        # Use configured charge value (default 3%)
+        charge_gain = self.charge_per_counter
         
-        # Add to both powers
+        # Add to both powers (they charge independently but from same actions)
         for power_key in ["power1", "power2"]:
             old_charge = self.power_charges[user_id][power_key]
             self.power_charges[user_id][power_key] = min(100.0, old_charge + charge_gain)
@@ -5227,8 +7712,20 @@ Your response (1-2 sentences max):"""
             
             if new_charge >= 100.0 and old_charge < 100.0:
                 console.print(f"[gold1]⚡ User {user_id} {power_key.upper()} FULLY CHARGED![/gold1]")
+                # Notify player in channel (async task)
+                asyncio.create_task(self.notify_power_charged(user_id, power_key))
         
         console.print(f"[cyan]⚡ User {user_id} gained {charge_gain:.1f}% charge from counter[/cyan]")
+    
+    async def notify_power_charged(self, user_id, power_key):
+        """Notify player when their power is fully charged"""
+        try:
+            channel = self.bot.get_channel(self.qte_channel_id)
+            if channel:
+                slot = power_key[-1]  # "power1" -> "1"
+                await self.safe_send(channel, content=f"<@{user_id}> ⚡ **{power_key.upper()} FULLY CHARGED!** Use `*power{slot}*` to unleash it!")
+        except Exception as e:
+            log.error(f"Error notifying power charged: {e}")
 
     def can_use_ultimate(self, user_id, power_slot):
         """Check if player has enough charge for ultimate"""
@@ -5280,7 +7777,9 @@ Your response (1-2 sentences max):"""
 
             self.qte_players = [
                 member for member in role.members
-                if member.id not in self.afk_users and not member.bot
+                if member.id not in self.afk_users 
+                and not member.bot
+                and not self.is_player_in_court_trial(member.id)  # Exclude court trial participants
             ]
 
             self.last_cache_update = datetime.now()
@@ -5369,6 +7868,32 @@ Your response (1-2 sentences max):"""
             if not target_member:
                 target_member = random.choice(self.qte_players)
             
+            # SOUL MANIPULATOR: Check for auto-evade on easy QTEs
+            soul_manipulator_active = self.player_stats.get(target_member.id, {}).get('soul_manipulator_active', False)
+            if soul_manipulator_active and difficulty == 'easy':
+                # Auto-evade easy QTEs during Soul Manipulator!
+                channel = self.bot.get_channel(self.qte_channel_id)
+                console.print(f"[green]👁️ AUTO-EVADE (Soul Manipulator) - {target_member.name} auto-evades {difficulty.upper()} QTE[/green]")
+                
+                await self.webhook_send(
+                    content=f"👁️✨ **{target_member.mention}** auto-evades the **{difficulty.upper()}** attack!\n"
+                           f"_\"I TRULY AM A CURSE!\"_"
+                )
+                
+                # Still counts as session stat
+                self.session_stats['qtes_triggered'] += 1
+                
+                # Add transfiguration stack + instant counter
+                await self.add_transfiguration_stack(target_member.id, channel)
+                
+                # Enable counter window (guaranteed during Soul Manipulator)
+                qte_id = self.qte_counter
+                self.qte_counter += 1
+                await self.send_success_with_counter(channel, target_member.mention, 0.0, target_member.id, qte_id, difficulty)
+                console.print(f"[yellow]⚡👁️ COUNTER ENABLED (Soul Manipulator auto-evade) for {target_member.name}[/yellow]")
+                
+                return  # QTE handled, don't actually trigger it
+            
             # MIRROR SHARD: Check for auto-evade on easy QTEs
             mirror_effects = self.special_objects_manager.get_active_effects(target_member.id, difficulty)
             auto_evade_difficulty = mirror_effects.get('auto_evade')
@@ -5395,12 +7920,28 @@ Your response (1-2 sentences max):"""
                 
                 return  # QTE handled, don't actually trigger it
 
+            # ========== SELECT QTE VARIATION ==========
+            qte_variation = self.select_qte_variation()
+            
+            # Handle special variation types
+            if qte_variation == "combo":
+                await self.trigger_combo_qte(difficulty, target_member, is_targeted)
+                return
+            elif qte_variation == "direction":
+                await self.trigger_direction_qte(difficulty, target_member, is_targeted)
+                return
+            elif qte_variation == "fake":
+                await self.trigger_fake_qte(difficulty, target_member, is_targeted)
+                return
+            # ========================================
+
             qte_id = self.qte_counter
             self.qte_counter += 1
 
             self.active_qtes[qte_id] = {
                 'difficulty': difficulty,
                 'mode': 'single',
+                'variation': 'standard',
                 'start': datetime.now(timezone.utc),
                 'target': target_member,
                 'participants': {},
@@ -5746,7 +8287,7 @@ Your response (1-2 sentences max):"""
             content = message.content.lower()
             
             # Fast check: Only process if message contains a QTE command
-            qte_commands = ('*evade*', '*parry*', '*save*', '*adapt*', '*counter*', '*block*')
+            qte_commands = ('*evade*', '*parry*', '*save*', '*adapt*', '*counter*', '*block*', '*up*', '*down*', '*left*', '*right*', '*u*', '*d*', '*l*', '*r*')
             if not any(cmd in content for cmd in qte_commands):
                 profiler.stop('handle_qte_response')
                 return
@@ -5809,6 +8350,30 @@ Your response (1-2 sentences max):"""
                         qte_id, qte_data, message, user_id, content, 
                         response_time, evade_window, parry_min, parry_max
                     )
+                
+                # ========== QTE VARIATION MODES ==========
+                elif qte_data['mode'] == 'combo':
+                    result = await self.handle_combo_qte_response(
+                        qte_id, qte_data, message, user_id, content, response_time
+                    )
+                    if result:
+                        break
+                
+                elif qte_data['mode'] == 'direction':
+                    result = await self.handle_direction_qte_response(
+                        qte_id, qte_data, message, user_id, content, response_time
+                    )
+                    if result:
+                        break
+                
+                elif qte_data['mode'] == 'fake':
+                    # ANY response during fake QTE = instant fail!
+                    result = await self.handle_fake_qte_response(
+                        qte_id, qte_data, message, user_id, content
+                    )
+                    if result:
+                        break
+                # =========================================
 
         except Exception as e:
             console.print(f"[red]✗ Error handling QTE response: {e}[/red]")
@@ -6086,6 +8651,26 @@ Your response (1-2 sentences max):"""
             if user_id in responses:
                 return False
             
+            # ========== BOSS DOMAIN STUN: AUTO-FAIL QTEs ==========
+            if self.has_status_effect(user_id, "stunned"):
+                # Player is stunned from boss domain - auto-fail any QTE response
+                await self.webhook_send(content=f"🔒 {message.author.mention} is **STUNNED** and cannot react! (Boss Domain)")
+                await self.damage_player(user_id, difficulty)
+                responses.add(user_id)
+                
+                asyncio.create_task(self.add_reaction_to_response(channel, user_id, message, "🔒"))
+                
+                current_time = time.time()
+                self.last_qte_completion[user_id] = current_time
+                is_batch = qte_data.get('batch_mode', False)
+                self.active_qtes.pop(qte_id, None)
+                self.save_all_data()
+                
+                if is_batch:
+                    await self.process_next_player_qte(target)
+                return True
+            # ======================================================
+            
             # Get active Mirror Shard effects
             mirror_effects = self.special_objects_manager.get_active_effects(user_id, difficulty)
 
@@ -6102,6 +8687,10 @@ Your response (1-2 sentences max):"""
                         # Add success reaction to Tupper message (or original if not using Tupper)
                         asyncio.create_task(self.add_reaction_to_response(channel, user_id, message, "✅"))
                         
+                        # SOUL MANIPULATOR: Add Transfiguration stack on evade
+                        if self.player_stats.get(user_id, {}).get('soul_manipulator_active'):
+                            await self.add_transfiguration_stack(user_id, channel)
+                        
                         # MIRROR SHARD: Heal on hard evade (15+ spins)
                         if difficulty == 'hard' and mirror_effects.get('on_hard_evade_heal', 0) > 0:
                             heal_amount = mirror_effects['on_hard_evade_heal']
@@ -6115,9 +8704,10 @@ Your response (1-2 sentences max):"""
                                 await self.webhook_send(content=f"🪞✨ **Mirror Shard** healed {message.author.mention}! ({old_hp} → {new_hp} HP)")
                                 console.print(f"[green]🪞 Mirror Shard heal: {old_hp} → {new_hp} (+{heal_amount})[/green]")
                         
-                        # Enable counter window if evaded fast enough OR has guaranteed_counter
+                        # Enable counter window if evaded fast enough OR has guaranteed_counter OR has Soul Manipulator
                         has_guaranteed_counter = mirror_effects.get('guaranteed_counter', False)
-                        if response_time < self.counter_window or has_guaranteed_counter:
+                        soul_manipulator_active = self.player_stats.get(user_id, {}).get('soul_manipulator_active', False)
+                        if response_time < self.counter_window or has_guaranteed_counter or soul_manipulator_active:
                             await self.send_success_with_counter(channel, message.author.mention, response_time, user_id, qte_id, difficulty)
                             if has_guaranteed_counter:
                                 console.print(f"[yellow]⚡🪞 COUNTER ENABLED (Mirror Shard guaranteed) for {message.author.name}[/yellow]")
@@ -6280,6 +8870,14 @@ Your response (1-2 sentences max):"""
                         asyncio.create_task(self.add_reaction_to_response(channel, user_id, message, "✅"))
 
                         await self.update_player_stats(user_id, 'parry', True, response_time)
+                        
+                        # ========== ACHIEVEMENT: LOW HP PARRY ==========
+                        # Check for "Revengeful Curse" achievement trigger
+                        current_hp = self.player_hp.get(user_id, {}).get("current", 100)
+                        if current_hp < 15 and current_hp > 0:
+                            asyncio.create_task(self.check_achievements(user_id, 'low_hp_parry', current_hp))
+                        # ================================================
+                        
                         current_time = time.time()
                         self.last_qte_completion[user_id] = current_time
                         
@@ -6584,6 +9182,166 @@ Your response (1-2 sentences max):"""
         except Exception as e:
             console.print(f"[red]✗ Error finishing group QTE: {e}[/red]")
 
+    # ========== QTE VARIATION RESPONSE HANDLERS ==========
+    
+    async def handle_combo_qte_response(self, qte_id, qte_data, message, user_id, content, response_time):
+        """Handle responses for Combo QTE - must complete sequence in order"""
+        try:
+            target = qte_data.get('target')
+            if not target or target.id != user_id:
+                return False
+            
+            combo_index = qte_data.get('combo_index', 0)
+            combo_sequence = qte_data.get('combo_sequence', [])
+            combo_length = qte_data.get('combo_length', 5)
+            difficulty = qte_data['difficulty']
+            
+            if combo_index >= len(combo_sequence):
+                return False
+            
+            expected_action = combo_sequence[combo_index]
+            channel = message.channel
+            
+            # Check if correct action
+            if f'*{expected_action}*' in content:
+                # Check timing (more lenient for combo)
+                timing = self.qte_times[difficulty]
+                evade_window = timing['evade_window'] + 0.5  # Slightly more lenient
+                
+                if response_time <= evade_window * (combo_index + 1):  # More time for later in combo
+                    # Success for this step!
+                    qte_data['combo_index'] = combo_index + 1
+                    
+                    if combo_index + 1 >= combo_length:
+                        # COMBO COMPLETE!
+                        self.active_qtes.pop(qte_id, None)
+                        await channel.send(
+                            f"# 🔥 **COMBO COMPLETE!** 🔥\n"
+                            f"{message.author.mention} completed all **{combo_length}** hits!"
+                        )
+                        console.print(f"[green]🔥 COMBO QTE COMPLETE - {message.author.name}[/green]")
+                        
+                        # Grant counter window
+                        await self.send_success_with_counter(channel, message.author.mention, response_time, user_id, qte_id, difficulty)
+                    else:
+                        # Next in sequence
+                        next_action = combo_sequence[combo_index + 1]
+                        await channel.send(f"✅ **{combo_index + 1}/{combo_length}!** Next: `*{next_action}*`")
+                    
+                    return True
+                else:
+                    # Too slow
+                    self.active_qtes.pop(qte_id, None)
+                    await channel.send(f"❌ **COMBO BROKEN!** {message.author.mention} was too slow!")
+                    await self.damage_player(user_id, difficulty)
+                    return True
+            else:
+                # Wrong action
+                self.active_qtes.pop(qte_id, None)
+                await channel.send(f"❌ **COMBO BROKEN!** {message.author.mention} used wrong action! Expected `*{expected_action}*`")
+                await self.damage_player(user_id, difficulty)
+                return True
+            
+        except Exception as e:
+            console.print(f"[red]✗ Error in combo QTE response: {e}[/red]")
+            return False
+    
+    async def handle_direction_qte_response(self, qte_id, qte_data, message, user_id, content, response_time):
+        """Handle responses for Direction QTE - must input OPPOSITE direction"""
+        try:
+            target = qte_data.get('target')
+            if not target or target.id != user_id:
+                return False
+            
+            correct_arrow = qte_data.get('correct_arrow')
+            shown_arrow = qte_data.get('shown_arrow')
+            difficulty = qte_data['difficulty']
+            channel = message.channel
+            
+            # Check what direction they input
+            input_direction = None
+            direction_map = {
+                '⬆️': ['*up*', '*u*'],
+                '⬇️': ['*down*', '*d*'],
+                '⬅️': ['*left*', '*l*'],
+                '➡️': ['*right*', '*r*']
+            }
+            
+            for arrow, commands in direction_map.items():
+                if any(cmd in content for cmd in commands):
+                    input_direction = arrow
+                    break
+            
+            if not input_direction:
+                return False  # Not a direction command
+            
+            self.active_qtes.pop(qte_id, None)
+            
+            # Check timing first
+            timing = self.qte_times[difficulty]
+            evade_window = timing['evade_window']
+            
+            if response_time > evade_window + 1.0:  # +1s for direction
+                await channel.send(f"❌ {message.author.mention} too slow! ({response_time:.2f}s)")
+                await self.damage_player(user_id, difficulty)
+                return True
+            
+            # Check if correct (OPPOSITE)
+            if input_direction == correct_arrow:
+                await channel.send(
+                    f"✅ **DIRECTION CORRECT!** {message.author.mention}\n"
+                    f"_Shown: {shown_arrow} → Input: {input_direction} (opposite)_"
+                )
+                console.print(f"[green]🎯 Direction QTE correct - {message.author.name}[/green]")
+                
+                # Grant counter window
+                await self.send_success_with_counter(channel, message.author.mention, response_time, user_id, qte_id, difficulty)
+            else:
+                await channel.send(
+                    f"❌ **WRONG DIRECTION!** {message.author.mention}\n"
+                    f"_Shown: {shown_arrow} → You input: {input_direction} (needed {correct_arrow})_"
+                )
+                await self.damage_player(user_id, difficulty)
+            
+            return True
+            
+        except Exception as e:
+            console.print(f"[red]✗ Error in direction QTE response: {e}[/red]")
+            return False
+    
+    async def handle_fake_qte_response(self, qte_id, qte_data, message, user_id, content):
+        """Handle responses for Fake QTE - ANY response = instant fail!"""
+        try:
+            difficulty = qte_data['difficulty']
+            channel = message.channel
+            
+            # Anyone who responds to a fake QTE fails!
+            # Check if this is a QTE command response
+            qte_commands = ('*evade*', '*parry*', '*save*', '*adapt*', '*counter*', '*block*')
+            if not any(cmd in content for cmd in qte_commands):
+                return False
+            
+            self.active_qtes.pop(qte_id, None)
+            
+            await channel.send(
+                f"# 👻 **FAKE QTE!** 👻\n"
+                f"❌ {message.author.mention} fell for it!\n"
+                f"_There was no real attack!_"
+            )
+            
+            console.print(f"[red]👻 Fake QTE triggered - {message.author.name} fell for it![/red]")
+            
+            # Damage the player who fell for it
+            await self.damage_player(user_id, difficulty)
+            
+            return True
+            
+        except Exception as e:
+            console.print(f"[red]✗ Error in fake QTE response: {e}[/red]")
+            return False
+    
+    # ========== END QTE VARIATION RESPONSE HANDLERS ==========
+
     async def check_trigger_phrase(self, message):
         """Check if message contains a trigger phrase for any registered power"""
         try:
@@ -6625,26 +9383,64 @@ Your response (1-2 sentences max):"""
         except Exception as e:
             log.error(f"Error checking trigger phrase: {e}")
 
-    async def handle_power_activation(self, message, power_slot):
-        """Handle power activation (*power1* or *power2*)"""
+    async def handle_power_activation(self, message, power_slot, specific_character=None):
+        """Handle power activation (*power1* or *power2*)
+        
+        Args:
+            message: Discord message
+            power_slot: 1 or 2
+            specific_character: If provided, use this character instead of auto-detecting
+        """
         try:
             user_id = message.author.id
             channel = message.channel
+            
+            # ========== TUPPERBOX SUPPORT: Resolve user from webhook ==========
+            # Check if this is a Tupper message and resolve the real user
+            resolved_user_id = self.resolve_user_id(message)
+            if resolved_user_id != user_id:
+                user_id = resolved_user_id
+                console.print(f"[dim]Resolved Tupper user: {message.author.display_name} -> user_id {user_id}[/dim]")
+            # ==================================================================
             
             # Check if player has registered characters
             if user_id not in self.user_characters or not self.user_characters[user_id]:
                 await channel.send(f"{message.author.mention} You need to register a character first! Use `/register`")
                 return
             
-            # Get first registered character (or implement character selection)
-            character_name = self.user_characters[user_id][0]
+            # ========== MULTI-CHARACTER SUPPORT ==========
+            # Try to find the right character:
+            # 1. If specific_character provided, use it
+            # 2. If Tupper message, match by display name
+            # 3. Otherwise, search all user's characters for one with this power
+            character_name = None
+            power_key = f"power{power_slot}"
+            
+            if specific_character and specific_character in self.user_characters[user_id]:
+                character_name = specific_character
+            elif message.author.display_name in self.character_registry:
+                # Tupper character name match
+                potential_char = message.author.display_name
+                if potential_char in self.character_powers and power_key in self.character_powers[potential_char]:
+                    character_name = potential_char
+            
+            # Search all user's characters for one with this power slot
+            if not character_name:
+                for char in self.user_characters[user_id]:
+                    if char in self.character_powers and power_key in self.character_powers[char]:
+                        character_name = char
+                        break
+            
+            if not character_name:
+                await channel.send(f"{message.author.mention} None of your characters have **Power {power_slot}** registered!")
+                return
+            # =============================================
             
             # Check if character has powers
             if character_name not in self.character_powers:
                 await channel.send(f"{message.author.mention} No powers registered for **{character_name}**!")
                 return
             
-            power_key = f"power{power_slot}"
             if power_key not in self.character_powers[character_name]:
                 await channel.send(f"{message.author.mention} **{character_name}** doesn't have Power {power_slot}!")
                 return
@@ -6698,6 +9494,2215 @@ Your response (1-2 sentences max):"""
         except Exception as e:
             log.error(f"Error handling power activation: {e}")
 
+    async def handle_domain_expansion(self, message):
+        """Handle Domain Expansion activation (*domain* / *power3* / *ult3*)
+        
+        Domain Expansion is unlocked via achievements and has:
+        - 5 second interruptible cast time
+        - GIF sequences: handsign → domain
+        - Text: "RYOIKI TENKAI" → "MURYOKUSHO" 
+        - Effects: stun + damage to boss
+        """
+        try:
+            user_id = message.author.id
+            channel = message.channel
+            
+            # Resolve Tupperbox user
+            resolved_user_id = self.resolve_user_id(message)
+            if resolved_user_id != user_id:
+                user_id = resolved_user_id
+            
+            user_id_str = str(user_id)
+            
+            # Check if player has unlocked any domain
+            player_ach = self.player_achievements.get(user_id_str, {})
+            unlocked_domains = player_ach.get("domains", [])
+            active_domain = player_ach.get("active_domain")
+            
+            if not unlocked_domains:
+                await channel.send(
+                    f"{message.author.mention} ❌ You don't have a domain."
+                )
+                return
+            
+            # Use active domain, or first unlocked if none set
+            domain_id = active_domain if active_domain in unlocked_domains else unlocked_domains[0]
+            domain_config = self.achievements_config.get("domains", {}).get(domain_id, {})
+            
+            if not domain_config:
+                await channel.send(f"{message.author.mention} ❌ Domain configuration not found!")
+                return
+            
+            # Check if already casting
+            if user_id in self.domain_casting:
+                await channel.send(f"{message.author.mention} ⏳ Domain already being cast! Focus on the handsign!")
+                return
+            
+            # ========== BLOCK CASTING INSIDE ACTIVE DOMAIN ==========
+            if self.active_domain_caster is not None and self.active_domain_end_time and time.time() < self.active_domain_end_time:
+                await channel.send(f"{message.author.mention} 🌌 **A Domain is already active!** You cannot cast another domain inside an active domain!")
+                return
+            
+            # ========== BLOCK CASTING DURING JACKPOT MODE ==========
+            if user_id in self.player_stats and self.player_stats[user_id].get('jackpot_active'):
+                await channel.send(f"{message.author.mention} 🎰 **JACKPOT MODE ACTIVE!** You cannot cast a domain while in jackpot mode - focus on your slots!")
+                return
+            
+            # ========== DOMAIN CLASH CHECK (during 5s casting window) ==========
+            # Check if someone else is currently casting - THIS triggers the clash!
+            other_caster_id = None
+            other_caster_config = None
+            for caster_id, casting_info in self.domain_casting.items():
+                if caster_id != user_id:
+                    other_caster_id = caster_id
+                    # Use stored config directly (more reliable than re-fetching)
+                    other_caster_config = casting_info.get("domain_config")
+                    if not other_caster_config:
+                        # Fallback: fetch from achievements_config
+                        other_domain_id = casting_info.get("domain_id")
+                        other_caster_config = self.achievements_config.get("domains", {}).get(other_domain_id, {})
+                    # Cancel the other caster's task - clash overrides
+                    if casting_info.get("task"):
+                        casting_info["task"].cancel()
+                    self.domain_casting.pop(caster_id, None)
+                    break
+            
+            if other_caster_id is not None and other_caster_config:
+                # DOMAIN CLASH triggered!
+                console.print(Panel.fit(
+                    f"[bold red]⚔️ DOMAIN CLASH TRIGGERED! ⚔️[/bold red]\n"
+                    f"[yellow]Challenger 1: {other_caster_id} - {other_caster_config.get('name', 'Unknown')}[/yellow]\n"
+                    f"[yellow]Challenger 2: {user_id} - {domain_config.get('name', 'Unknown')}[/yellow]",
+                    border_style="red"
+                ))
+                await self._trigger_domain_clash(
+                    challenger1_id=other_caster_id,
+                    challenger1_config=other_caster_config,
+                    challenger2_id=user_id,
+                    challenger2_config=domain_config,
+                    channel=channel
+                )
+                return  # Don't proceed with normal casting
+            # ============================================
+            
+            # Check cooldown
+            cooldown = domain_config.get("cooldown", 600)  # Default 10 minutes
+            if user_id in self.domain_cooldowns and domain_id in self.domain_cooldowns[user_id]:
+                last_used = self.domain_cooldowns[user_id][domain_id]
+                elapsed = time.time() - last_used
+                if elapsed < cooldown:
+                    remaining = cooldown - elapsed
+                    minutes = int(remaining // 60)
+                    seconds = int(remaining % 60)
+                    await channel.send(
+                        f"{message.author.mention} ⏱️ Domain on cooldown! **{minutes}m {seconds}s** remaining."
+                    )
+                    return
+            
+            # Check if fight is active (optional - domains might work outside fights too)
+            if not self.fight_active and not self.active_boss:
+                await channel.send(
+                    f"{message.author.mention} ⚔️ **No active fight!** "
+                    f"Domain Expansion can only be used during boss fights."
+                )
+                return
+            
+            # Start casting!
+            console.print(Panel.fit(
+                f"[bold magenta]🌌 DOMAIN EXPANSION CASTING 🌌[/bold magenta]\n"
+                f"[yellow]{message.author.display_name} - {domain_config.get('name', 'Domain')}[/yellow]\n"
+                f"[red]INTERRUPTIBLE - 5 second cast![/red]",
+                border_style="magenta"
+            ))
+            
+            # Phase 1: Handsign formation
+            # Prefer local assets over URLs if available
+            handsign_gif = domain_config.get("assets", {}).get("handsign") or domain_config.get("gifs", {}).get("handsign", "")
+            activation_text = domain_config.get("activation_text", "RYOIKI TENKAI")
+            
+            # Convert relative paths to absolute using ASSETS_DIR
+            if handsign_gif and handsign_gif.startswith("assets/"):
+                handsign_gif = str(ASSETS_DIR / handsign_gif.replace("assets/", ""))
+            
+            embed = discord.Embed(
+                title=f"🤲 *{activation_text}* 🤲",
+                description=f"**{message.author.display_name}** is forming the handsign...\n\n"
+                           f"*⚠️ CAN BE INTERRUPTED BY DAMAGE!*",
+                color=discord.Color.from_rgb(0, 0, 0)
+            )
+            
+            # Support both URLs and local files (local files use "assets/filename" format)
+            handsign_file = None
+            if handsign_gif:
+                if handsign_gif.startswith(("http://", "https://")):
+                    embed.set_image(url=handsign_gif)
+                elif os.path.exists(handsign_gif):
+                    # Local file - send as attachment
+                    handsign_file = discord.File(handsign_gif, filename=os.path.basename(handsign_gif))
+                    embed.set_image(url=f"attachment://{os.path.basename(handsign_gif)}")
+            
+            if handsign_file:
+                await self.webhook_send(embed=embed, file=handsign_file)
+            else:
+                await self.webhook_send(embed=embed)
+            
+            # Mark as casting (with timestamp for interrupt checking)
+            cast_task = asyncio.create_task(self._complete_domain_expansion(user_id, domain_id, domain_config, message, channel))
+            self.domain_casting[user_id] = {
+                "domain_id": domain_id,
+                "domain_config": domain_config,  # Store full config for clash detection
+                "start_time": time.time(),
+                "task": cast_task
+            }
+            
+        except Exception as e:
+            console.print(f"[red]✗ Error handling domain expansion: {e}[/red]")
+            import traceback
+            console.print(f"[red]{traceback.format_exc()}[/red]")
+            log.error(f"Domain expansion error: {e}")
+    
+    async def _complete_domain_expansion(self, user_id: int, domain_id: str, domain_config: dict, message, channel):
+        """Complete domain expansion after cast time (can be cancelled by damage)."""
+        try:
+            cast_time = domain_config.get("cast_time", 5.0)
+            
+            # Wait for cast time (can be interrupted)
+            await asyncio.sleep(cast_time)
+            
+            # Check if still casting (not interrupted)
+            if user_id not in self.domain_casting:
+                console.print(f"[red]Domain was interrupted during cast![/red]")
+                return
+            
+            # Remove from casting (successful)
+            self.domain_casting.pop(user_id, None)
+            
+            # Phase 2: Domain expands!
+            domain_text = domain_config.get("domain_text", "DOMAIN EXPANSION")
+            domain_name = domain_config.get("name", "Domain")
+            japanese_name = domain_config.get("japanese_name", "")
+            # Prefer local assets over URLs if available
+            domain_gif = domain_config.get("assets", {}).get("domain") or domain_config.get("gifs", {}).get("domain", "")
+            
+            # Convert relative paths to absolute using ASSETS_DIR
+            if domain_gif and domain_gif.startswith("assets/"):
+                domain_gif = str(ASSETS_DIR / domain_gif.replace("assets/", ""))
+            
+            # NOTE: Domain clash is triggered at HANDSIGN phase (cast start)
+            # If we reach here, no clash was triggered - proceed with domain activation
+            
+            # Send domain activation
+            embed = discord.Embed(
+                title=f"🌌 **{domain_name.upper()}** 🌌",
+                description=f"# {domain_text}\n"
+                           f"*{japanese_name}*\n\n"
+                           f"**{message.author.display_name}** unleashes their Domain!",
+                color=discord.Color.from_rgb(0, 0, 0)
+            )
+            
+            # Support both URLs and local files (local files use "assets/filename" format)
+            domain_file = None
+            if domain_gif:
+                if domain_gif.startswith(("http://", "https://")):
+                    embed.set_image(url=domain_gif)
+                elif os.path.exists(domain_gif):
+                    # Local file - send as attachment
+                    domain_file = discord.File(domain_gif, filename=os.path.basename(domain_gif))
+                    embed.set_image(url=f"attachment://{os.path.basename(domain_gif)}")
+            
+            if domain_file:
+                await self.webhook_send(embed=embed, file=domain_file)
+            else:
+                await self.webhook_send(embed=embed)
+            
+            # Track this as the active domain (for clash detection)
+            domain_duration = domain_config.get("effects", {}).get("stun_duration", 30)
+            self.active_domain_caster = user_id
+            self.active_domain_config = domain_config
+            self.active_domain_end_time = time.time() + domain_duration
+            
+            # Schedule clearing of active domain
+            asyncio.create_task(self._clear_active_domain(domain_duration))
+            
+            # ========== DOMAIN TYPE DISPATCH ==========
+            domain_type = domain_config.get("type", "simple")
+            
+            if domain_type == "pachinko":
+                # Idle Death Gamble - Hakari's domain
+                await self._handle_pachinko_domain(user_id, domain_config, message, channel)
+            elif domain_type == "reflect":
+                # Time Cell Moon Palace - Naoya's domain
+                await self._handle_reflect_domain(user_id, domain_config, message, channel)
+            elif domain_type == "dps":
+                # Malevolent Shrine - Sukuna's domain
+                await self._handle_dps_domain(user_id, domain_config, message, channel)
+            elif domain_type == "cursed_partners":
+                # Authentic Mutual Love - True Love domain
+                await self._handle_cursed_partners_domain(user_id, domain_config, message, channel)
+            elif domain_type == "court_trial":
+                # Deadly Sentencing - Lawyer domain
+                await self._handle_court_trial_domain(user_id, domain_config, message, channel)
+            elif domain_type == "soul_manipulator":
+                # Self-Embodiment of Perfection - Perfect counter domain
+                await self._handle_soul_manipulator_domain(user_id, domain_config, message, channel)
+            else:
+                # Simple domain (default) - Infinite Void type
+                await self._handle_simple_domain(user_id, domain_config, message, channel)
+            
+            # Set cooldown (applies to ALL domain types)
+            if user_id not in self.domain_cooldowns:
+                self.domain_cooldowns[user_id] = {}
+            self.domain_cooldowns[user_id][domain_id] = time.time()
+            
+            console.print(Panel.fit(
+                f"[bold magenta]🌌 DOMAIN EXPANSION COMPLETE 🌌[/bold magenta]\n"
+                f"[green]{message.author.display_name} - {domain_name}[/green]\n"
+                f"[cyan]Type: {domain_type}[/cyan]",
+                border_style="green"
+            ))
+            
+        except asyncio.CancelledError:
+            console.print(f"[yellow]Domain expansion cancelled (task)[/yellow]")
+        except Exception as e:
+            console.print(f"[red]✗ Error completing domain expansion: {e}[/red]")
+            import traceback
+            console.print(f"[red]{traceback.format_exc()}[/red]")
+    
+    async def _remove_domain_stun(self, duration: float):
+        """Remove domain stun after duration expires."""
+        await asyncio.sleep(duration)
+        if self.enemy_stunned and self.stun_end_time and time.time() >= self.stun_end_time:
+            self.enemy_stunned = False
+            self.stun_end_time = None
+            console.print(f"[yellow]Domain stun expired[/yellow]")
+            
+            channel = self.bot.get_channel(self.qte_channel_id)
+            if channel and self.active_boss:
+                await channel.send(f"⚡ **{self.active_boss['name']}** breaks free from the Domain!")
+    
+    async def _clear_active_domain(self, duration: float):
+        """Clear active domain tracking after duration"""
+        await asyncio.sleep(duration)
+        self.active_domain_caster = None
+        self.active_domain_config = None
+        self.active_domain_end_time = None
+        console.print(f"[magenta]🌌 Active domain tracking cleared[/magenta]")
+    
+    # ========== DOMAIN CLASH SYSTEM ==========
+    
+    async def _trigger_domain_clash(self, challenger1_id: int, challenger1_config: dict, 
+                                    challenger2_id: int, challenger2_config: dict, channel):
+        """Trigger a domain clash between two domain casters"""
+        try:
+            self.domain_clash_active = True
+            
+            # Get player names
+            member1 = channel.guild.get_member(challenger1_id) if channel.guild else None
+            member2 = channel.guild.get_member(challenger2_id) if channel.guild else None
+            name1 = member1.display_name if member1 else f"Player 1"
+            name2 = member2.display_name if member2 else f"Player 2"
+            
+            domain1_name = challenger1_config.get("name", "Domain 1")
+            domain2_name = challenger2_config.get("name", "Domain 2")
+            
+            self.domain_clash_data = {
+                "challenger1": {"user_id": challenger1_id, "domain_config": challenger1_config, "score": 0, "name": name1},
+                "challenger2": {"user_id": challenger2_id, "domain_config": challenger2_config, "score": 0, "name": name2},
+                "current_word": None,
+                "word_start_time": None,
+                "words_completed": 0,
+                "max_words": 5,
+                "clash_channel": channel.id
+            }
+            
+            # Send clash announcement
+            clash_embed = discord.Embed(
+                title="🌌⚔️ DOMAIN CLASH! ⚔️🌌",
+                description=f"**{name1}**'s *{domain1_name}*\n"
+                           f"**VS**\n"
+                           f"**{name2}**'s *{domain2_name}*\n\n"
+                           f"🎮 **TYPE THE WORDS FASTEST TO WIN!**\n"
+                           f"First to win **{self.domain_clash_data['max_words']}** words wins the clash!",
+                color=discord.Color.dark_purple()
+            )
+            
+            # Handle local file vs URL for clash gif
+            clash_file = None
+            if self.domain_clash_gif.startswith(("http://", "https://")):
+                clash_embed.set_image(url=self.domain_clash_gif)
+            elif os.path.exists(self.domain_clash_gif):
+                clash_file = discord.File(self.domain_clash_gif, filename="domain_clash.gif")
+                clash_embed.set_image(url="attachment://domain_clash.gif")
+            
+            if clash_file:
+                await channel.send(embed=clash_embed, file=clash_file)
+            else:
+                await channel.send(embed=clash_embed)
+            
+            # Clear the current active domain (clash overrides it)
+            self.active_domain_caster = None
+            self.active_domain_config = None
+            self.active_domain_end_time = None
+            
+            # Start the clash loop
+            await asyncio.sleep(2)  # Brief pause before starting
+            await self._run_domain_clash_loop(channel)
+            
+        except Exception as e:
+            log.error(f"Error triggering domain clash: {e}")
+            self.domain_clash_active = False
+    
+    async def _run_domain_clash_loop(self, channel):
+        """Run the domain clash word typing competition"""
+        clash_words = [
+            "DOMAIN", "CURSED", "ENERGY", "STRIKE", "PARRY", "EVADE", 
+            "POWER", "BLACK", "FLASH", "SHRINE", "VOID", "GAMBLE",
+            "FIGHT", "CURSE", "DEMON", "SPIRIT", "SOUL", "BLADE"
+        ]
+        
+        try:
+            while self.domain_clash_active and self.domain_clash_data["words_completed"] < self.domain_clash_data["max_words"]:
+                # Pick a random word
+                word = random.choice(clash_words)
+                self.domain_clash_data["current_word"] = word.upper()
+                self.domain_clash_data["word_start_time"] = time.time()
+                
+                # Announce the word
+                word_num = self.domain_clash_data["words_completed"] + 1
+                c1 = self.domain_clash_data["challenger1"]
+                c2 = self.domain_clash_data["challenger2"]
+                
+                await channel.send(
+                    f"# 📝 Word {word_num}/{self.domain_clash_data['max_words']}: **{word}**\n"
+                    f"🔥 {c1['name']}: **{c1['score']}** | {c2['name']}: **{c2['score']}**"
+                )
+                
+                # Wait for response (handled in on_message)
+                # Timeout after 5 seconds
+                for _ in range(50):  # 5 seconds in 0.1s intervals
+                    await asyncio.sleep(0.1)
+                    if self.domain_clash_data["current_word"] is None:
+                        break  # Word was claimed
+                
+                # If no one claimed, it's a tie for this round
+                if self.domain_clash_data["current_word"] is not None:
+                    await channel.send(f"⏰ **Time's up!** No one typed **{word}** fast enough!")
+                    self.domain_clash_data["current_word"] = None
+                
+                self.domain_clash_data["words_completed"] += 1
+                await asyncio.sleep(1)  # Brief pause between words
+            
+            # Clash finished - determine winner
+            await self._end_domain_clash(channel)
+            
+        except Exception as e:
+            log.error(f"Error in domain clash loop: {e}")
+            self.domain_clash_active = False
+    
+    async def handle_domain_clash_response(self, message):
+        """Check if message is a valid clash word response"""
+        if not self.domain_clash_active:
+            return False
+        
+        if message.channel.id != self.domain_clash_data.get("clash_channel"):
+            return False
+        
+        current_word = self.domain_clash_data.get("current_word")
+        if not current_word:
+            return False
+        
+        user_id = message.author.id
+        content = message.content.upper().strip()
+        
+        # Check if it's one of the challengers
+        c1 = self.domain_clash_data["challenger1"]
+        c2 = self.domain_clash_data["challenger2"]
+        
+        if user_id != c1["user_id"] and user_id != c2["user_id"]:
+            return False  # Not a participant
+        
+        # Check if word matches
+        if content == current_word:
+            response_time = time.time() - self.domain_clash_data["word_start_time"]
+            
+            # Award point to winner
+            if user_id == c1["user_id"]:
+                c1["score"] += 1
+                winner_name = c1["name"]
+            else:
+                c2["score"] += 1
+                winner_name = c2["name"]
+            
+            self.domain_clash_data["current_word"] = None  # Clear word
+            
+            await message.channel.send(f"✅ **{winner_name}** got it in **{response_time:.2f}s**!")
+            return True
+        
+        return False
+    
+    async def _end_domain_clash(self, channel):
+        """End the domain clash and activate winner's domain"""
+        try:
+            c1 = self.domain_clash_data["challenger1"]
+            c2 = self.domain_clash_data["challenger2"]
+            
+            self.domain_clash_active = False
+            
+            if c1["score"] > c2["score"]:
+                winner = c1
+                loser = c2
+            elif c2["score"] > c1["score"]:
+                winner = c2
+                loser = c1
+            else:
+                # Tie - both domains cancel
+                await channel.send(
+                    f"# 🌌💥 DOMAIN CLASH - TIE! 💥🌌\n"
+                    f"Both domains **COLLAPSE**! No winner!\n"
+                    f"Final Score: **{c1['name']}** {c1['score']} - {c2['score']} **{c2['name']}**"
+                )
+                return
+            
+            # Winner's domain activates
+            winner_domain = winner["domain_config"]
+            domain_name = winner_domain.get("name", "Domain")
+            domain_text = winner_domain.get("domain_text", "DOMAIN EXPANSION")
+            japanese_name = winner_domain.get("japanese_name", "")
+            domain_gif = winner_domain.get("assets", {}).get("domain") or winner_domain.get("gifs", {}).get("domain", "")
+            
+            await channel.send(
+                f"# 🌌🏆 DOMAIN CLASH WINNER! 🏆🌌\n"
+                f"**{winner['name']}**'s *{domain_name}* **OVERPOWERS** the enemy!\n"
+                f"Final Score: **{c1['name']}** {c1['score']} - {c2['score']} **{c2['name']}**"
+            )
+            
+            # ========== FULL DOMAIN ACTIVATION FOR WINNER ==========
+            # Send the domain expansion visual
+            embed = discord.Embed(
+                title=f"🌌 **{domain_name.upper()}** 🌌",
+                description=f"# {domain_text}\n"
+                           f"*{japanese_name}*\n\n"
+                           f"**{winner['name']}** unleashes their Domain!",
+                color=discord.Color.from_rgb(0, 0, 0)
+            )
+            
+            # Handle local vs URL gif
+            domain_file = None
+            if domain_gif:
+                if domain_gif.startswith(("http://", "https://")):
+                    embed.set_image(url=domain_gif)
+                elif os.path.exists(domain_gif):
+                    domain_file = discord.File(domain_gif, filename=os.path.basename(domain_gif))
+                    embed.set_image(url=f"attachment://{os.path.basename(domain_gif)}")
+            
+            if domain_file:
+                await channel.send(embed=embed, file=domain_file)
+            else:
+                await channel.send(embed=embed)
+            
+            # Activate winner's domain tracking
+            self.active_domain_caster = winner["user_id"]
+            self.active_domain_config = winner_domain
+            domain_duration = winner_domain.get("effects", {}).get("stun_duration", 30)
+            self.active_domain_end_time = time.time() + domain_duration
+            
+            # Schedule clearing of active domain
+            asyncio.create_task(self._clear_active_domain(domain_duration))
+            
+            # ========== DISPATCH TO PROPER DOMAIN TYPE HANDLER ==========
+            domain_type = winner_domain.get("type", "simple")
+            winner_user_id = winner["user_id"]
+            
+            # Create a mock message object for the handler
+            class MockMessage:
+                def __init__(self, author_name, author_id):
+                    self.author = type('Author', (), {'display_name': author_name, 'id': author_id})()
+            
+            mock_msg = MockMessage(winner['name'], winner_user_id)
+            
+            if domain_type == "pachinko":
+                await self._handle_pachinko_domain(winner_user_id, winner_domain, mock_msg, channel)
+            elif domain_type == "reflect":
+                await self._handle_reflect_domain(winner_user_id, winner_domain, mock_msg, channel)
+            elif domain_type == "dps":
+                await self._handle_dps_domain(winner_user_id, winner_domain, mock_msg, channel)
+            else:
+                # Simple domain (Infinite Void type)
+                await self._handle_simple_domain(winner_user_id, winner_domain, mock_msg, channel)
+            
+            # Set cooldown for winner
+            domain_id = None
+            for d_id, d_config in self.achievements_config.get("domains", {}).items():
+                if d_config.get("name") == domain_name:
+                    domain_id = d_id
+                    break
+            
+            if domain_id:
+                if winner_user_id not in self.domain_cooldowns:
+                    self.domain_cooldowns[winner_user_id] = {}
+                self.domain_cooldowns[winner_user_id][domain_id] = time.time()
+            
+            console.print(f"[magenta]🌌 Domain clash ended - {winner['name']} wins![/magenta]")
+            
+        except Exception as e:
+            log.error(f"Error ending domain clash: {e}")
+        finally:
+            self.domain_clash_active = False
+
+    # ========== DOMAIN TYPE HANDLERS ==========
+    
+    async def _handle_simple_domain(self, user_id: int, domain_config: dict, message, channel):
+        """Handle simple domain type (Infinite Void) - BUFFED: 1000 dmg, 35s stun, TRIPLE damage"""
+        effects = domain_config.get("effects", {})
+        
+        # BUFFED: 35 second stun (was 30)
+        stun_duration = effects.get("stun_duration", 35)
+        if stun_duration > 0 and self.active_boss:
+            self.enemy_stunned = True
+            self.stun_end_time = time.time() + stun_duration
+            
+            # Track domain amplifier - TRIPLE damage while active
+            if user_id not in self.player_stats:
+                self.player_stats[user_id] = {}
+            self.player_stats[user_id]['infinity_domain_active'] = True
+            self.player_stats[user_id]['infinity_domain_end'] = time.time() + stun_duration
+            
+            await channel.send(
+                f"💫 **{self.active_boss['name']}** is trapped in the Infinite Void! **STUNNED for {stun_duration}s!**\n"
+                f"⚡ **ALL DAMAGE TRIPLED** while the domain is active!"
+            )
+            asyncio.create_task(self._remove_domain_stun(stun_duration))
+            asyncio.create_task(self._remove_infinity_amplifier(user_id, stun_duration))
+        
+        # BUFFED: 1000 damage (was configurable lower)
+        damage = effects.get("damage", 1000)  # Default to 1000
+        if damage > 0 and self.active_boss:
+            old_hp = self.active_boss['hp_current']
+            self.active_boss['hp_current'] = max(0, self.active_boss['hp_current'] - damage)
+            actual_damage = old_hp - self.active_boss['hp_current']
+            
+            await channel.send(f"💥 **{self.active_boss['name']}** takes **{actual_damage} DOMAIN DAMAGE!**")
+            console.print(f"[red]🌌 Infinite Void dealt {actual_damage} damage to boss![/red]")
+            
+            await self.update_hp_bar_display(self.active_boss['name'], is_boss=True)
+            
+            if self.active_boss['hp_current'] == 0:
+                # Boss defeated - call damage_boss with 0 to trigger defeat logic
+                await self.damage_boss(self.active_boss['name'], 0)
+    
+    async def _remove_infinity_amplifier(self, user_id: int, duration: float):
+        """Remove the Infinity domain damage amplifier after duration"""
+        await asyncio.sleep(duration)
+        if user_id in self.player_stats:
+            self.player_stats[user_id]['infinity_domain_active'] = False
+            console.print(f"[magenta]♾️ Infinity domain amplifier expired for {user_id}[/magenta]")
+    
+    async def _handle_pachinko_domain(self, user_id: int, domain_config: dict, message, channel):
+        """Handle pachinko domain type (Idle Death Gamble) - slot machine rolls"""
+        mechanics = domain_config.get("mechanics", {})
+        roll_interval = mechanics.get("roll_interval", 20)
+        max_rolls = mechanics.get("max_rolls", 5)
+        slot_range = mechanics.get("slot_range", [1, 7])
+        
+        # Check for jackpot bonus from previous domain
+        user_id_str = str(user_id)
+        jackpot_bonus = self.player_stats.get(user_id, {}).get('next_domain_jackpot_bonus', 0)
+        
+        await channel.send(f"🎰 **IDLE DEATH GAMBLE** activated! Rolling every **{roll_interval}s** for up to **{max_rolls}** rolls!")
+        if jackpot_bonus > 0:
+            await channel.send(f"✨ **JACKPOT BONUS ACTIVE!** +{jackpot_bonus}% chance on first roll!")
+        
+        # Start the pachinko loop
+        asyncio.create_task(self._pachinko_loop(user_id, domain_config, message, channel, jackpot_bonus))
+    
+    async def _pachinko_loop(self, user_id: int, domain_config: dict, message, channel, jackpot_bonus: int = 0):
+        """Run the pachinko slot machine loop - 10 SECONDS between each roll"""
+        mechanics = domain_config.get("mechanics", {})
+        roll_interval = 10  # FIXED: Always 10 seconds between rolls
+        max_rolls = mechanics.get("max_rolls", 5)
+        slot_range = mechanics.get("slot_range", [1, 7])
+        # Jackpot chances per roll: [roll1, roll2, roll3, roll4, roll5] as percentages
+        jackpot_chances = mechanics.get("jackpot_chances", [0, 0, 0, 50, 70])
+        
+        for roll_num in range(1, max_rolls + 1):
+            # Check if domain was broken or fight ended
+            if not self.fight_active:
+                await channel.send("🎰 Domain broken - fight ended!")
+                return
+            
+            await asyncio.sleep(roll_interval)
+            
+            # Roll 3 slots
+            slots = [random.randint(slot_range[0], slot_range[1]) for _ in range(3)]
+            slot_display = " | ".join([f"**{s}**" for s in slots])
+            
+            # Get the jackpot probability for this roll
+            roll_index = roll_num - 1
+            jackpot_chance = jackpot_chances[roll_index] if roll_index < len(jackpot_chances) else jackpot_chances[-1]
+            total_chance = jackpot_chance
+            if roll_num == 1 and jackpot_bonus > 0:
+                total_chance += jackpot_bonus
+            
+            # Check for matches
+            unique_vals = len(set(slots))
+            
+            if unique_vals == 1:
+                # JACKPOT! All 3 match - Do the dramatic reveal
+                await channel.send(f"🎰 Roll #{roll_num}: [ {slot_display} ] *(Jackpot chance: {total_chance}%)*")
+                await asyncio.sleep(1)
+                await channel.send("🎰 Wait...")
+                await asyncio.sleep(1)
+                
+                # Send anticipation GIF before 7-7-7 reveal
+                try:
+                    anticipation_gif = ASSETS_DIR / "Idle death gamble jackpot.gif"
+                    await channel.send(file=discord.File(str(anticipation_gif)))
+                except Exception as e:
+                    console.print(f"[yellow]Could not send Jackpot anticipation GIF: {e}[/yellow]")
+                
+                await asyncio.sleep(0.5)
+                await channel.send("🎰 [ **7** | ❓ | ❓ ]")
+                await asyncio.sleep(0.5)
+                await channel.send("🎰 [ **7** | **7** | ❓ ]")
+                await asyncio.sleep(0.5)
+                await channel.send("🎰 [ **7** | **7** | **7** ]")
+                await asyncio.sleep(0.5)
+                await channel.send("# 🎰💰 ***JACKPOOOOOOOOOOOOOOTTTT!!!*** 💰🎰")
+                await self._trigger_jackpot(user_id, domain_config, message, channel)
+                return  # Domain breaks after jackpot
+            
+            elif unique_vals == 2:
+                # 2 match - ult charge bonus
+                await channel.send(f"🎰 Roll #{roll_num}: [ {slot_display} ] *(Jackpot chance: {total_chance}%)* - **2 MATCH!** ⚡+30% Ult Charge!")
+                # Add ult charge
+                if user_id not in self.power_charges:
+                    self.power_charges[user_id] = {"power1": 0, "power2": 0}
+                self.power_charges[user_id]["power1"] = min(100, self.power_charges[user_id].get("power1", 0) + 30)
+                self.power_charges[user_id]["power2"] = min(100, self.power_charges[user_id].get("power2", 0) + 30)
+            
+            else:
+                # No match - check for lucky jackpot RNG before displaying
+                # jackpot_chances: [0, 0, 0, 50, 70] means roll 4 = 50%, roll 5 = 70%
+                roll_index = roll_num - 1
+                base_jackpot_chance = jackpot_chances[roll_index] if roll_index < len(jackpot_chances) else jackpot_chances[-1]
+                
+                # Add bonus from previous jackpot (only on first roll)
+                total_rng_chance = base_jackpot_chance
+                if roll_num == 1 and jackpot_bonus > 0:
+                    total_rng_chance += jackpot_bonus
+                    # Clear the bonus
+                    if user_id in self.player_stats:
+                        self.player_stats[user_id]['next_domain_jackpot_bonus'] = 0
+                
+                # Roll for lucky jackpot on NO MATCH only
+                if total_rng_chance > 0 and random.randint(1, 100) <= total_rng_chance:
+                    # RNG jackpot on fail - do dramatic reveal
+                    await channel.send(f"🎰 Roll #{roll_num}: [ {slot_display} ] *(Jackpot chance: {total_chance}%)* - Wait...")
+                    await asyncio.sleep(1)
+                    
+                    # Send anticipation GIF before 7-7-7 reveal
+                    try:
+                        anticipation_gif = ASSETS_DIR / "Idle death gamble jackpot.gif"
+                        await channel.send(file=discord.File(str(anticipation_gif)))
+                    except Exception as e:
+                        console.print(f"[yellow]Could not send Jackpot anticipation GIF: {e}[/yellow]")
+                    
+                    await asyncio.sleep(0.5)
+                    await channel.send("🎰 [ **7** | ❓ | ❓ ]")
+                    await asyncio.sleep(0.5)
+                    await channel.send("🎰 [ **7** | **7** | ❓ ]")
+                    await asyncio.sleep(0.5)
+                    await channel.send("🎰 [ **7** | **7** | **7** ]")
+                    await asyncio.sleep(0.5)
+                    await channel.send(f"# 🎰💰 ***JACKPOOOOOOOOOOOOOOTTTT!!!*** 💰🎰\n*({total_rng_chance}% chance - Fate smiled upon you!)*")
+                    await self._trigger_jackpot(user_id, domain_config, message, channel)
+                    return
+                else:
+                    # No match and no lucky jackpot
+                    await channel.send(f"🎰 Roll #{roll_num}: [ {slot_display} ] *(Jackpot chance: {total_chance}%)* - No match...")
+        
+        await channel.send("🎰 All rolls complete! Domain fades...")
+    
+    async def _trigger_jackpot(self, user_id: int, domain_config: dict, message, channel):
+        """Trigger jackpot effects - unlimited ult, infinite heal, instant domain cooldown, etc."""
+        mechanics = domain_config.get("mechanics", {})
+        jackpot_duration = mechanics.get("jackpot_duration", 147)
+        jackpot_effects = mechanics.get("jackpot_effects", {})
+        
+        # Send jackpot GIF
+        try:
+            jackpot_activate_gif = ASSETS_DIR / "jackpot idle death gamble.gif"
+            await channel.send(file=discord.File(str(jackpot_activate_gif)))
+        except Exception as e:
+            console.print(f"[yellow]Could not send Jackpot GIF: {e}[/yellow]")
+        
+        await channel.send(
+            f"🌟 **JACKPOT ACTIVATED** for **{jackpot_duration}s**!\n"
+            f"⚡ **UNLIMITED Ult Charge** (10s cooldown)\n"
+            f"💚 **Infinite Healing**\n"
+            f"🎰 **Domain READY!** Use domain again INSTANTLY!\n"
+            f"✨ **Next domain:** +20% Jackpot bonus on first roll!"
+        )
+        
+        # Store jackpot state
+        user_id_str = str(user_id)
+        if user_id not in self.player_stats:
+            self.player_stats[user_id] = {}
+        
+        self.player_stats[user_id]['jackpot_active'] = True
+        self.player_stats[user_id]['jackpot_end_time'] = time.time() + jackpot_duration
+        self.player_stats[user_id]['next_domain_jackpot_bonus'] = jackpot_effects.get('next_domain_jackpot_bonus', 20)
+        self.player_stats[user_id]['jackpot_ult_cooldown'] = 10  # 10 second cooldown during jackpot
+        
+        # RESET DOMAIN COOLDOWN - Jackpot allows instant domain reuse
+        if user_id in self.domain_cooldowns:
+            # Clear all domain cooldowns for this user
+            self.domain_cooldowns[user_id] = {}
+        
+        # Set ultra-fast cooldowns
+        if user_id not in self.power_cooldowns:
+            self.power_cooldowns[user_id] = {}
+        self.power_cooldowns[user_id]["power1"] = time.time()  # Reset cooldowns
+        self.power_cooldowns[user_id]["power2"] = time.time()
+        
+        # Set charges to 100% (will stay at 100% during jackpot)
+        if user_id not in self.power_charges:
+            self.power_charges[user_id] = {}
+        self.power_charges[user_id]["power1"] = 100
+        self.power_charges[user_id]["power2"] = 100
+        
+        # Heal to full
+        if user_id in self.player_hp:
+            self.player_hp[user_id]["current"] = self.player_hp[user_id]["max"]
+            await self.update_hp_bar_display(user_id)
+        
+        # Schedule jackpot end
+        asyncio.create_task(self._end_jackpot(user_id, jackpot_duration, channel))
+    
+    async def _end_jackpot(self, user_id: int, duration: float, channel):
+        """End jackpot effects after duration"""
+        await asyncio.sleep(duration)
+        
+        if user_id in self.player_stats and self.player_stats[user_id].get('jackpot_active'):
+            self.player_stats[user_id]['jackpot_active'] = False
+            await channel.send(f"🎰 **JACKPOT ENDED!** <@{user_id}> can throw another domain now!")
+            console.print(f"[yellow]🎰 Jackpot ended for user {user_id}[/yellow]")
+    
+    async def _handle_reflect_domain(self, user_id: int, domain_config: dict, message, channel):
+        """Handle reflect domain type (Time Cell Moon Palace) - reflect ALL damage"""
+        mechanics = domain_config.get("mechanics", {})
+        duration = mechanics.get("duration", 60)
+        damage_multiplier = mechanics.get("damage_multiplier_to_boss", 2.0)
+        
+        await channel.send(
+            f"🌙 **TIME CELL MOON PALACE** activated for **{duration}s**!\n"
+            f"⚔️ **ALL damage** inside the domain is **REFLECTED** to the boss!\n"
+            f"💥 Reflected damage is **x{damage_multiplier:.1f}**!\n"
+            f"⚡ ALL damage taken grants **ULT CHARGE**!"
+        )
+        
+        # Store reflect state - applies to ALL players during duration
+        if user_id not in self.player_stats:
+            self.player_stats[user_id] = {}
+        
+        # Store domain-wide reflect (not just for caster)
+        self.active_reflect_domain = {
+            'caster': user_id,
+            'end_time': time.time() + duration,
+            'multiplier': damage_multiplier,
+            'active': True
+        }
+        
+        # Also store on caster for backwards compatibility
+        self.player_stats[user_id]['reflect_active'] = True
+        self.player_stats[user_id]['reflect_end_time'] = time.time() + duration
+        self.player_stats[user_id]['reflect_multiplier'] = damage_multiplier
+        
+        # Schedule reflect end
+        asyncio.create_task(self._end_reflect_domain(user_id, duration, channel))
+    
+    async def _end_reflect_domain(self, user_id: int, duration: float, channel):
+        """End reflect domain effects"""
+        await asyncio.sleep(duration)
+        
+        # Clear domain-wide reflect
+        if hasattr(self, 'active_reflect_domain') and self.active_reflect_domain:
+            self.active_reflect_domain['active'] = False
+            self.active_reflect_domain = None
+        
+        if user_id in self.player_stats and self.player_stats[user_id].get('reflect_active'):
+            self.player_stats[user_id]['reflect_active'] = False
+            await channel.send(f"🌙 **TIME CELL MOON PALACE** fades... <@{user_id}>")
+            console.print(f"[yellow]🌙 Reflect domain ended for user {user_id}[/yellow]")
+    
+    async def _handle_dps_domain(self, user_id: int, domain_config: dict, message, channel):
+        """Handle DPS domain type (Malevolent Shrine) - damage over time + finisher"""
+        mechanics = domain_config.get("mechanics", {})
+        duration = mechanics.get("duration", 60)
+        dps = mechanics.get("damage_per_second", 10)
+        finisher_threshold_damage = mechanics.get("finisher_threshold_damage", 450)
+        finisher_threshold_time = mechanics.get("finisher_threshold_time", 45)
+        time_reduction_per_hit = mechanics.get("time_reduction_per_hit", 5)
+        
+        await channel.send(
+            f"⛩️ **MALEVOLENT SHRINE** activated!\n"
+            f"💀 **{dps} damage/second** to boss\n"
+            f"🔥 After {finisher_threshold_damage} damage OR {finisher_threshold_time}s: **OPEN, FURNACE**"
+        )
+        
+        # Store DPS domain state
+        if user_id not in self.player_stats:
+            self.player_stats[user_id] = {}
+        
+        self.player_stats[user_id]['shrine_active'] = True
+        self.player_stats[user_id]['shrine_damage_dealt'] = 0
+        self.player_stats[user_id]['shrine_start_time'] = time.time()
+        self.player_stats[user_id]['shrine_remaining_duration'] = duration
+        
+        # Start DPS loop
+        asyncio.create_task(self._shrine_dps_loop(user_id, domain_config, message, channel))
+    
+    async def _shrine_dps_loop(self, user_id: int, domain_config: dict, message, channel):
+        """Run the Malevolent Shrine DPS loop"""
+        mechanics = domain_config.get("mechanics", {})
+        dps = mechanics.get("damage_per_second", 10)
+        finisher_threshold_damage = mechanics.get("finisher_threshold_damage", 450)
+        finisher_threshold_time = mechanics.get("finisher_threshold_time", 45)
+        finisher = mechanics.get("finisher", {})
+        
+        start_time = time.time()
+        total_damage = 0
+        
+        while self.player_stats.get(user_id, {}).get('shrine_active', False):
+            # Check if boss is still alive
+            if not self.active_boss or self.active_boss['hp_current'] <= 0:
+                self.player_stats[user_id]['shrine_active'] = False
+                return
+            
+            # Deal DPS
+            damage = dps
+            self.active_boss['hp_current'] = max(0, self.active_boss['hp_current'] - damage)
+            total_damage += damage
+            self.player_stats[user_id]['shrine_damage_dealt'] = total_damage
+            
+            # Update every 5 seconds with status
+            elapsed = time.time() - start_time
+            remaining = self.player_stats[user_id].get('shrine_remaining_duration', 60) - elapsed
+            
+            if int(elapsed) % 5 == 0 and elapsed > 0:
+                await channel.send(f"⛩️ **SHRINE** dealing damage... Total: **{total_damage}** | Remaining: **{int(remaining)}s**")
+                await self.update_hp_bar_display(self.active_boss['name'], is_boss=True)
+            
+            # Check finisher conditions
+            if total_damage >= finisher_threshold_damage or elapsed >= finisher_threshold_time:
+                self.player_stats[user_id]['shrine_active'] = False
+                await self._trigger_furnace(user_id, finisher, message, channel)
+                return
+            
+            # Check if duration expired
+            if remaining <= 0:
+                self.player_stats[user_id]['shrine_active'] = False
+                await channel.send(f"⛩️ **MALEVOLENT SHRINE** fades... {total_damage} total damage dealt.")
+                return
+            
+            # Check boss death
+            if self.active_boss['hp_current'] <= 0:
+                await self.trigger_boss_defeat(channel)
+                self.player_stats[user_id]['shrine_active'] = False
+                return
+            
+            await asyncio.sleep(1)  # 1 second ticks
+    
+    async def _trigger_furnace(self, user_id: int, finisher_config: dict, message, channel):
+        """Trigger Open, Furnace finisher attack"""
+        cast_time = finisher_config.get("cast_time", 3.0)
+        damage = finisher_config.get("damage", 900)
+        
+        await channel.send(
+            f"# 🔥 **OPEN** 🔥\n"
+            f"*{message.author.display_name}* is charging **FURNACE**...\n"
+            f"⚠️ *INTERRUPTIBLE - {cast_time}s cast!*"
+        )
+        
+        # Mark as casting furnace
+        self.domain_casting[user_id] = {
+            "domain_id": "furnace",
+            "start_time": time.time(),
+            "type": "furnace"
+        }
+        
+        await asyncio.sleep(cast_time)
+        
+        # Check if interrupted
+        if user_id not in self.domain_casting or self.domain_casting[user_id].get("type") != "furnace":
+            await channel.send(f"🔥❌ **FURNACE INTERRUPTED!** {message.author.mention}")
+            return
+        
+        self.domain_casting.pop(user_id, None)
+        
+        # FURNACE SUCCEEDS
+        await channel.send(f"# 🔥⚡ **FURNACE** ⚡🔥\n**{damage} DAMAGE!!!**")
+        
+        # Deal damage to boss
+        if self.active_boss:
+            self.active_boss['hp_current'] = max(0, self.active_boss['hp_current'] - damage)
+            await self.update_hp_bar_display(self.active_boss['name'], is_boss=True)
+            
+            if self.active_boss['hp_current'] <= 0:
+                # Trigger boss defeat via damage_boss
+                await self.damage_boss(self.active_boss['name'], 0)
+    
+    # ========== NEW DOMAIN TYPE HANDLERS (Phase 2) ==========
+    
+    async def _handle_cursed_partners_domain(self, user_id: int, domain_config: dict, message, channel):
+        """Handle Cursed Partners domain type (Authentic Mutual Love)
+        - Grants spec1/2/3 attacks (50/stun/bleed+counter)
+        - Overspec counter grants extra attack
+        - Jacob's Ladder finisher (5s cast, 80% total HP damage)
+        """
+        mechanics = domain_config.get("mechanics", {})
+        # Support both 'special_attacks' (JSON) and 'spec_attacks' (legacy)
+        spec_attacks = mechanics.get("special_attacks", mechanics.get("spec_attacks", {}))
+        duration = mechanics.get("duration", domain_config.get("effects", {}).get("stun_duration", 60))
+        
+        # Send domain GIFs
+        handsign_gif = domain_config.get("assets", {}).get("handsign", "assets/Authentic mutual love handsign.gif")
+        domain_gif = domain_config.get("assets", {}).get("domain", "assets/Authentic mutual love domain.gif")
+        
+        # Convert relative paths to absolute using ASSETS_DIR
+        if handsign_gif.startswith("assets/"):
+            handsign_gif = str(ASSETS_DIR / handsign_gif.replace("assets/", ""))
+        if domain_gif.startswith("assets/"):
+            domain_gif = str(ASSETS_DIR / domain_gif.replace("assets/", ""))
+        
+        try:
+            await channel.send(file=discord.File(handsign_gif))
+            await asyncio.sleep(1)
+            await channel.send(file=discord.File(domain_gif))
+        except Exception as e:
+            console.print(f"[yellow]Could not send Authentic Mutual Love GIFs: {e}[/yellow]")
+        
+        await channel.send(
+            f"💕 **AUTHENTIC MUTUAL LOVE** activated for **{duration}s**!\n"
+            f"⚔️ **Spec Attacks Unlocked:**\n"
+            f"  • `*spec1*` - **{spec_attacks.get('spec1', {}).get('damage', 50)} damage**\n"
+            f"  • `*spec2*` - **Stun boss** for {spec_attacks.get('spec2', {}).get('stun_duration', 10)}s\n"
+            f"  • `*spec3*` - **Bleed + DOUBLE counter window!**\n"
+            f"🔄 **Overspec:** Counter with any spec attack for EXTRA hit!\n"
+            f"⚡ **Jacob's Ladder** (`*jacobs*`): 5s cast, 80% total HP FINISHER!"
+        )
+        
+        # Store cursed partners domain state
+        if user_id not in self.player_stats:
+            self.player_stats[user_id] = {}
+        
+        self.player_stats[user_id]['cursed_partners_active'] = True
+        self.player_stats[user_id]['cursed_partners_end'] = time.time() + duration
+        self.player_stats[user_id]['cursed_partners_overspec'] = 0  # Counter tracking
+        self.player_stats[user_id]['cursed_partners_config'] = domain_config
+        
+        # Schedule domain end
+        asyncio.create_task(self._end_cursed_partners_domain(user_id, duration, channel))
+    
+    async def _end_cursed_partners_domain(self, user_id: int, duration: float, channel):
+        """End Cursed Partners domain effects"""
+        await asyncio.sleep(duration)
+        
+        if user_id in self.player_stats and self.player_stats[user_id].get('cursed_partners_active'):
+            self.player_stats[user_id]['cursed_partners_active'] = False
+            await channel.send(f"💕 **AUTHENTIC MUTUAL LOVE** fades... <@{user_id}>")
+            console.print(f"[magenta]💕 Cursed Partners domain ended for {user_id}[/magenta]")
+    
+    async def handle_spec_attack(self, message, spec_number: int):
+        """Handle spec1/2/3 attacks during Cursed Partners domain
+        - All specs have 10s cooldown
+        - Tracks which specs hit in normal and overspec mode for Jacob's Ladder
+        """
+        user_id = message.author.id
+        channel = message.channel
+        
+        # Check if domain is active
+        if not self.player_stats.get(user_id, {}).get('cursed_partners_active'):
+            await channel.send(f"{message.author.mention} ❌ You need **Authentic Mutual Love** domain active!")
+            return
+        
+        # Check cooldown (10s for all spec attacks)
+        spec_cooldown = 10
+        spec_key = f"spec{spec_number}"
+        cooldown_key = f"spec{spec_number}_cooldown"
+        last_used = self.player_stats[user_id].get(cooldown_key, 0)
+        
+        if time.time() - last_used < spec_cooldown:
+            remaining = spec_cooldown - (time.time() - last_used)
+            await channel.send(f"{message.author.mention} ⏱️ **Spec{spec_number}** on cooldown! **{remaining:.1f}s**")
+            return
+        
+        config = self.player_stats[user_id].get('cursed_partners_config', {})
+        mechanics = config.get("mechanics", {})
+        # Support both 'special_attacks' (JSON) and 'spec_attacks' (legacy)
+        spec_attacks = mechanics.get("special_attacks", mechanics.get("spec_attacks", {}))
+        spec_config = spec_attacks.get(spec_key, {})
+        
+        if not spec_config:
+            return
+        
+        # Set cooldown
+        self.player_stats[user_id][cooldown_key] = time.time()
+        
+        # Check if in counter window (overspec bonus)
+        is_overspec = self.player_stats[user_id].get('in_counter_window', False)
+        
+        # Track spec hits for Jacob's Ladder requirement
+        # Initialize tracking dicts if not exists
+        if 'spec_hits_normal' not in self.player_stats[user_id]:
+            self.player_stats[user_id]['spec_hits_normal'] = set()
+        if 'spec_hits_overspec' not in self.player_stats[user_id]:
+            self.player_stats[user_id]['spec_hits_overspec'] = set()
+        
+        # Record this spec hit
+        if is_overspec:
+            self.player_stats[user_id]['spec_hits_overspec'].add(spec_number)
+        else:
+            self.player_stats[user_id]['spec_hits_normal'].add(spec_number)
+        
+        if spec_number == 1:
+            # Spec1: Direct damage
+            damage = spec_config.get("damage", 50)
+            if is_overspec:
+                damage = int(damage * 1.5)  # 50% bonus on overspec
+                await channel.send(f"💕⚡ **OVERSPEC SPEC1!** {message.author.mention} deals **{damage} DAMAGE!**")
+            else:
+                await channel.send(f"💕 **SPEC1!** {message.author.mention} deals **{damage} DAMAGE!**")
+            
+            if self.active_boss:
+                await self.damage_boss(self.active_boss['name'], damage)
+                
+        elif spec_number == 2:
+            # Spec2: Stun boss
+            stun_duration = spec_config.get("stun_duration", 10)
+            if is_overspec:
+                stun_duration = int(stun_duration * 1.5)
+            
+            self.enemy_stunned = True
+            self.stun_end_time = time.time() + stun_duration
+            await channel.send(f"💕🌀 **SPEC2!** Boss STUNNED for **{stun_duration}s**!")
+            asyncio.create_task(self._remove_domain_stun(stun_duration))
+            
+        elif spec_number == 3:
+            # Spec3: Apply bleed + double counter window
+            bleed_stacks = spec_config.get("bleed_stacks", 5)
+            counter_mult = spec_config.get("counter_multiplier", 2)
+            
+            if self.active_boss:
+                boss_name = self.active_boss['name']
+                await self.apply_status_effect(boss_name, "bleed", 30, stacks=bleed_stacks, is_boss=True)
+            
+            # Grant double counter window on next evade
+            self.player_stats[user_id]['double_counter_next'] = True
+            await channel.send(
+                f"💕🩸 **SPEC3!** Boss afflicted with **{bleed_stacks} BLEED!**\n"
+                f"⚡ Next evade has **DOUBLE counter window**!"
+            )
+        
+        # Check Jacob's Ladder progress
+        normal_hits = self.player_stats[user_id].get('spec_hits_normal', set())
+        overspec_hits = self.player_stats[user_id].get('spec_hits_overspec', set())
+        all_normal = {1, 2, 3}.issubset(normal_hits)
+        all_overspec = {1, 2, 3}.issubset(overspec_hits)
+        
+        if all_normal and all_overspec:
+            await channel.send(f"🪜✨ {message.author.mention} **JACOB'S LADDER UNLOCKED!** Use `*jacobs*` or `*ladder*`!")
+        elif all_normal:
+            await channel.send(f"🪜 {message.author.mention} Normal specs complete! Hit all 3 specs in **OVERSPEC** (during counter window) to unlock Jacob's Ladder!")
+        
+        # Clear counter window flag if used
+        if is_overspec:
+            self.player_stats[user_id]['in_counter_window'] = False
+            self.player_stats[user_id]['cursed_partners_overspec'] = self.player_stats[user_id].get('cursed_partners_overspec', 0) + 1
+
+    async def handle_jacobs_ladder(self, message):
+        """Handle Jacob's Ladder finisher attack (Cursed Partners)
+        - Requires hitting ALL 3 specs in BOTH normal AND overspec mode
+        - 80% of boss total HP damage
+        """
+        user_id = message.author.id
+        channel = message.channel
+        
+        # Check if domain is active
+        if not self.player_stats.get(user_id, {}).get('cursed_partners_active'):
+            await channel.send(f"{message.author.mention} ❌ You need **Authentic Mutual Love** domain active!")
+            return
+        
+        if not self.active_boss:
+            await channel.send(f"{message.author.mention} ❌ No active boss!")
+            return
+        
+        # Check Jacob's Ladder requirement - ALL specs in BOTH modes
+        normal_hits = self.player_stats[user_id].get('spec_hits_normal', set())
+        overspec_hits = self.player_stats[user_id].get('spec_hits_overspec', set())
+        all_normal = {1, 2, 3}.issubset(normal_hits)
+        all_overspec = {1, 2, 3}.issubset(overspec_hits)
+        
+        if not all_normal or not all_overspec:
+            missing_normal = {1, 2, 3} - normal_hits
+            missing_overspec = {1, 2, 3} - overspec_hits
+            
+            msg = f"{message.author.mention} ❌ **JACOB'S LADDER LOCKED!**\n"
+            if missing_normal:
+                msg += f"  🔴 Normal specs missing: `spec{', spec'.join(map(str, sorted(missing_normal)))}`\n"
+            if missing_overspec:
+                msg += f"  ⚡ Overspec missing: `spec{', spec'.join(map(str, sorted(missing_overspec)))}` (use during counter window)\n"
+            msg += f"_Hit all 3 specs in BOTH normal AND overspec mode to unlock!_"
+            await channel.send(msg)
+            return
+        
+        config = self.player_stats[user_id].get('cursed_partners_config', {})
+        jacobs = config.get("mechanics", {}).get("jacobs_ladder", {})
+        cast_time = jacobs.get("cast_time", 5.0)
+        hp_percentage = jacobs.get("hp_percentage_damage", 0.80)
+        
+        # Check if already casting
+        if user_id in self.domain_casting:
+            await channel.send(f"{message.author.mention} ⏳ Already casting!")
+            return
+        
+        await channel.send(
+            f"# 🪜 **JACOB'S LADDER** 🪜\n"
+            f"*{message.author.display_name}* begins the divine ascent...\n"
+            f"⚠️ *INTERRUPTIBLE - {cast_time}s cast!*"
+        )
+        
+        # Mark as casting
+        self.domain_casting[user_id] = {
+            "domain_id": "jacobs_ladder",
+            "start_time": time.time(),
+            "type": "jacobs_ladder"
+        }
+        
+        await asyncio.sleep(cast_time)
+        
+        # Check if interrupted
+        if user_id not in self.domain_casting or self.domain_casting[user_id].get("type") != "jacobs_ladder":
+            await channel.send(f"🪜❌ **JACOB'S LADDER INTERRUPTED!** {message.author.mention}")
+            return
+        
+        self.domain_casting.pop(user_id, None)
+        
+        # Send Jacob's Ladder GIF
+        try:
+            jacobs_gif = ASSETS_DIR / "Jacob's ladder, Authentic mutual love.gif"
+            await channel.send(file=discord.File(str(jacobs_gif)))
+        except Exception as e:
+            console.print(f"[yellow]Could not send Jacob's Ladder GIF: {e}[/yellow]")
+        
+        # Calculate damage (80% of boss's TOTAL HP)
+        total_hp = self.active_boss.get('hp_max', self.active_boss.get('hp_current', 1000))
+        damage = int(total_hp * hp_percentage)
+        
+        await channel.send(
+            f"# 🪜✨ **JACOB'S LADDER** ✨🪜\n"
+            f"*The divine light descends!*\n"
+            f"**{damage} DAMAGE!!!** *(80% of total HP)*"
+        )
+        
+        self.active_boss['hp_current'] = max(0, self.active_boss['hp_current'] - damage)
+        await self.update_hp_bar_display(self.active_boss['name'], is_boss=True)
+        
+        if self.active_boss['hp_current'] <= 0:
+            await self.damage_boss(self.active_boss['name'], 0)
+    
+    async def _handle_court_trial_domain(self, user_id: int, domain_config: dict, message, channel):
+        """Handle Court Trial domain type (Deadly Sentencing)
+        - REQUIRES: Prosecutor must PING the defendant in the domain command
+        - 3 rounds of AI judging
+        - 10 points max per round
+        - Score determines outcome:
+          • 8-17 pts: Break enemy parry/evade
+          • 18-24 pts: Remove one QTE type from boss
+          • 25+ pts: Grant Executioner Sword (4x damage temporary)
+        """
+        mechanics = domain_config.get("mechanics", {})
+        rounds = mechanics.get("max_rounds", mechanics.get("rounds", 3))
+        points_per_round = mechanics.get("points_per_round", 10)
+        time_limit = mechanics.get("time_limit", 60)
+        
+        # REQUIRE: Defendant must be PINGED in the message
+        defendant = None
+        if message.mentions:
+            # Get the first mentioned user that isn't the prosecutor or a bot
+            for mentioned_user in message.mentions:
+                if mentioned_user.id != user_id and not mentioned_user.bot:
+                    defendant = mentioned_user
+                    break
+        
+        # If no valid defendant pinged, reject the domain expansion
+        if not defendant:
+            await channel.send(
+                f"⚖️ {message.author.mention} **OBJECTION!** You must **PING** your defendant!\n"
+                f"_Use `*domain* @defendant` to accuse someone!_"
+            )
+            # Refund the domain - remove active domain state
+            self.active_domain = None
+            self.active_domain_end_time = None
+            return
+        
+        defendant_mention = f"<@{defendant.id}>"
+        defendant_id = defendant.id
+        
+        # Send domain GIF first
+        domain_gif = domain_config.get("assets", {}).get("domain", "assets/Deadly sentencing domain.gif")
+        handsign_gif = domain_config.get("assets", {}).get("handsign", "assets/Deadly sentencing handsign.gif")
+        
+        # Convert relative paths to absolute using ASSETS_DIR
+        if domain_gif.startswith("assets/"):
+            domain_gif = str(ASSETS_DIR / domain_gif.replace("assets/", ""))
+        if handsign_gif.startswith("assets/"):
+            handsign_gif = str(ASSETS_DIR / handsign_gif.replace("assets/", ""))
+        
+        try:
+            await channel.send(file=discord.File(handsign_gif))
+            await asyncio.sleep(1)
+            await channel.send(file=discord.File(domain_gif))
+        except Exception as e:
+            console.print(f"[yellow]Could not send court GIFs: {e}[/yellow]")
+        
+        await channel.send(
+            f"# ⚖️ **DEADLY SENTENCING** - COURT IN SESSION! ⚖️\n"
+            f"👨‍⚖️ **PROSECUTOR:** <@{user_id}>\n"
+            f"🧑‍⚖️ **DEFENDANT:** {defendant_mention}\n\n"
+            f"📜 **{rounds} rounds** of cross-examination\n"
+            f"🎯 **{points_per_round} points** max per round\n"
+            f"⏱️ **{time_limit}s** time limit per argument\n\n"
+            f"**Verdicts (based on PROSECUTOR score):**\n"
+            f"  • **8-17 pts:** Break enemy defense\n"
+            f"  • **18-24 pts:** Remove one QTE type from boss\n"
+            f"  • **25+ pts:** 🗡️ **EXECUTIONER'S SWORD** granted!\n\n"
+            f"⚠️ **COURT IMMUNITY:** Participants cannot attack or be attacked!\n"
+            f"⚖️ *El Bot will judge each argument...*"
+        )
+        
+        # Store trial state
+        if user_id not in self.player_stats:
+            self.player_stats[user_id] = {}
+        
+        self.player_stats[user_id]['court_trial_active'] = True
+        self.player_stats[user_id]['court_trial_score'] = 0
+        self.player_stats[user_id]['court_trial_round'] = 0
+        self.player_stats[user_id]['court_trial_config'] = domain_config
+        self.player_stats[user_id]['court_trial_channel'] = channel.id
+        self.player_stats[user_id]['court_prosecutor_id'] = user_id
+        self.player_stats[user_id]['court_defendant_id'] = defendant_id
+        self.player_stats[user_id]['court_current_speaker'] = 'prosecutor'  # prosecution goes first
+        self.player_stats[user_id]['court_timeout_task'] = None  # For cancelling timeouts
+        self.player_stats[user_id]['court_round_version'] = 0  # Track round version to prevent duplicate triggers
+        
+        # Start first round after brief delay
+        await asyncio.sleep(2)
+        await self._run_court_round(user_id, channel, 1)
+    
+    async def _run_court_round(self, user_id: int, channel, round_num: int):
+        """Run a single court trial round with AI judging"""
+        if not self.player_stats.get(user_id, {}).get('court_trial_active'):
+            return
+        
+        # Increment round version to invalidate old timeouts
+        self.player_stats[user_id]['court_round_version'] = self.player_stats[user_id].get('court_round_version', 0) + 1
+        current_version = self.player_stats[user_id]['court_round_version']
+        
+        config = self.player_stats[user_id].get('court_trial_config', {})
+        mechanics = config.get("mechanics", {})
+        max_rounds = mechanics.get("max_rounds", mechanics.get("rounds", 3))
+        points_per_round = mechanics.get("points_per_round", 10)
+        time_limit = mechanics.get("time_limit", 60)
+        
+        prosecutor_id = self.player_stats[user_id].get('court_prosecutor_id', user_id)
+        defendant_id = self.player_stats[user_id].get('court_defendant_id')
+        
+        # Court prompts for each round
+        prosecution_prompts = [
+            "Present your OPENING STATEMENT! Why should the defendant be found **GUILTY**?",
+            "Present your EVIDENCE! What crimes has the defendant committed?",
+            "CLOSING ARGUMENT! Summarize why the defendant deserves punishment!"
+        ]
+        
+        defense_prompts = [
+            "Present your DEFENSE! Why are you **INNOCENT**?",
+            "COUNTER the evidence! Explain yourself!",
+            "FINAL PLEA! Why should the court show mercy?"
+        ]
+        
+        prompt = prosecution_prompts[(round_num - 1) % len(prosecution_prompts)]
+        
+        # Always start round with prosecution
+        self.player_stats[user_id]['court_current_speaker'] = 'prosecutor'
+        
+        await channel.send(
+            f"# ⚖️ ROUND {round_num}/{max_rounds} - PROSECUTION\n"
+            f"**{prompt}**\n"
+            f"_<@{prosecutor_id}> has {time_limit}s to make your argument..._"
+        )
+        
+        self.player_stats[user_id]['court_trial_round'] = round_num
+        self.player_stats[user_id]['court_waiting_response'] = True
+        self.player_stats[user_id]['court_response_deadline'] = time.time() + time_limit
+        self.player_stats[user_id]['court_awaiting_user'] = prosecutor_id
+        
+        # Wait for response (handled in on_message) or timeout
+        await asyncio.sleep(time_limit)
+        
+        # Check if version changed (response was received) - prevent duplicate triggers
+        if self.player_stats.get(user_id, {}).get('court_round_version') != current_version:
+            return  # Response was handled, don't trigger timeout
+        
+        # Check if they responded
+        if self.player_stats.get(user_id, {}).get('court_waiting_response'):
+            # Timeout - 0 points for this round
+            self.player_stats[user_id]['court_waiting_response'] = False
+            await channel.send(f"⏰ **TIME'S UP!** <@{prosecutor_id}> failed to respond! **0 points** this round.")
+            # Skip to next round or verdict
+            if round_num < max_rounds:
+                await asyncio.sleep(2)
+                await self._run_court_round(user_id, channel, round_num + 1)
+            else:
+                await self._deliver_court_verdict(user_id, channel)
+    
+    async def _run_defense_turn(self, user_id: int, channel, round_num: int):
+        """Run the defense portion of a court round"""
+        if not self.player_stats.get(user_id, {}).get('court_trial_active'):
+            return
+        
+        # Track defense version to prevent duplicate timeouts
+        self.player_stats[user_id]['court_round_version'] = self.player_stats[user_id].get('court_round_version', 0) + 1
+        current_version = self.player_stats[user_id]['court_round_version']
+        
+        config = self.player_stats[user_id].get('court_trial_config', {})
+        mechanics = config.get("mechanics", {})
+        max_rounds = mechanics.get("max_rounds", mechanics.get("rounds", 3))
+        time_limit = mechanics.get("time_limit", 60)
+        
+        defendant_id = self.player_stats[user_id].get('court_defendant_id')
+        
+        if not defendant_id:
+            # No defendant - skip defense turn
+            if round_num < max_rounds:
+                await asyncio.sleep(2)
+                await self._run_court_round(user_id, channel, round_num + 1)
+            else:
+                await self._deliver_court_verdict(user_id, channel)
+            return
+        
+        defense_prompts = [
+            "Present your DEFENSE! Why are you **INNOCENT**?",
+            "COUNTER the evidence! Explain yourself!",
+            "FINAL PLEA! Why should the court show mercy?"
+        ]
+        
+        prompt = defense_prompts[(round_num - 1) % len(defense_prompts)]
+        
+        self.player_stats[user_id]['court_current_speaker'] = 'defendant'
+        
+        await channel.send(
+            f"# 🛡️ ROUND {round_num}/{max_rounds} - DEFENSE\n"
+            f"**{prompt}**\n"
+            f"_<@{defendant_id}> has {time_limit}s to defend yourself..._"
+        )
+        
+        self.player_stats[user_id]['court_waiting_response'] = True
+        self.player_stats[user_id]['court_response_deadline'] = time.time() + time_limit
+        self.player_stats[user_id]['court_awaiting_user'] = defendant_id
+        
+        # Wait for response or timeout
+        await asyncio.sleep(time_limit)
+        
+        # Check if version changed (response was received) - prevent duplicate triggers
+        if self.player_stats.get(user_id, {}).get('court_round_version') != current_version:
+            return  # Response was handled, don't trigger timeout
+        
+        if self.player_stats.get(user_id, {}).get('court_waiting_response'):
+            self.player_stats[user_id]['court_waiting_response'] = False
+            await channel.send(f"⏰ **TIME'S UP!** <@{defendant_id}> failed to respond!")
+        
+        # Move to next round
+        if round_num < max_rounds:
+            await asyncio.sleep(2)
+            await self._run_court_round(user_id, channel, round_num + 1)
+        else:
+            await self._deliver_court_verdict(user_id, channel)
+    
+    async def handle_court_response(self, message, trial_owner_id: int):
+        """Handle player's court trial response - AI judges it
+        
+        Args:
+            message: The Discord message containing the argument
+            trial_owner_id: The user who initiated the court trial (prosecutor)
+        """
+        responder_id = message.author.id
+        
+        if not self.player_stats.get(trial_owner_id, {}).get('court_waiting_response'):
+            return False
+        
+        # Check if this is the expected responder
+        expected_user = self.player_stats[trial_owner_id].get('court_awaiting_user')
+        if expected_user != responder_id:
+            return False
+        
+        # Check if in time
+        deadline = self.player_stats[trial_owner_id].get('court_response_deadline', 0)
+        if time.time() > deadline:
+            return False
+        
+        # Invalidate timeout by incrementing version
+        self.player_stats[trial_owner_id]['court_round_version'] = self.player_stats[trial_owner_id].get('court_round_version', 0) + 1
+        self.player_stats[trial_owner_id]['court_waiting_response'] = False
+        
+        # Determine who is speaking
+        current_speaker = self.player_stats[trial_owner_id].get('court_current_speaker', 'prosecutor')
+        round_num = self.player_stats[trial_owner_id].get('court_trial_round', 1)
+        response_text = message.content
+        
+        # AI judges the response (1-10 points)
+        points = await self._ai_judge_court_response(response_text, round_num, current_speaker)
+        
+        # Only prosecution arguments add to the score
+        if current_speaker == 'prosecutor':
+            self.player_stats[trial_owner_id]['court_trial_score'] = self.player_stats[trial_owner_id].get('court_trial_score', 0) + points
+            total_score = self.player_stats[trial_owner_id]['court_trial_score']
+            
+            # Announce judgment
+            judgment_text = self._get_court_judgment_text(points)
+            await message.channel.send(
+                f"⚖️ **EL BOT RULES:** {judgment_text}\n"
+                f"**+{points} points!** (Prosecutor Total: **{total_score}**)"
+            )
+            
+            # Now ping the defendant for their turn
+            defendant_id = self.player_stats[trial_owner_id].get('court_defendant_id')
+            if defendant_id:
+                await asyncio.sleep(1)
+                # Start defense turn
+                asyncio.create_task(self._run_defense_turn(trial_owner_id, message.channel, round_num))
+            else:
+                # No defendant - move to next round
+                config = self.player_stats[trial_owner_id].get('court_trial_config', {})
+                max_rounds = config.get("mechanics", {}).get("max_rounds", 3)
+                if round_num < max_rounds:
+                    await asyncio.sleep(2)
+                    asyncio.create_task(self._run_court_round(trial_owner_id, message.channel, round_num + 1))
+                else:
+                    asyncio.create_task(self._deliver_court_verdict(trial_owner_id, message.channel))
+        else:
+            # Defense response - doesn't add points but gets judged
+            judgment_text = self._get_defense_judgment_text(points)
+            await message.channel.send(
+                f"🛡️ **EL BOT NOTES:** {judgment_text}\n"
+                f"_Defense argument received ({points}/10 quality)_"
+            )
+            
+            # Move to next round
+            config = self.player_stats[trial_owner_id].get('court_trial_config', {})
+            max_rounds = config.get("mechanics", {}).get("max_rounds", 3)
+            if round_num < max_rounds:
+                await asyncio.sleep(2)
+                asyncio.create_task(self._run_court_round(trial_owner_id, message.channel, round_num + 1))
+            else:
+                asyncio.create_task(self._deliver_court_verdict(trial_owner_id, message.channel))
+        
+        return True
+    
+    def _get_defense_judgment_text(self, points: int) -> str:
+        """Get flavor text for defense judgment"""
+        if points >= 9:
+            return "**COMPELLING DEFENSE!** The jury considers your words carefully... 🤔"
+        elif points >= 7:
+            return "**REASONABLE DEFENSE.** Some jurors nod in agreement. 📜"
+        elif points >= 5:
+            return "**ADEQUATE.** The court acknowledges your defense."
+        elif points >= 3:
+            return "**UNCONVINCING.** The jury seems skeptical... 😐"
+        else:
+            return "**WEAK DEFENSE!** This doesn't help your case! 👎"
+    
+    async def _ai_judge_court_response(self, response: str, round_num: int, speaker_type: str = 'prosecutor') -> int:
+        """Use AI (elbot) to judge court response, returns 1-10 points
+        
+        Args:
+            response: The argument text
+            round_num: Current round number (1-3)
+            speaker_type: 'prosecutor' or 'defendant'
+        """
+        try:
+            if not self.ai_enabled:
+                # No AI - slightly generous random judgment
+                return random.randint(6, 9)
+            
+            role = "PROSECUTION" if speaker_type == 'prosecutor' else "DEFENSE"
+            
+            prompt = f"""Eres El Bot, un JUEZ GENEROSO en esta corte del Yendaverse. Evalua este argumento de la {role} en la Ronda {round_num}.
+
+CRITERIOS (maximo 10 puntos - SE GENEROSO):
+- EMOCION y PASION en el argumento (4 pts) - valora el sentimiento!
+- Creatividad y originalidad (3 pts) - cualquier esfuerzo creativo cuenta!
+- Coherencia basica (2 pts) - si tiene sentido, puntos!
+- Participacion (1 pt) - por el simple hecho de responder!
+
+IMPORTANTE: Eres un juez JUSTO pero GENEROSO. Si el argumento muestra CUALQUIER esfuerzo o emocion, dale minimo 7 puntos. Solo argumentos muy vagos o de una palabra merecen menos de 6.
+
+ARGUMENTO: "{response}"
+
+Responde SOLAMENTE con un numero del 1 al 10."""
+
+            # Call Ollama API with elbot model
+            async with aiohttp.ClientSession() as session:
+                async with session.post(
+                    self.ai_endpoint,
+                    json={
+                        "model": self.ai_model,  # Uses elbot
+                        "prompt": prompt,
+                        "stream": False,
+                        "options": {
+                            "temperature": 0.5,  # Slightly higher for variety but still consistent
+                            "num_predict": 10    # Only need a number
+                        }
+                    },
+                    timeout=aiohttp.ClientTimeout(total=15)
+                ) as resp:
+                    if resp.status == 200:
+                        data = await resp.json()
+                        result = data.get("response", "7").strip()
+                        console.print(f"[cyan]⚖️ AI Judge raw response: {result}[/cyan]")
+                        # Extract number from response
+                        numbers = re.findall(r'\d+', result)
+                        if numbers:
+                            score = min(10, max(1, int(numbers[0])))
+                            console.print(f"[green]⚖️ AI scored {speaker_type} argument: {score}/10[/green]")
+                            return score
+        except Exception as e:
+            console.print(f"[yellow]AI judge error: {e}[/yellow]")
+        
+        # Fallback: GENEROUS heuristics - bias towards higher scores
+        base_score = 7  # Start generous
+        if len(response) > 50:
+            base_score += 1
+        if len(response) > 150:
+            base_score += 1
+        if any(word in response.lower() for word in ['guilty', 'crime', 'evidence', 'sentence', 'death', 'innocent', 'honor', 'justice']):
+            base_score += 1
+        return min(10, base_score)
+    
+    def is_player_in_court_trial(self, user_id: int) -> bool:
+        """Check if a player is currently participating in a court trial (as prosecutor OR defendant)
+        
+        Players in court trials are immune to damage and excluded from QTEs.
+        """
+        # Check if user is a prosecutor with active trial
+        if user_id in self.player_stats and self.player_stats[user_id].get('court_trial_active'):
+            return True
+        
+        # Check if user is a defendant in any active trial
+        for prosecutor_id, stats in self.player_stats.items():
+            if stats.get('court_trial_active') and stats.get('court_defendant_id') == user_id:
+                return True
+        
+        return False
+    
+    def _get_court_judgment_text(self, points: int) -> str:
+        """Get flavor text for court judgment"""
+        if points >= 9:
+            return "**EXCEPTIONAL!** The jury is MOVED! 👏"
+        elif points >= 7:
+            return "**COMPELLING!** Strong argument! 📜"
+        elif points >= 5:
+            return "**ACCEPTABLE.** The court acknowledges your words."
+        elif points >= 3:
+            return "**WEAK.** The jury is unconvinced... 😐"
+        else:
+            return "**PATHETIC!** The court is DISPLEASED! 👎"
+    
+    async def _deliver_court_verdict(self, user_id: int, channel):
+        """Deliver final court verdict based on total score (max 30, sword at 25+)"""
+        total_score = self.player_stats.get(user_id, {}).get('court_trial_score', 0)
+        
+        self.player_stats[user_id]['court_trial_active'] = False
+        
+        if total_score >= 25:
+            # EXCELLENT - Grant Executioner Sword (lowered from 30)
+            # Send Executioner Sword GIF
+            try:
+                executioner_gif = ASSETS_DIR / "Executioner sword deadly sentencing.gif"
+                await channel.send(file=discord.File(str(executioner_gif)))
+            except Exception as e:
+                console.print(f"[yellow]Could not send Executioner Sword GIF: {e}[/yellow]")
+            
+            await channel.send(
+                f"# ⚖️🗡️ **VERDICT: DEATH SENTENCE!** 🗡️⚖️\n"
+                f"**EXCELLENT SCORE: {total_score}/30!**\n\n"
+                f"<@{user_id}> has been granted the **EXECUTIONER'S SWORD!**\n"
+                f"🗡️ **4x DAMAGE** on all attacks for 60 seconds!\n"
+                f"Use `*ult1*` and `*ult2*` for special sword attacks!"
+            )
+            
+            # Grant Executioner Sword buff
+            self.player_stats[user_id]['executioner_sword_active'] = True
+            self.player_stats[user_id]['executioner_sword_end'] = time.time() + 60
+            self.player_stats[user_id]['executioner_sword_multiplier'] = 4.0
+            asyncio.create_task(self._end_executioner_sword(user_id, 60, channel))
+            
+        elif total_score >= 18:
+            # Great - Remove QTE type from boss (lowered from 20)
+            await channel.send(
+                f"# ⚖️ **VERDICT: GUILTY!** ⚖️\n"
+                f"**Score: {total_score}/30**\n\n"
+                f"The boss loses the ability to use one QTE type!\n"
+                f"🚫 **Boss QTE pool reduced!**"
+            )
+            # Effect: reduce boss QTE difficulty options
+            if hasattr(self, 'boss_disabled_qte_types'):
+                self.boss_disabled_qte_types.append(random.choice(['hard', 'impossible']))
+            else:
+                self.boss_disabled_qte_types = [random.choice(['hard', 'impossible'])]
+            
+        elif total_score >= 8:
+            # OK - Break enemy defense (lowered from 10)
+            await channel.send(
+                f"# ⚖️ **VERDICT: PARTIALLY GUILTY** ⚖️\n"
+                f"**Score: {total_score}/30**\n\n"
+                f"Enemy defenses BROKEN for 30 seconds!\n"
+                f"💔 **Boss cannot evade or parry!**"
+            )
+            # Effect: stun boss (similar to breaking defense)
+            self.enemy_stunned = True
+            self.stun_end_time = time.time() + 30
+            asyncio.create_task(self._remove_domain_stun(30))
+        else:
+            # Failed - Minimal effect
+            await channel.send(
+                f"# ⚖️ **VERDICT: INSUFFICIENT EVIDENCE** ⚖️\n"
+                f"**Score: {total_score}/30**\n\n"
+                f"The case was WEAK. Minor damage dealt."
+            )
+            if self.active_boss:
+                await self.damage_boss(self.active_boss['name'], 100)
+    
+    async def _end_executioner_sword(self, user_id: int, duration: float, channel):
+        """End Executioner Sword buff"""
+        await asyncio.sleep(duration)
+        
+        if user_id in self.player_stats and self.player_stats[user_id].get('executioner_sword_active'):
+            self.player_stats[user_id]['executioner_sword_active'] = False
+            await channel.send(f"🗡️ **EXECUTIONER'S SWORD** fades... <@{user_id}>")
+    
+    async def _handle_soul_manipulator_domain(self, user_id: int, domain_config: dict, message, channel):
+        """Handle Soul Manipulator domain type (Self-Embodiment of Perfection)
+        - Every evade triggers INSTANT counter (no window needed)
+        - Transfiguration: Each counter adds 1.03^n damage multiplier (max 6x)
+        """
+        mechanics = domain_config.get("mechanics", {})
+        duration = domain_config.get("effects", {}).get("stun_duration", 60)
+        base_multiplier = mechanics.get("transfiguration", {}).get("base_multiplier", 1.03)
+        max_multiplier = mechanics.get("transfiguration", {}).get("max_multiplier", 6.0)
+        
+        await channel.send(
+            f"👁️ **SELF-EMBODIMENT OF PERFECTION** activated!\n"
+            f"⚡ **INSTANT COUNTER** on every evade!\n"
+            f"📈 **Transfiguration:** Each counter = **{base_multiplier}x** stack\n"
+            f"🔥 Maximum multiplier: **{max_multiplier}x**\n"
+            f"_\"I TRULY AM A CURSE!\"_"
+        )
+        
+        # Store soul manipulator state
+        if user_id not in self.player_stats:
+            self.player_stats[user_id] = {}
+        
+        self.player_stats[user_id]['soul_manipulator_active'] = True
+        self.player_stats[user_id]['soul_manipulator_end'] = time.time() + duration
+        self.player_stats[user_id]['transfiguration_stacks'] = 0
+        self.player_stats[user_id]['transfiguration_base'] = base_multiplier
+        self.player_stats[user_id]['transfiguration_max'] = max_multiplier
+        
+        asyncio.create_task(self._end_soul_manipulator_domain(user_id, duration, channel))
+    
+    async def _end_soul_manipulator_domain(self, user_id: int, duration: float, channel):
+        """End Soul Manipulator domain effects"""
+        await asyncio.sleep(duration)
+        
+        if user_id in self.player_stats and self.player_stats[user_id].get('soul_manipulator_active'):
+            stacks = self.player_stats[user_id].get('transfiguration_stacks', 0)
+            self.player_stats[user_id]['soul_manipulator_active'] = False
+            self.player_stats[user_id]['transfiguration_stacks'] = 0
+            await channel.send(f"👁️ **SELF-EMBODIMENT OF PERFECTION** fades... <@{user_id}>\n_Achieved {stacks} Transfiguration stacks_")
+    
+    def get_soul_manipulator_multiplier(self, user_id: int) -> float:
+        """Get current Transfiguration damage multiplier"""
+        if not self.player_stats.get(user_id, {}).get('soul_manipulator_active'):
+            return 1.0
+        
+        stacks = self.player_stats[user_id].get('transfiguration_stacks', 0)
+        base = self.player_stats[user_id].get('transfiguration_base', 1.03)
+        max_mult = self.player_stats[user_id].get('transfiguration_max', 6.0)
+        
+        # Calculate 1.03^n
+        multiplier = base ** stacks
+        return min(multiplier, max_mult)
+    
+    async def add_transfiguration_stack(self, user_id: int, channel):
+        """Add a Transfiguration stack after counter"""
+        if not self.player_stats.get(user_id, {}).get('soul_manipulator_active'):
+            return
+        
+        self.player_stats[user_id]['transfiguration_stacks'] = self.player_stats[user_id].get('transfiguration_stacks', 0) + 1
+        stacks = self.player_stats[user_id]['transfiguration_stacks']
+        multiplier = self.get_soul_manipulator_multiplier(user_id)
+        
+        await channel.send(f"👁️ **TRANSFIGURATION!** Stack {stacks} | Damage: **{multiplier:.2f}x**")
+    
+    # ========== INFINITE VOID *VAR* MODE ==========
+    
+    async def handle_domain_expansion_var(self, message):
+        """Handle *var* command - Quick Infinite Void variant
+        - 2s cast time (ultra fast)
+        - 10s stun on boss
+        - Spammable 50dmg ult1 instead of normal domain
+        - Lower cooldown
+        """
+        user_id = message.author.id
+        channel = message.channel
+        
+        # Check if player has Infinite Void as their ACTIVE domain
+        player_ach = self.player_achievements.get(str(user_id), {})
+        unlocked_domains = player_ach.get("domains", [])
+        active_domain = player_ach.get("active_domain")
+        
+        if "infinite_void" not in unlocked_domains:
+            await channel.send(f"{message.author.mention} ❌ You need **Infinite Void** domain!")
+            return
+        
+        # VAR can ONLY be used when Infinite Void is the ACTIVE domain
+        if active_domain != "infinite_void":
+            await channel.send(f"{message.author.mention} ❌ **VAR** can only be used when **Infinite Void** is your active domain! (Currently: **{active_domain or 'None'}**)")
+            return
+        
+        # Check if fight is active
+        if not self.fight_active or not self.active_boss:
+            await channel.send(f"{message.author.mention} ⚔️ No active fight!")
+            return
+        
+        # ========== BLOCK VAR DURING JACKPOT MODE ==========
+        if user_id in self.player_stats and self.player_stats[user_id].get('jackpot_active'):
+            await channel.send(f"{message.author.mention} 🎰 **JACKPOT MODE ACTIVE!** You cannot use VAR while in jackpot mode - focus on your slots!")
+            return
+        
+        # Cancel any active normal domain casting
+        if user_id in self.domain_casting:
+            self.domain_casting.pop(user_id, None)
+            await channel.send(f"♾️ *Normal domain cancelled for VAR mode...*")
+        
+        # Check cooldown - SHARES cooldown with normal infinite_void domain (mutual exclusivity)
+        domain_cooldown = 300  # 5 minutes (same as normal domain)
+        if user_id in self.domain_cooldowns:
+            # Check BOTH var and normal domain cooldowns
+            var_last = self.domain_cooldowns[user_id].get("infinite_void_var", 0)
+            normal_last = self.domain_cooldowns[user_id].get("infinite_void", 0)
+            last_used = max(var_last, normal_last)  # Use whichever was used more recently
+            
+            elapsed = time.time() - last_used
+            if elapsed < domain_cooldown:
+                remaining = domain_cooldown - elapsed
+                minutes = int(remaining // 60)
+                seconds = int(remaining % 60)
+                await channel.send(f"{message.author.mention} ⏱️ **Infinite Void** (VAR or normal) on cooldown! **{minutes}m {seconds}s**")
+                return
+        
+        # Send VAR GIF
+        try:
+            var_gif_path = ASSETS_DIR / "infinite void 0.2 var.gif"
+            await channel.send(file=discord.File(str(var_gif_path)))
+        except Exception as e:
+            console.print(f"[yellow]Could not send VAR GIF: {e}[/yellow]")
+        
+        await channel.send(
+            f"# ♾️ **MURYOKUSHO *VAR*** ♾️\n"
+            f"*Quick deploy variant activating...*\n"
+            f"⏳ **2s cast** | 🌀 **10s STUN** | ⚡ **Spammable ult1**"
+        )
+        
+        # 2 second cast (ultra fast)
+        await asyncio.sleep(2)
+        
+        # Stun boss for 10 seconds
+        self.enemy_stunned = True
+        self.stun_end_time = time.time() + 10
+        asyncio.create_task(self._remove_domain_stun(10))
+        
+        # Activate VAR mode
+        if user_id not in self.player_stats:
+            self.player_stats[user_id] = {}
+        
+        var_duration = 30  # 30 seconds of VAR mode
+        self.player_stats[user_id]['var_mode_active'] = True
+        self.player_stats[user_id]['var_mode_end'] = time.time() + var_duration
+        
+        await channel.send(
+            f"# ♾️ ***VAR* ACTIVE!** ♾️\n"
+            f"🌀 **Boss STUNNED for 10s!**\n"
+            f"Use `*ult1*` for **spammable 50 damage** attacks!\n"
+            f"_Duration: {var_duration}s_"
+        )
+        
+        # Set cooldown on BOTH var and normal infinite_void (mutual exclusivity)
+        if user_id not in self.domain_cooldowns:
+            self.domain_cooldowns[user_id] = {}
+        current_time = time.time()
+        self.domain_cooldowns[user_id]["infinite_void_var"] = current_time
+        self.domain_cooldowns[user_id]["infinite_void"] = current_time  # Also set normal domain cooldown
+        
+        # Schedule end
+        asyncio.create_task(self._end_var_mode(user_id, var_duration, channel))
+    
+    async def _end_var_mode(self, user_id: int, duration: float, channel):
+        """End VAR mode"""
+        await asyncio.sleep(duration)
+        
+        if user_id in self.player_stats and self.player_stats[user_id].get('var_mode_active'):
+            self.player_stats[user_id]['var_mode_active'] = False
+            await channel.send(f"♾️ ***VAR* MODE ENDED** <@{user_id}>")
+    
+    def is_var_mode_active(self, user_id: int) -> bool:
+        """Check if VAR mode is active for user"""
+        if not self.player_stats.get(user_id, {}).get('var_mode_active'):
+            return False
+        return time.time() < self.player_stats[user_id].get('var_mode_end', 0)
+    
+    async def handle_var_ult1(self, message):
+        """Handle spammable *ult1* attack during VAR mode - 50 damage, no cooldown"""
+        user_id = message.author.id
+        channel = message.channel
+        
+        # Double check VAR mode is active
+        if not self.is_var_mode_active(user_id):
+            await channel.send(f"{message.author.mention} ❌ VAR mode not active!")
+            return
+        
+        if not self.fight_active or not self.active_boss:
+            await channel.send(f"{message.author.mention} ⚔️ No active fight!")
+            return
+        
+        # Deal 50 damage - NO COOLDOWN (spammable)
+        damage = 50
+        
+        # Apply weapon multiplier if any
+        weapon_mult = self.get_weapon_damage_multiplier(user_id)
+        final_damage = int(damage * weapon_mult)
+        
+        await channel.send(
+            f"♾️⚡ **VAR ULT1!** {message.author.mention} deals **{final_damage} damage!**"
+        )
+        
+        if self.active_boss:
+            self.active_boss['hp_current'] = max(0, self.active_boss['hp_current'] - final_damage)
+            await self.update_hp_bar_display(self.active_boss['name'], is_boss=True)
+            
+            # Check for boss death
+            if self.active_boss['hp_current'] <= 0:
+                await self.damage_boss(self.active_boss['name'], 0)
+    
+    async def handle_executioner_ult1(self, message):
+        """Handle *ult1* during Executioner Sword - Executioner Lunge
+        - 10 second interruptible cast
+        - If landed: 50% of boss's total HP as damage
+        """
+        user_id = message.author.id
+        channel = message.channel
+        
+        # Check if Executioner Sword is active
+        if not self.player_stats.get(user_id, {}).get('executioner_sword_active'):
+            await channel.send(f"{message.author.mention} ❌ Executioner Sword not active!")
+            return
+        
+        if not self.fight_active or not self.active_boss:
+            await channel.send(f"{message.author.mention} ⚔️ No active fight!")
+            return
+        
+        # Check if already casting
+        if user_id in self.domain_casting:
+            await channel.send(f"{message.author.mention} ⏳ Already casting!")
+            return
+        
+        cast_time = 10.0
+        
+        await channel.send(
+            f"# 🗡️⚡ **EXECUTIONER LUNGE** ⚡🗡️\n"
+            f"*{message.author.display_name}* prepares the killing blow...\n"
+            f"⚠️ **INTERRUPTIBLE** - {cast_time}s cast!\n"
+            f"_Any damage will cancel this attack!_"
+        )
+        
+        # Mark as casting (interruptible by damage)
+        self.domain_casting[user_id] = {
+            "domain_id": "executioner_lunge",
+            "start_time": time.time(),
+            "type": "executioner_lunge",
+            "interruptible_by_damage": True
+        }
+        
+        await asyncio.sleep(cast_time)
+        
+        # Check if interrupted (casting dict entry removed or changed)
+        if user_id not in self.domain_casting or self.domain_casting[user_id].get("type") != "executioner_lunge":
+            await channel.send(f"🗡️❌ **EXECUTIONER LUNGE INTERRUPTED!** {message.author.mention}")
+            return
+        
+        self.domain_casting.pop(user_id, None)
+        
+        # Check if sword still active
+        if not self.player_stats.get(user_id, {}).get('executioner_sword_active'):
+            await channel.send(f"{message.author.mention} ❌ Executioner Sword expired during cast!")
+            return
+        
+        if not self.active_boss:
+            return
+        
+        # Deal 50% of boss's TOTAL HP
+        total_hp = self.active_boss.get('hp_max', self.active_boss.get('hp_current', 1000))
+        damage = int(total_hp * 0.50)
+        
+        await channel.send(
+            f"# 🗡️💀 **EXECUTIONER LUNGE LANDS!** 💀🗡️\n"
+            f"*The blade finds its mark!*\n"
+            f"**{damage} DAMAGE!!!** *(50% of total HP)*"
+        )
+        
+        self.active_boss['hp_current'] = max(0, self.active_boss['hp_current'] - damage)
+        await self.update_hp_bar_display(self.active_boss['name'], is_boss=True)
+        
+        if self.active_boss['hp_current'] <= 0:
+            await self.damage_boss(self.active_boss['name'], 0)
+    
+    async def handle_executioner_ult2(self, message):
+        """Handle *ult2* during Executioner Sword - Final Judgement (Tug of War Clash)
+        - 30 second tug-of-war minigame
+        - Both type letter combos (max 3 letters), first to type wins the point
+        - Points work like tug of war (earning takes from opponent)
+        - If player wins: 99% damage to boss
+        - If boss wins: Executioner Sword breaks, boss heals 20%
+        """
+        user_id = message.author.id
+        channel = message.channel
+        
+        # Check if Executioner Sword is active
+        if not self.player_stats.get(user_id, {}).get('executioner_sword_active'):
+            await channel.send(f"{message.author.mention} ❌ Executioner Sword not active!")
+            return
+        
+        if not self.fight_active or not self.active_boss:
+            await channel.send(f"{message.author.mention} ⚔️ No active fight!")
+            return
+        
+        # Check if clash already active
+        if self.player_stats.get(user_id, {}).get('final_judgement_active'):
+            await channel.send(f"{message.author.mention} ⚔️ Final Judgement already in progress!")
+            return
+        
+        # Initialize Final Judgement state
+        self.player_stats[user_id]['final_judgement_active'] = True
+        self.player_stats[user_id]['final_judgement_player_score'] = 0
+        self.player_stats[user_id]['final_judgement_boss_score'] = 0
+        self.player_stats[user_id]['final_judgement_current_combo'] = None
+        self.player_stats[user_id]['final_judgement_channel'] = channel.id
+        self.player_stats[user_id]['final_judgement_end_time'] = time.time() + 30
+        
+        boss_name = self.active_boss.get('name', 'The Boss')
+        
+        await channel.send(
+            f"# ⚔️⚖️ **FINAL JUDGEMENT** ⚖️⚔️\n"
+            f"*{message.author.display_name}* vs **{boss_name}**!\n\n"
+            f"🎮 **TUG OF WAR** - 30 seconds!\n"
+            f"Type the letter combo **FIRST** to win the point!\n"
+            f"Points swing like a pendulum - first to dominate wins!\n\n"
+            f"🏆 **Player wins:** 99% DAMAGE to boss!\n"
+            f"💀 **Boss wins:** Sword BREAKS + Boss heals 20%!\n\n"
+            f"⚔️ **CLASH BEGINS!**"
+        )
+        
+        await asyncio.sleep(1)
+        
+        # Start the tug of war loop
+        asyncio.create_task(self._run_final_judgement(user_id, channel))
+    
+    async def _run_final_judgement(self, user_id: int, channel):
+        """Run the Final Judgement tug-of-war minigame"""
+        import string
+        
+        duration = 30
+        end_time = time.time() + duration
+        max_score = 10  # First to reach this wins instantly
+        
+        while time.time() < end_time:
+            # Check if still active
+            if not self.player_stats.get(user_id, {}).get('final_judgement_active'):
+                return
+            
+            # Generate random 2-3 letter combo
+            combo_length = random.randint(2, 3)
+            combo = ''.join(random.choices(string.ascii_uppercase, k=combo_length))
+            
+            self.player_stats[user_id]['final_judgement_current_combo'] = combo.lower()
+            self.player_stats[user_id]['final_judgement_combo_answered'] = False
+            
+            player_score = self.player_stats[user_id].get('final_judgement_player_score', 0)
+            boss_score = self.player_stats[user_id].get('final_judgement_boss_score', 0)
+            
+            # Visual progress bar
+            total = player_score + boss_score
+            if total == 0:
+                bar = "⬜⬜⬜⬜⬜🔶⬜⬜⬜⬜⬜"
+            else:
+                # Calculate position (-10 to +10 range, 0 is center)
+                position = player_score - boss_score
+                # Map to 0-10 scale for display
+                bar_pos = 5 + position  # 5 is center
+                bar_pos = max(0, min(10, bar_pos))
+                bar = "⬛" * bar_pos + "🔶" + "⬜" * (10 - bar_pos)
+            
+            time_left = int(end_time - time.time())
+            
+            await channel.send(
+                f"⚔️ **TYPE:** `{combo}`\n"
+                f"📊 {bar}\n"
+                f"👤 Player: **{player_score}** | Boss: **{boss_score}** 👹\n"
+                f"⏱️ {time_left}s remaining"
+            )
+            
+            # Wait for response or boss "types" (random delay 0.5-2s)
+            boss_reaction_time = random.uniform(0.5, 2.0)
+            wait_start = time.time()
+            
+            while not self.player_stats[user_id].get('final_judgement_combo_answered', False):
+                await asyncio.sleep(0.1)
+                
+                # Boss tries to answer
+                if time.time() - wait_start >= boss_reaction_time:
+                    # Boss answers first!
+                    if not self.player_stats[user_id].get('final_judgement_combo_answered'):
+                        self.player_stats[user_id]['final_judgement_combo_answered'] = True
+                        self.player_stats[user_id]['final_judgement_boss_score'] += 1
+                        
+                        # Take point from player if they have any
+                        if self.player_stats[user_id]['final_judgement_player_score'] > 0:
+                            self.player_stats[user_id]['final_judgement_player_score'] -= 1
+                        
+                        await channel.send(f"👹💨 **BOSS** typed `{combo}` first! Boss gains a point!")
+                        
+                        # Check if boss wins
+                        if self.player_stats[user_id]['final_judgement_boss_score'] >= max_score:
+                            await self._end_final_judgement(user_id, channel, winner='boss')
+                            return
+                    break
+                
+                # Timeout check
+                if time.time() >= end_time:
+                    break
+            
+            # Small delay before next combo
+            await asyncio.sleep(0.3)
+        
+        # Time's up - determine winner
+        player_score = self.player_stats[user_id].get('final_judgement_player_score', 0)
+        boss_score = self.player_stats[user_id].get('final_judgement_boss_score', 0)
+        
+        if player_score > boss_score:
+            await self._end_final_judgement(user_id, channel, winner='player')
+        elif boss_score > player_score:
+            await self._end_final_judgement(user_id, channel, winner='boss')
+        else:
+            # Tie - favor boss (defender's advantage)
+            await self._end_final_judgement(user_id, channel, winner='boss')
+    
+    async def _end_final_judgement(self, user_id: int, channel, winner: str):
+        """End the Final Judgement and apply results"""
+        self.player_stats[user_id]['final_judgement_active'] = False
+        self.player_stats[user_id]['final_judgement_current_combo'] = None
+        
+        player_score = self.player_stats[user_id].get('final_judgement_player_score', 0)
+        boss_score = self.player_stats[user_id].get('final_judgement_boss_score', 0)
+        
+        if winner == 'player':
+            # Player wins - 99% damage to boss!
+            if self.active_boss:
+                total_hp = self.active_boss.get('hp_max', self.active_boss.get('hp_current', 1000))
+                damage = int(total_hp * 0.99)
+                
+                await channel.send(
+                    f"# ⚔️🏆 **FINAL JUDGEMENT - GUILTY!** 🏆⚔️\n"
+                    f"**Score: {player_score} - {boss_score}**\n\n"
+                    f"*The executioner's blade falls!*\n"
+                    f"**{damage} DAMAGE!!!** *(99% of total HP)*\n"
+                    f"_\"DEATH SENTENCE EXECUTED!\"_"
+                )
+                
+                self.active_boss['hp_current'] = max(0, self.active_boss['hp_current'] - damage)
+                await self.update_hp_bar_display(self.active_boss['name'], is_boss=True)
+                
+                if self.active_boss['hp_current'] <= 0:
+                    await self.damage_boss(self.active_boss['name'], 0)
+        else:
+            # Boss wins - Sword breaks, boss heals 20%
+            self.player_stats[user_id]['executioner_sword_active'] = False
+            
+            if self.active_boss:
+                total_hp = self.active_boss.get('hp_max', self.active_boss.get('hp_current', 1000))
+                heal_amount = int(total_hp * 0.20)
+                self.active_boss['hp_current'] = min(total_hp, self.active_boss['hp_current'] + heal_amount)
+                
+                await channel.send(
+                    f"# ⚔️💀 **FINAL JUDGEMENT - NOT GUILTY!** 💀⚔️\n"
+                    f"**Score: {player_score} - {boss_score}**\n\n"
+                    f"*The defendant overpowers the executioner!*\n"
+                    f"🗡️💔 **EXECUTIONER SWORD SHATTERED!**\n"
+                    f"💚 **Boss heals {heal_amount} HP!** *(20% of total)*\n"
+                    f"_\"The sentence has been overturned...\"_"
+                )
+                
+                await self.update_hp_bar_display(self.active_boss['name'], is_boss=True)
+    
+    async def handle_final_judgement_response(self, message) -> bool:
+        """Handle player response during Final Judgement tug-of-war
+        Returns True if message was consumed by Final Judgement
+        """
+        user_id = message.author.id
+        
+        # Check if this user has active Final Judgement
+        if not self.player_stats.get(user_id, {}).get('final_judgement_active'):
+            return False
+        
+        expected_combo = self.player_stats[user_id].get('final_judgement_current_combo')
+        if not expected_combo:
+            return False
+        
+        # Check if already answered
+        if self.player_stats[user_id].get('final_judgement_combo_answered'):
+            return False
+        
+        # Check if message matches combo (case insensitive)
+        if message.content.lower().strip() == expected_combo:
+            self.player_stats[user_id]['final_judgement_combo_answered'] = True
+            self.player_stats[user_id]['final_judgement_player_score'] += 1
+            
+            # Take point from boss if they have any
+            if self.player_stats[user_id]['final_judgement_boss_score'] > 0:
+                self.player_stats[user_id]['final_judgement_boss_score'] -= 1
+            
+            await message.channel.send(f"👤⚡ **{message.author.display_name}** typed `{expected_combo.upper()}` first! Player gains a point!")
+            
+            # Check if player wins
+            if self.player_stats[user_id]['final_judgement_player_score'] >= 10:
+                await self._end_final_judgement(user_id, message.channel, winner='player')
+            
+            return True
+        
+        return False
+    
+    # ========== END DOMAIN TYPE HANDLERS ==========
+
     async def apply_power_effect(self, user, power, channel, power_key=None):
         """Apply power effects based on effect string"""
         try:
@@ -6720,9 +11725,6 @@ Your response (1-2 sentences max):"""
                 was_capped = raw_damage > self.ultimate_max_damage
                 # ======================================
                 
-                # Use 10-minute base cooldown for ultimates (fight-time only!)
-                total_cooldown = self.ultimate_base_cooldown  # 600 seconds = 10 minutes
-                
                 if was_capped:
                     embed.add_field(
                         name="Effect", 
@@ -6731,21 +11733,6 @@ Your response (1-2 sentences max):"""
                     )
                 else:
                     embed.add_field(name="Effect", value=f"💥 **{damage} damage** to enemy!", inline=False)
-                
-                # Show cooldown in minutes
-                cooldown_minutes = total_cooldown // 60
-                embed.add_field(
-                    name="Cooldown", 
-                    value=f"⏱️ **{cooldown_minutes} minutes** (fight-time only!)", 
-                    inline=False
-                )
-                
-                # Set the cooldown for this power
-                if power_key and user.id:
-                    if user.id not in self.power_cooldowns:
-                        self.power_cooldowns[user.id] = {}
-                    self.power_cooldowns[user.id][power_key] = time.time() + total_cooldown
-                    console.print(f"[yellow]⏱️ Set {power_key} cooldown: {cooldown_minutes}m (fight-time)[/yellow]")
                 
                 # ===== PHASE 5: ADD CHARGE FROM POWER DAMAGE (only if self-recharge enabled) =====
                 if self.ultimate_self_recharge:
@@ -6775,12 +11762,43 @@ Your response (1-2 sentences max):"""
                 embed.add_field(name="Effect", value="🌀 Enemy stunned for **3 seconds**!", inline=False)
             
             elif effect.startswith("buff:"):
-                buff_type = effect.split(":")[1]
-                embed.add_field(name="Effect", value=f"✨ {buff_type.capitalize()} buff applied!", inline=False)
-                # TODO: Implement buff system if needed
+                buff_parts = effect.split(":")
+                buff_type = buff_parts[1]
+                buff_value = float(buff_parts[2]) if len(buff_parts) > 2 else 0.1
+                buff_duration = float(buff_parts[3]) if len(buff_parts) > 3 else 30.0
+                # Apply actual buff
+                self.apply_buff(user.id, buff_type, buff_value, buff_duration)
+                embed.add_field(name="Effect", value=f"✨ **{buff_type.capitalize()}** buff applied! (+{buff_value*100:.0f}% for {buff_duration:.0f}s)", inline=False)
             
             else:
                 embed.add_field(name="Effect", value=f"⚡ {effect}", inline=False)
+            
+            # ========== APPLY COOLDOWN FOR ALL POWER TYPES ==========
+            # Use power's custom cooldown if set, otherwise use base cooldown
+            power_cooldown = power.get("cooldown", self.ultimate_base_cooldown)
+            
+            # ===== JACKPOT CHECK - Reduce cooldowns during jackpot =====
+            if user.id in self.player_stats and self.player_stats[user.id].get('jackpot_active'):
+                jackpot_end = self.player_stats[user.id].get('jackpot_end_time', 0)
+                if time.time() < jackpot_end:
+                    # During jackpot: 10s cooldown only!
+                    power_cooldown = self.player_stats[user.id].get('jackpot_ult_cooldown', 10)
+                    console.print(f"[purple]🎰 JACKPOT ACTIVE - Cooldown reduced to {power_cooldown}s![/purple]")
+                    # Also refill charges to 100% (unlimited ult charge)
+                    if user.id not in self.power_charges:
+                        self.power_charges[user.id] = {}
+                    self.power_charges[user.id]["power1"] = 100
+                    self.power_charges[user.id]["power2"] = 100
+            # ===========================================================
+            
+            if power_key and user.id:
+                if user.id not in self.power_cooldowns:
+                    self.power_cooldowns[user.id] = {}
+                self.power_cooldowns[user.id][power_key] = time.time() + power_cooldown
+                cooldown_display = f"{power_cooldown // 60}m {power_cooldown % 60}s" if power_cooldown >= 60 else f"{power_cooldown}s"
+                embed.add_field(name="Cooldown", value=f"⏱️ **{cooldown_display}** (fight-time only!)", inline=False)
+                console.print(f"[yellow]⏱️ Set {power_key} cooldown: {cooldown_display} (fight-time)[/yellow]")
+            # =========================================================
             
             # Add power image (custom if set, otherwise default ultimate GIF)
             power_image = power.get("image_url") or self.ultimate_gif
@@ -6801,6 +11819,94 @@ Your response (1-2 sentences max):"""
             "control": discord.Color.purple()
         }
         return colors.get(power_type, discord.Color.dark_purple())
+
+    # ========== WEAPON SYSTEM ==========
+    
+    def get_weapon_damage_multiplier(self, user_id: int) -> float:
+        """Get the damage multiplier from equipped weapon"""
+        # Check for Executioner Sword (temporary buff from court trial)
+        if self.player_stats.get(user_id, {}).get('executioner_sword_active'):
+            end_time = self.player_stats[user_id].get('executioner_sword_end', 0)
+            if time.time() < end_time:
+                return self.player_stats[user_id].get('executioner_sword_multiplier', 4.0)
+        
+        # Check for equipped weapon from achievements
+        user_id_str = str(user_id)
+        equipped_weapon = self.player_achievements.get(user_id_str, {}).get('equipped_weapon')
+        
+        if not equipped_weapon:
+            return 1.0
+        
+        # Get weapon config
+        weapons_config = self.achievements_config.get("weapons", {})
+        weapon_data = weapons_config.get(equipped_weapon, {})
+        
+        return weapon_data.get("damage_multiplier", 1.0)
+    
+    def get_player_weapons(self, user_id: int) -> list:
+        """Get list of unlocked weapons for a player"""
+        user_id_str = str(user_id)
+        return self.player_achievements.get(user_id_str, {}).get("weapons", [])
+    
+    async def equip_weapon(self, user_id: int, weapon_id: str) -> bool:
+        """Equip a weapon for a player"""
+        user_id_str = str(user_id)
+        
+        # Check if player has this weapon
+        unlocked_weapons = self.get_player_weapons(user_id)
+        if weapon_id not in unlocked_weapons:
+            return False
+        
+        # Equip the weapon
+        if user_id_str not in self.player_achievements:
+            self.player_achievements[user_id_str] = {}
+        
+        self.player_achievements[user_id_str]['equipped_weapon'] = weapon_id
+        save_data("player_achievements", self.player_achievements)
+        
+        return True
+    
+    def get_equipped_weapon(self, user_id: int) -> dict:
+        """Get the currently equipped weapon data for a player"""
+        user_id_str = str(user_id)
+        equipped_id = self.player_achievements.get(user_id_str, {}).get('equipped_weapon')
+        
+        if not equipped_id:
+            return None
+        
+        weapons_config = self.achievements_config.get("weapons", {})
+        weapon_data = weapons_config.get(equipped_id, {})
+        
+        if weapon_data:
+            weapon_data['id'] = equipped_id
+        
+        return weapon_data
+    
+    async def grant_weapon(self, user_id: int, weapon_id: str):
+        """Grant a weapon to a player"""
+        user_id_str = str(user_id)
+        
+        if user_id_str not in self.player_achievements:
+            self.player_achievements[user_id_str] = {}
+        
+        if 'weapons' not in self.player_achievements[user_id_str]:
+            self.player_achievements[user_id_str]['weapons'] = []
+        
+        if weapon_id not in self.player_achievements[user_id_str]['weapons']:
+            self.player_achievements[user_id_str]['weapons'].append(weapon_id)
+            save_data("player_achievements", self.player_achievements)
+            
+            # Get weapon info for announcement
+            weapon_data = self.achievements_config.get("weapons", {}).get(weapon_id, {})
+            weapon_name = weapon_data.get("name", weapon_id)
+            
+            channel = self.bot.get_channel(self.qte_channel_id)
+            if channel:
+                await channel.send(f"🗡️ <@{user_id}> has acquired **{weapon_name}**!")
+            
+            console.print(f"[gold1]🗡️ Weapon {weapon_id} granted to {user_id}[/gold1]")
+    
+    # ========== END WEAPON SYSTEM ==========
 
     async def handle_counter_attack(self, message):
         """Handle *attack* counter command - triggers instant counter with GIF"""
@@ -6831,6 +11937,28 @@ Your response (1-2 sentences max):"""
             streak_multiplier = min(2.0, 1.0 + (parry_streak * 0.1))
             counter_damage = int(base_damage * streak_multiplier)
             
+            # ========== WEAPON DAMAGE MULTIPLIER ==========
+            weapon_multiplier = self.get_weapon_damage_multiplier(user_id)
+            if weapon_multiplier > 1.0:
+                counter_damage = int(counter_damage * weapon_multiplier)
+                console.print(f"[gold1]🗡️ WEAPON BONUS: Damage multiplied by {weapon_multiplier}x![/gold1]")
+            # ===============================================
+            
+            # ========== TRANSFIGURATION (Soul Manipulator) ==========
+            transfig_multiplier = self.get_soul_manipulator_multiplier(user_id)
+            if transfig_multiplier > 1.0:
+                counter_damage = int(counter_damage * transfig_multiplier)
+                console.print(f"[magenta]👁️ TRANSFIGURATION: Damage multiplied by {transfig_multiplier:.2f}x![/magenta]")
+            # ========================================================
+            
+            # ========== INFINITY DOMAIN: TRIPLE DAMAGE ==========
+            infinity_active = self.player_stats.get(user_id, {}).get('infinity_domain_active', False)
+            infinity_end = self.player_stats.get(user_id, {}).get('infinity_domain_end', 0)
+            if infinity_active and time.time() < infinity_end:
+                counter_damage = int(counter_damage * 3)  # TRIPLE damage!
+                console.print(f"[magenta]♾️ INFINITY AMPLIFIER: Counter damage tripled! ({counter_damage})[/magenta]")
+            # ====================================================
+            
             # CRITICAL COUNTER CHECK - Uses luck modifier (formerly BF chance)
             is_critical = False
             crit_chance = self.player_stats.get(user_id, {}).get('black_flash_chance', self.black_flash_base_chance)
@@ -6850,6 +11978,15 @@ Your response (1-2 sentences max):"""
                         stats.get('black_flash_chance', self.black_flash_base_chance) + self.black_flash_increment,
                         self.black_flash_cap
                     )
+                
+                # ========== ACHIEVEMENT: CRITICAL COUNTER IN FIGHT ==========
+                # Track critical counters during active boss fights for "Restless Gambler"
+                if self.fight_active:
+                    if 'critical_counters_this_fight' not in stats:
+                        stats['critical_counters_this_fight'] = 0
+                    stats['critical_counters_this_fight'] += 1
+                    asyncio.create_task(self.check_achievements(user_id, 'critical_counter_fight', stats['critical_counters_this_fight']))
+                # ============================================================
             
             # Add charge from counter
             self.add_charge_from_damage_dealt(user_id, counter_damage)
@@ -6857,7 +11994,64 @@ Your response (1-2 sentences max):"""
             
             # Apply damage to boss if active
             if self.active_boss:
-                await self.damage_boss(self.active_boss['name'], counter_damage)
+                # ========== TUPPERBOX BOSS MODE: EVADE/COUNTER CHECK ==========
+                boss_evaded = False
+                boss_countered = False
+                boss_evade_gif = None
+                boss_counter_gif = None
+                boss_counter_damage = 0
+                
+                if self.tupperbox_boss_mode:
+                    boss_evaded, boss_evade_gif = await self.boss_try_evade()
+                    
+                    if boss_evaded:
+                        # Boss evaded the player's attack!
+                        console.print(f"[bold red]👹 BOSS EVADED {mention}'s counter![/bold red]")
+                        
+                        # Send evade message
+                        boss_name = self.tupperbox_boss_config.get("character_name", "The Boss")
+                        evade_embed = discord.Embed(
+                            title="👹 Boss Evades!",
+                            description=f"**{boss_name}** evaded {mention}'s counter attack!",
+                            color=discord.Color.orange()
+                        )
+                        if boss_evade_gif:
+                            evade_embed.set_image(url=boss_evade_gif)
+                        await self.safe_send(channel, embed=evade_embed)
+                        
+                        # Boss tries to counter after evading
+                        boss_countered, boss_counter_damage, boss_counter_gif = await self.boss_try_counter()
+                        
+                        if boss_countered:
+                            # Boss counter-attacks!
+                            console.print(f"[bold red]👹💥 BOSS COUNTERS for {boss_counter_damage} damage![/bold red]")
+                            
+                            # Apply damage to player
+                            await self.damage_player(user_id, boss_counter_damage)
+                            
+                            counter_embed = discord.Embed(
+                                title="👹💥 Boss Counter-Attack!",
+                                description=f"**{boss_name}** counters with a devastating blow!\n\n"
+                                           f"💢 **{boss_counter_damage} DAMAGE** to {mention}!",
+                                color=discord.Color.dark_red()
+                            )
+                            if boss_counter_gif:
+                                counter_embed.set_image(url=boss_counter_gif)
+                            await self.safe_send(channel, embed=counter_embed)
+                            
+                            # Apply status effect if configured for counter
+                            status_config = self.tupperbox_boss_config.get("status_inflict", {}).get("counter", {})
+                            if status_config:
+                                status_type = status_config.get("status")
+                                chance = status_config.get("chance", 100)
+                                duration = status_config.get("duration", 60)
+                                if random.randint(1, 100) <= chance:
+                                    await self.apply_status_effect(user_id, status_type, duration, source="Boss Counter")
+                
+                # Only damage boss if boss didn't evade
+                if not boss_evaded:
+                    await self.damage_boss(self.active_boss['name'], counter_damage)
+                # ============================================================
             
             # STUN SCALING: Base 0.5-1s, DOUBLED at 5 streak (1-2s), caps at 2s for 5+ streak
             if counter_streak >= 5:
@@ -7159,6 +12353,8 @@ Your response (1-2 sentences max):"""
                     'best_streak': 0,
                     'parry_streak': 0,
                     'best_parry_streak': 0,
+                    'evade_streak': 0,
+                    'best_evade_streak': 0,
                     'black_flash_chance': self.black_flash_base_chance,
                     'black_flashes': 0
                 }
@@ -7178,6 +12374,18 @@ Your response (1-2 sentences max):"""
                 stats['evades'] += 1
                 # Reset parry streak on evade
                 stats['parry_streak'] = stats.get('parry_streak', 0)
+                
+                # Track evade streak for achievements
+                if success:
+                    stats['evade_streak'] = stats.get('evade_streak', 0) + 1
+                    stats['best_evade_streak'] = max(stats.get('best_evade_streak', 0), stats['evade_streak'])
+                    console.print(f"[green]♾️ Evade streak: {stats['evade_streak']}[/green]")
+                    
+                    # Check for evade-related achievements
+                    asyncio.create_task(self.check_achievements(user_id, 'evade_streak', stats['evade_streak']))
+                    asyncio.create_task(self.check_achievements(user_id, 'evade_count', stats['evades']))
+                else:
+                    stats['evade_streak'] = 0  # Reset on failed evade
             elif action == 'parry':
                 stats['parries'] += 1
                 if success:

@@ -1,0 +1,128 @@
+{
+  "_comment": "Player achievement progress - {user_id: {achievement_id: {unlocked: bool, date: timestamp}}}",
+  "_version": "1.0",
+  "752599251787448330": {
+    "first_evade": {
+      "unlocked": true,
+      "date": "2026-01-29 19:19:56",
+      "timestamp": 1769735996.607533
+    },
+    "titles": [
+      "Nimble",
+      "⛩️ The Untouched"
+    ],
+    "domains": [
+      "malevolent_shrine"
+    ],
+    "active_title": "Nimble",
+    "shrine": {
+      "unlocked": true,
+      "date": "2026-01-30 21:59:06",
+      "timestamp": 1769831946.873428
+    },
+    "active_domain": "malevolent_shrine"
+  },
+  "984522852898320424": {
+    "titles": [
+      "🎲 High Roller",
+      "∞ Infinity"
+    ],
+    "domains": [
+      "idle_death_gamble",
+      "infinite_void"
+    ],
+    "restless_gambler": {
+      "unlocked": true,
+      "date": "2026-01-30 20:01:20",
+      "timestamp": 1769824880.038848
+    },
+    "active_title": "🎲 High Roller",
+    "active_domain": "infinite_void",
+    "infinity": {
+      "unlocked": true,
+      "date": "2026-01-30 20:32:43",
+      "timestamp": 1769826763.823718
+    }
+  },
+  "954834739607535709": {
+    "titles": [
+      "Nimble",
+      "👁️ I TRULY AM A CURSE!",
+      "∞ Infinity"
+    ],
+    "domains": [
+      "self_embodiment_perfection",
+      "infinite_void"
+    ],
+    "first_evade": {
+      "unlocked": true,
+      "date": "2026-01-29 21:49:20",
+      "timestamp": 1769744960.3704407
+    },
+    "active_title": "👁️ I TRULY AM A CURSE!",
+    "soul_manipulator": {
+      "unlocked": true,
+      "date": "2026-01-30 20:33:02",
+      "timestamp": 1769826782.4819853
+    },
+    "active_domain": "self_embodiment_perfection",
+    "infinity": {
+      "unlocked": true,
+      "date": "2026-01-30 22:02:23",
+      "timestamp": 1769832143.953078
+    }
+  },
+  "1102073491316023347": {
+    "titles": [
+      "Nimble",
+      "The Untouchable",
+      "🎲 High Roller"
+    ],
+    "domains": [
+      "idle_death_gamble"
+    ],
+    "first_evade": {
+      "unlocked": true,
+      "date": "2026-01-30 21:29:50",
+      "timestamp": 1769830190.383584
+    },
+    "evade_master": {
+      "unlocked": true,
+      "date": "2026-01-30 21:29:51",
+      "timestamp": 1769830191.0491302
+    },
+    "active_title": "Nimble",
+    "restless_gambler": {
+      "unlocked": true,
+      "date": "2026-01-30 21:32:35",
+      "timestamp": 1769830355.618639
+    },
+    "active_domain": "idle_death_gamble"
+  },
+  "654071438030143488": {
+    "titles": [],
+    "domains": []
+  },
+  "1389975939252883489": {
+    "titles": [
+      "⚖️ Professional Lawyer",
+      "☽ Cursed Avenger"
+    ],
+    "domains": [
+      "deadly_sentencing",
+      "time_cell_moon_palace"
+    ],
+    "incriminating_evidence": {
+      "unlocked": true,
+      "date": "2026-01-30 21:58:42",
+      "timestamp": 1769831922.19414
+    },
+    "active_title": "⚖️ Professional Lawyer",
+    "active_domain": "time_cell_moon_palace",
+    "revengeful_curse": {
+      "unlocked": true,
+      "date": "2026-01-30 22:15:04",
+      "timestamp": 1769832904.057516
+    }
+  }
+}

@@ -1,0 +1,24 @@
+version: '3.8'
+
+services:
+  bot:
+    build: .
+    environment:
+      - DISCORD_TOKEN=${DISCORD_TOKEN}
+      - BOT_PREFIX=${BOT_PREFIX:=*}
+      - QTE_CHANNEL_ID=${QTE_CHANNEL_ID}
+      - QTE_PLAYER_ROLE_ID=${QTE_PLAYER_ROLE_ID}
+      - GM_ROLE_ID=${GM_ROLE_ID}
+      - AI_ENABLED=${AI_ENABLED:=false}
+      - AI_ENDPOINT=${AI_ENDPOINT:=http://localhost:7001/api/generate}
+      - PLAYER_MAX_HP=${PLAYER_MAX_HP:=100}
+      - PLAYER_REGEN_PER_CHECKPOINT=${PLAYER_REGEN_PER_CHECKPOINT:=30}
+      - ULT_CHARGE_PER_DAMAGE_DEALT=${ULT_CHARGE_PER_DAMAGE_DEALT:=2.0}
+      - ULT_CHARGE_PER_DAMAGE_TAKEN=${ULT_CHARGE_PER_DAMAGE_TAKEN:=5.0}
+      - ULT_BASE_COOLDOWN_SECONDS=${ULT_BASE_COOLDOWN_SECONDS:=600}
+      - LOG_LEVEL=${LOG_LEVEL:=INFO}
+    volumes:
+      - ./data:/app/data
+      - ./assets:/app/assets
+      - ./logs:/app/logs
+    restart: unless-stopped

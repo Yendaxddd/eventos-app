@@ -1,0 +1,507 @@
+{
+  "_version": "2.0",
+  "_description": "Achievement definitions - unlocked through gameplay",
+  
+  "categories": {
+    "combat": {
+      "name": "Combat",
+      "icon": "⚔️",
+      "color": "#FF4444"
+    },
+    "defense": {
+      "name": "Defense",
+      "icon": "🛡️",
+      "color": "#4444FF"
+    },
+    "mastery": {
+      "name": "Mastery",
+      "icon": "👑",
+      "color": "#FFD700"
+    },
+    "special": {
+      "name": "Special",
+      "icon": "✨",
+      "color": "#9944FF"
+    },
+    "domain": {
+      "name": "Domain Expansion",
+      "icon": "♾️",
+      "color": "#000000"
+    }
+  },
+  
+  "achievements": {
+    "infinity": {
+      "name": "Infinity",
+      "description": "Dodge 5 attacks in a row without getting hit",
+      "category": "domain",
+      "icon": "♾️",
+      "trigger": "evade_streak:5",
+      "reward": {
+        "skill_points": 5,
+        "title": "∞ Infinity",
+        "domain": "infinite_void"
+      },
+      "hidden": false,
+      "announce": true,
+      "announcement_message": "🌌 **{player}** has achieved **INFINITY**! They have unlocked **DOMAIN EXPANSION: INFINITE VOID**!"
+    },
+    "restless_gambler": {
+      "name": "Restless Gambler",
+      "description": "Hit 3 Critical counters in a single bossfight",
+      "category": "domain",
+      "icon": "🎰",
+      "trigger": "critical_counter_fight:3",
+      "reward": {
+        "skill_points": 5,
+        "title": "🎲 High Roller",
+        "domain": "idle_death_gamble"
+      },
+      "hidden": false,
+      "announce": true,
+      "announcement_message": "🎰 **{player}** has become a **RESTLESS GAMBLER**! They have unlocked **DOMAIN EXPANSION: IDLE DEATH GAMBLE**!"
+    },
+    "revengeful_curse": {
+      "name": "Revengeful Curse",
+      "description": "Make a parry at less than 15 HP",
+      "category": "domain",
+      "icon": "🌙",
+      "trigger": "low_hp_parry:15",
+      "reward": {
+        "skill_points": 5,
+        "title": "☽ Cursed Avenger",
+        "domain": "time_cell_moon_palace"
+      },
+      "hidden": false,
+      "announce": true,
+      "announcement_message": "🌙 **{player}** has embraced the **REVENGEFUL CURSE**! They have unlocked **DOMAIN EXPANSION: TIME CELL MOON PALACE**!"
+    },
+    "shrine": {
+      "name": "Shrine",
+      "description": "Survive a bossfight without receiving ANY damage at all",
+      "category": "domain",
+      "icon": "⛩️",
+      "trigger": "flawless_boss_victory:1",
+      "reward": {
+        "skill_points": 10,
+        "title": "⛩️ The Untouched",
+        "domain": "malevolent_shrine"
+      },
+      "hidden": true,
+      "announce": true,
+      "announcement_message": "⛩️ **{player}** has achieved **SHRINE**! They have unlocked **DOMAIN EXPANSION: MALEVOLENT SHRINE**!"
+    },
+    "cursed_partners": {
+      "name": "Cursed Partners",
+      "description": "Save someone under 5HP OR save someone from 4 impossible QTEs in a streak",
+      "category": "domain",
+      "icon": "💕",
+      "trigger": "save_critical_hp:5|impossible_save_streak:4",
+      "reward": {
+        "skill_points": 10,
+        "title": "💕 True Love",
+        "domain": "authentic_mutual_love"
+      },
+      "hidden": true,
+      "announce": true,
+      "announcement_message": "💕 **{player}** has found **TRUE LOVE**! They have unlocked **DOMAIN EXPANSION: AUTHENTIC MUTUAL LOVE**!"
+    },
+    "incriminating_evidence": {
+      "name": "Incriminating Evidence",
+      "description": "In a single bossfight: Deal the last hit, save 5 people, AND deal minimum 300 damage",
+      "category": "domain",
+      "icon": "⚖️",
+      "trigger": "last_hit_save5_damage300:1",
+      "reward": {
+        "skill_points": 15,
+        "title": "⚖️ Professional Lawyer",
+        "domain": "deadly_sentencing"
+      },
+      "hidden": true,
+      "announce": true,
+      "announcement_message": "⚖️ **{player}** has obtained **INCRIMINATING EVIDENCE**! They have unlocked **DOMAIN EXPANSION: DEADLY SENTENCING**!"
+    },
+    "soul_manipulator": {
+      "name": "Soul Manipulator",
+      "description": "Kill 2 bosses in streak with 2+ black flashes each, then land a 3rd black flash under 50HP",
+      "category": "domain",
+      "icon": "👁️",
+      "trigger": "bf_boss_streak_low_hp:1",
+      "reward": {
+        "skill_points": 20,
+        "title": "👁️ I TRULY AM A CURSE!",
+        "domain": "self_embodiment_perfection"
+      },
+      "hidden": true,
+      "announce": true,
+      "announcement_message": "👁️ **{player}** declares **\"I TRULY AM A CURSE!\"** They have unlocked **DOMAIN EXPANSION: SELF-EMBODIMENT OF PERFECTION**!"
+    },
+    "first_evade": {
+      "name": "Quick Feet",
+      "description": "Successfully evade your first QTE",
+      "category": "combat",
+      "icon": "🏃",
+      "trigger": "evade_count:1",
+      "reward": {
+        "skill_points": 1,
+        "title": "Nimble"
+      },
+      "hidden": false
+    },
+    "evade_master": {
+      "name": "Untouchable",
+      "description": "Evade 100 QTEs",
+      "category": "combat",
+      "icon": "💨",
+      "trigger": "evade_count:100",
+      "reward": {
+        "skill_points": 3,
+        "title": "The Untouchable"
+      },
+      "hidden": false
+    },
+    "first_parry": {
+      "name": "Perfect Defense",
+      "description": "Successfully parry your first QTE",
+      "category": "defense",
+      "icon": "⚔️",
+      "trigger": "parry_count:1",
+      "reward": {
+        "skill_points": 1
+      },
+      "hidden": false
+    },
+    "first_black_flash": {
+      "name": "Black Spark",
+      "description": "Land your first Black Flash",
+      "category": "mastery",
+      "icon": "⚡",
+      "trigger": "black_flash_count:1",
+      "reward": {
+        "skill_points": 2,
+        "title": "Flash User"
+      },
+      "hidden": false
+    },
+    "black_flash_chain_4": {
+      "name": "Chain Lightning",
+      "description": "Land a 4-chain Black Flash combo",
+      "category": "mastery",
+      "icon": "⚡⚡⚡⚡",
+      "trigger": "bf_chain_max:4",
+      "reward": {
+        "skill_points": 5,
+        "title": "Chain Master"
+      },
+      "hidden": true
+    },
+    "counter_master": {
+      "name": "Counter Strike",
+      "description": "Land 50 counter attacks",
+      "category": "combat",
+      "icon": "🔄",
+      "trigger": "counter_count:50",
+      "reward": {
+        "skill_points": 3
+      },
+      "hidden": false
+    },
+    "survivor": {
+      "name": "Survivor",
+      "description": "Win a fight with less than 10 HP",
+      "category": "defense",
+      "icon": "💀",
+      "trigger": "survive_low_hp:10",
+      "reward": {
+        "skill_points": 2,
+        "title": "Survivor"
+      },
+      "hidden": true
+    },
+    "revenge_victory": {
+      "name": "Wrath",
+      "description": "Defeat a boss while in REVENGE mode",
+      "category": "special",
+      "icon": "🔥",
+      "trigger": "boss_kill_revenge:1",
+      "reward": {
+        "skill_points": 3,
+        "title": "Wrathful"
+      },
+      "hidden": true
+    },
+    "boss_slayer_10": {
+      "name": "Boss Slayer",
+      "description": "Participate in defeating 10 bosses",
+      "category": "mastery",
+      "icon": "💀",
+      "trigger": "boss_kills:10",
+      "reward": {
+        "skill_points": 5,
+        "title": "Boss Slayer"
+      },
+      "hidden": false
+    }
+  },
+  
+  "domains": {
+    "infinite_void": {
+      "id": "infinite_void",
+      "name": "Infinite Void",
+      "japanese_name": "無量空処",
+      "romanji": "Muryōkūsho",
+      "activation_text": "RYOIKI TENKAI",
+      "domain_text": "MURYOKUSHO",
+      "description": "Traps enemies in infinite information, stunning them completely.",
+      "cast_time": 5.0,
+      "interruptible": true,
+      "type": "simple",
+      "effects": {
+        "stun_duration": 30,
+        "damage": 300
+      },
+      "assets": {
+        "handsign": "assets/infinite void handsign.gif",
+        "domain": "assets/infinite void domain.gif"
+      },
+      "cooldown": 300
+    },
+    "idle_death_gamble": {
+      "id": "idle_death_gamble",
+      "name": "Idle Death Gamble",
+      "japanese_name": "坐殺博徒",
+      "romanji": "Zakasu Bakuto",
+      "activation_text": "RYOIKI TENKAI",
+      "domain_text": "ZAKASU BAKUTO",
+      "description": "A domain of chance where fate is determined by the roll of slots.",
+      "cast_time": 5.0,
+      "interruptible": true,
+      "type": "pachinko",
+      "mechanics": {
+        "roll_interval": 20,
+        "max_rolls": 5,
+        "slot_range": [1, 7],
+        "jackpot_chances": [0, 0, 0, 50, 70],
+        "jackpot_duration": 147,
+        "jackpot_effects": {
+          "unlimited_ult_charge": true,
+          "ult_cooldown_override": 10,
+          "infinite_heal": true,
+          "next_domain_jackpot_bonus": 20
+        }
+      },
+      "assets": {
+        "handsign": "assets/Idle death gamble handsign.gif",
+        "domain": "assets/idle death gamble domain.gif",
+        "jackpot": "assets/Idle death gamble jackpot.gif"
+      },
+      "cooldown": 300
+    },
+    "time_cell_moon_palace": {
+      "id": "time_cell_moon_palace",
+      "name": "Time Cell Moon Palace",
+      "japanese_name": "時胞月宮殿",
+      "romanji": "Jibō Tsuki Kyūden",
+      "activation_text": "RYOIKI TENKAI",
+      "domain_text": "JIBO TSUKI KYUDEN",
+      "description": "A domain of reflection where ALL attacks return to the boss.",
+      "cast_time": 5.0,
+      "interruptible": true,
+      "type": "reflect",
+      "mechanics": {
+        "duration": 60,
+        "reflect_all_damage": true,
+        "damage_multiplier_to_boss": 2.0,
+        "grants_ult_charge": true
+      },
+      "assets": {
+        "handsign": "assets/Time cell moon palace handsign.gif",
+        "domain": "assets/Time cell moon palace domain.gif"
+      },
+      "cooldown": 300
+    },
+    "malevolent_shrine": {
+      "id": "malevolent_shrine",
+      "name": "Malevolent Shrine",
+      "japanese_name": "伏魔御廚子",
+      "romanji": "Fukuma Mizushi",
+      "activation_text": "RYOIKI TENKAI",
+      "domain_text": "FUKUMA MIZUSHI",
+      "description": "A domain of relentless destruction with a devastating finisher.",
+      "cast_time": 5.0,
+      "interruptible": true,
+      "type": "dps",
+      "mechanics": {
+        "duration": 60,
+        "damage_per_second": 10,
+        "finisher_threshold_damage": 450,
+        "finisher_threshold_time": 45,
+        "time_reduction_per_hit": 5,
+        "finisher": {
+          "name": "Open, Furnace",
+          "cast_time": 3.0,
+          "interruptible": true,
+          "damage": 900
+        }
+      },
+      "assets": {
+        "handsign": "assets/Malevolent shrine handsign.gif",
+        "domain": "assets/Malevolent shrine domain.gif",
+        "furnace": "assets/Open, Furnace.gif"
+      },
+      "cooldown": 300
+    },
+    "authentic_mutual_love": {
+      "id": "authentic_mutual_love",
+      "name": "Authentic Mutual Love",
+      "japanese_name": "真愛領域",
+      "romanji": "Shin'ai Ryōiki",
+      "activation_text": "RYOIKI TENKAI",
+      "domain_text": "SHIN'AI RYOIKI",
+      "description": "A domain of true partnership with 3 special attacks, overspec counters, and Jacob's Ladder finisher.",
+      "cast_time": 5.0,
+      "interruptible": true,
+      "type": "cursed_partners",
+      "mechanics": {
+        "duration": 60,
+        "special_attacks": {
+          "spec1": {
+            "name": "Dismantle",
+            "damage": 50,
+            "cooldown": 8,
+            "description": "A slicing attack that dismantles the target"
+          },
+          "spec2": {
+            "name": "Binding Vow",
+            "stun_duration": 10,
+            "cooldown": 15,
+            "description": "Stuns the boss for 10 seconds"
+          },
+          "spec3": {
+            "name": "Crimson Binding",
+            "effect": "bleed_double_counter",
+            "duration": 30,
+            "cooldown": 20,
+            "description": "Inflicts bleed - all counters do double damage for 30s"
+          }
+        },
+        "overspec_requirement": 3,
+        "normal_spec_requirement": 3,
+        "jacobs_ladder": {
+          "name": "Jacob's Ladder",
+          "cast_time": 5.0,
+          "interruptible": true,
+          "damage_percent": 80,
+          "description": "A devastating beam dealing 80% of target's total HP"
+        }
+      },
+      "assets": {
+        "handsign": "assets/authentic mutual love handsign.gif",
+        "domain": "assets/authentic mutual love domain.gif",
+        "dismantle": "assets/dismantle.gif",
+        "jacobs_ladder": "assets/jacobs ladder.gif"
+      },
+      "cooldown": 300
+    },
+    "deadly_sentencing": {
+      "id": "deadly_sentencing",
+      "name": "Deadly Sentencing",
+      "japanese_name": "死刑宣告",
+      "romanji": "Shikei Senkoku",
+      "activation_text": "RYOIKI TENKAI",
+      "domain_text": "SHIKEI SENKOKU",
+      "description": "A courtroom domain where AI judges the battle. Win to gain the Executioner Sword.",
+      "cast_time": 5.0,
+      "interruptible": true,
+      "type": "court_trial",
+      "mechanics": {
+        "max_rounds": 3,
+        "points_per_round": 10,
+        "max_points": 30,
+        "questions": [
+          "¿Por qué no deberías ser encarcelado?"
+        ],
+        "outcomes": {
+          "10-19": "domain_break",
+          "20-29": "remove_qte_type",
+          "30": "executioner_sword"
+        },
+        "executioner_sword": {
+          "damage_multiplier": 4,
+          "executioner_lunge": {
+            "name": "Executioner Lunge",
+            "cast_time": 10,
+            "interruptible": true,
+            "damage_percent": 50
+          },
+          "final_judgement": {
+            "name": "Final Judgement",
+            "qte_race_target": 10,
+            "time_limit": 20,
+            "win_effect": "instant_kill",
+            "lose_effect": "heal_20_percent"
+          }
+        }
+      },
+      "assets": {
+        "handsign": "assets/deadly sentencing handsign.gif",
+        "domain": "assets/deadly sentencing domain.gif",
+        "executioner_sword": "assets/executioner sword.gif"
+      },
+      "cooldown": 300
+    },
+    "self_embodiment_perfection": {
+      "id": "self_embodiment_perfection",
+      "name": "Self-Embodiment of Perfection",
+      "japanese_name": "自己完璧体現",
+      "romanji": "Jiko Kanpeki Taigen",
+      "activation_text": "RYOIKI TENKAI",
+      "domain_text": "JIKO KANPEKI TAIGEN",
+      "description": "A domain where all evades become instant perfect counters. Stacks Transfiguration for exponential damage.",
+      "cast_time": 5.0,
+      "interruptible": true,
+      "type": "soul_manipulator",
+      "mechanics": {
+        "duration": 45,
+        "instant_counter_on_evade": true,
+        "transfiguration": {
+          "base_multiplier": 1.03,
+          "max_multiplier": 6.0,
+          "stacks_on": "attack_landed"
+        }
+      },
+      "assets": {
+        "handsign": "assets/self embodiment handsign.gif",
+        "domain": "assets/self embodiment domain.gif"
+      },
+      "cooldown": 300
+    }
+  },
+  
+  "weapons": {
+    "split_soul_katana": {
+      "id": "split_soul_katana",
+      "name": "Split Soul Katana",
+      "description": "A cursed blade that splits the soul. Grants 1.5x damage multiplier when equipped.",
+      "icon": "⚔️",
+      "rarity": "legendary",
+      "effects": {
+        "damage_multiplier": 1.5
+      },
+      "equip_slot": "weapon"
+    },
+    "executioner_sword": {
+      "id": "executioner_sword",
+      "name": "Executioner Sword",
+      "description": "Obtained from winning Deadly Sentencing. Grants 4x damage and special attacks.",
+      "icon": "🗡️",
+      "rarity": "mythic",
+      "temporary": true,
+      "effects": {
+        "damage_multiplier": 4,
+        "replaces_ults": true
+      },
+      "equip_slot": "weapon"
+    }
+  }
+}

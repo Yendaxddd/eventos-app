@@ -1,0 +1,130 @@
+{
+  "$schema": "skill_tree_schema",
+  "id": "example_tree",
+  "name": "Example Skill Tree",
+  "description": "A template skill tree showing the branching structure",
+  "version": "1.0",
+  "author": "GM",
+  
+  "requirements": {
+    "min_level": 1,
+    "prerequisite_trees": []
+  },
+  
+  "branches": {
+    "combat": {
+      "name": "Combat Mastery",
+      "description": "Offensive combat abilities",
+      "icon": "⚔️",
+      "color": "#FF4444",
+      "skills": [
+        {
+          "id": "combat_1",
+          "name": "Quick Reflexes",
+          "description": "+0.1s evade window",
+          "tier": 1,
+          "cost": 1,
+          "max_rank": 3,
+          "effect": "evade_window_bonus:0.1",
+          "prerequisites": []
+        },
+        {
+          "id": "combat_2a",
+          "name": "Power Strike",
+          "description": "+10% counter damage",
+          "tier": 2,
+          "cost": 2,
+          "max_rank": 5,
+          "effect": "counter_damage_bonus:0.10",
+          "prerequisites": ["combat_1"]
+        },
+        {
+          "id": "combat_2b",
+          "name": "Perfect Timing",
+          "description": "+5% Black Flash chance",
+          "tier": 2,
+          "cost": 2,
+          "max_rank": 3,
+          "effect": "bf_chance_bonus:0.05",
+          "prerequisites": ["combat_1"]
+        }
+      ]
+    },
+    "defense": {
+      "name": "Defensive Arts",
+      "description": "Survival and protection abilities",
+      "icon": "🛡️",
+      "color": "#4444FF",
+      "skills": [
+        {
+          "id": "defense_1",
+          "name": "Iron Will",
+          "description": "-5% damage taken",
+          "tier": 1,
+          "cost": 1,
+          "max_rank": 5,
+          "effect": "damage_reduction:0.05",
+          "prerequisites": []
+        },
+        {
+          "id": "defense_2a",
+          "name": "Second Wind",
+          "description": "Survive fatal blow once per fight at 1 HP",
+          "tier": 2,
+          "cost": 3,
+          "max_rank": 1,
+          "effect": "death_prevention:1",
+          "prerequisites": ["defense_1"]
+        },
+        {
+          "id": "defense_2b",
+          "name": "Parry Master",
+          "description": "+0.2s parry window",
+          "tier": 2,
+          "cost": 2,
+          "max_rank": 3,
+          "effect": "parry_window_bonus:0.2",
+          "prerequisites": ["defense_1"]
+        }
+      ]
+    },
+    "utility": {
+      "name": "Utility & Support",
+      "description": "Charge, healing, and team abilities",
+      "icon": "✨",
+      "color": "#44FF44",
+      "skills": [
+        {
+          "id": "utility_1",
+          "name": "Power Surge",
+          "description": "+1% ultimate charge per action",
+          "tier": 1,
+          "cost": 1,
+          "max_rank": 5,
+          "effect": "charge_bonus:0.01",
+          "prerequisites": []
+        },
+        {
+          "id": "utility_2a",
+          "name": "Rapid Recovery",
+          "description": "+5 HP regen at checkpoints",
+          "tier": 2,
+          "cost": 2,
+          "max_rank": 3,
+          "effect": "regen_bonus:5",
+          "prerequisites": ["utility_1"]
+        },
+        {
+          "id": "utility_2b",
+          "name": "Cooldown Reduction",
+          "description": "-10% power cooldowns",
+          "tier": 2,
+          "cost": 2,
+          "max_rank": 3,
+          "effect": "cooldown_reduction:0.10",
+          "prerequisites": ["utility_1"]
+        }
+      ]
+    }
+  }
+}

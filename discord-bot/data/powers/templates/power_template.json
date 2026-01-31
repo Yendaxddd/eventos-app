@@ -1,0 +1,35 @@
+{
+  "$schema": "power_schema_v1",
+  "_instructions": "Copy this template and fill in the fields. Submit via /submitpower command.",
+  
+  "character_name": "YOUR_CHARACTER_NAME",
+  "slot": 1,
+  
+  "power": {
+    "name": "Power Name",
+    "description": "Detailed description of what the power does in roleplay terms.",
+    "type": "destructive",
+    "_type_options": ["destructive", "support", "defend", "build", "control"],
+    
+    "effect": "damage:100",
+    "_effect_formats": [
+      "damage:X - Deal X damage to boss (max 500)",
+      "heal:X - Heal X HP to self",
+      "heal_ally:X - Heal X HP to target ally",
+      "stun - Stun enemy for 3 seconds",
+      "buff:type:value:duration - Apply buff (e.g., buff:damage:0.2:30 = +20% damage for 30s)",
+      "shield:X - Block next X damage"
+    ],
+    
+    "cooldown": 60,
+    "_cooldown_notes": "In seconds. Recommended: 30-120 for basic, 180-600 for powerful. Only ticks during fights!",
+    
+    "image_url": null,
+    "_image_notes": "Optional GIF/image URL shown when power activates",
+    
+    "trigger_phrase": null,
+    "_trigger_notes": "Optional phrase that triggers power when said in quotes (e.g., 'Domain Expansion')"
+  },
+  
+  "balance_notes": "GM will review and may adjust cooldown/effect values for game balance."
+}

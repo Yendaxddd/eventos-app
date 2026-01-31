@@ -1,0 +1,209 @@
+/* Animation Styles */
+
+/* Skill Unlock Animation */
+@keyframes unlockPulse {
+  0% {
+    transform: scale(1);
+    box-shadow: 0 0 0 0 rgba(255, 215, 0, 0.7);
+  }
+  50% {
+    transform: scale(1.2);
+    box-shadow: 0 0 40px 20px rgba(255, 215, 0, 0);
+  }
+  100% {
+    transform: scale(1);
+    box-shadow: 0 0 25px rgba(255, 215, 0, 0.4);
+  }
+}
+
+.skill-node.just-unlocked {
+  animation: unlockPulse 0.6s ease-out;
+}
+
+/* Particle Effect for Unlock */
+@keyframes particle {
+  0% {
+    transform: translate(0, 0) scale(1);
+    opacity: 1;
+  }
+  100% {
+    transform: translate(var(--tx), var(--ty)) scale(0);
+    opacity: 0;
+  }
+}
+
+.unlock-particle {
+  position: absolute;
+  width: 8px;
+  height: 8px;
+  background: var(--accent-gold);
+  border-radius: 50%;
+  pointer-events: none;
+  animation: particle 0.8s ease-out forwards;
+}
+
+/* Connection Line Animation */
+@keyframes connectionGlow {
+  0%, 100% {
+    filter: drop-shadow(0 0 4px var(--accent-gold));
+  }
+  50% {
+    filter: drop-shadow(0 0 10px var(--accent-gold));
+  }
+}
+
+.connection-unlocked {
+  animation: connectionGlow 2s infinite;
+}
+
+/* Available Node Glow */
+@keyframes availableGlow {
+  0%, 100% {
+    box-shadow: 0 0 20px rgba(139, 92, 246, 0.3);
+  }
+  50% {
+    box-shadow: 0 0 35px rgba(139, 92, 246, 0.5);
+  }
+}
+
+.skill-node.available {
+  animation: availableGlow 2s infinite;
+}
+
+/* Tier 4 Special Effect */
+@keyframes legendaryPulse {
+  0%, 100% {
+    box-shadow: 
+      0 0 30px rgba(168, 85, 247, 0.6),
+      inset 0 0 20px rgba(168, 85, 247, 0.2);
+  }
+  50% {
+    box-shadow: 
+      0 0 50px rgba(168, 85, 247, 0.8),
+      inset 0 0 30px rgba(168, 85, 247, 0.3);
+  }
+}
+
+.skill-node.unlocked[data-tier="4"] {
+  animation: legendaryPulse 3s infinite;
+}
+
+/* Panel Slide Animations */
+@keyframes slideInRight {
+  from {
+    transform: translateX(100%);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+
+@keyframes slideOutRight {
+  from {
+    transform: translateX(0);
+    opacity: 1;
+  }
+  to {
+    transform: translateX(100%);
+    opacity: 0;
+  }
+}
+
+#skill-details {
+  animation: slideInRight 0.3s ease forwards;
+}
+
+#skill-details.closing {
+  animation: slideOutRight 0.3s ease forwards;
+}
+
+/* Loading Shimmer */
+@keyframes shimmer {
+  0% {
+    background-position: -200% 0;
+  }
+  100% {
+    background-position: 200% 0;
+  }
+}
+
+.loading-shimmer {
+  background: linear-gradient(
+    90deg,
+    var(--bg-tertiary) 0%,
+    var(--bg-secondary) 50%,
+    var(--bg-tertiary) 100%
+  );
+  background-size: 200% 100%;
+  animation: shimmer 1.5s infinite;
+}
+
+/* Floating Icons Background */
+@keyframes float {
+  0%, 100% {
+    transform: translateY(0) rotate(0deg);
+  }
+  50% {
+    transform: translateY(-20px) rotate(5deg);
+  }
+}
+
+.bg-icon {
+  position: absolute;
+  font-size: 40px;
+  opacity: 0.05;
+  animation: float 6s ease-in-out infinite;
+  pointer-events: none;
+}
+
+/* Button Press Effect */
+@keyframes buttonPress {
+  0% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(0.95);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+.unlock-btn:active:not(:disabled) {
+  animation: buttonPress 0.2s ease;
+}
+
+/* Success Ripple */
+@keyframes ripple {
+  0% {
+    transform: scale(0);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(4);
+    opacity: 0;
+  }
+}
+
+.ripple-effect {
+  position: absolute;
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  background: rgba(255, 215, 0, 0.3);
+  animation: ripple 0.6s ease-out forwards;
+  pointer-events: none;
+}
+
+/* Mobile Touch Feedback */
+@media (hover: none) {
+  .skill-node:active {
+    transform: scale(0.95);
+  }
+  
+  .nav-btn:active {
+    transform: scale(0.95);
+  }
+}
