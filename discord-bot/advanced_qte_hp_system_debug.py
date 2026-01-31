@@ -208,14 +208,22 @@ class AdvancedQTEBot:
         # Validate configuration
         if not self.bot_token:
             raise RuntimeError("DISCORD_TOKEN not found in environment variables! Create a .env file.")
+        
+        # Load saved channel config (can override env vars)
+        self._load_channel_config()
+        
+        # Channel ID can be set via /setchannel if not in env
         if not self.qte_channel_id:
-            raise RuntimeError("QTE_CHANNEL_ID not found in environment variables!")
+            console.print("[yellow]⚠️ QTE_CHANNEL_ID not set - use /setchannel to configure[/yellow]")
+        else:
+            console.print(f"[cyan]  Channel ID: {self.qte_channel_id}[/cyan]")
+        
         if not self.qte_player_role_id:
-            raise RuntimeError("QTE_PLAYER_ROLE_ID not found in environment variables!")
+            console.print("[yellow]⚠️ QTE_PLAYER_ROLE_ID not set - some features may be limited[/yellow]")
+        else:
+            console.print(f"[magenta]  Role ID: {self.qte_player_role_id}[/magenta]")
 
         console.print("[green]✓ Configuration loaded[/green]")
-        console.print(f"[cyan]  Channel ID: {self.qte_channel_id}[/cyan]")
-        console.print(f"[magenta]  Role ID: {self.qte_player_role_id}[/magenta]")
         if self.admin_role_id:
             console.print(f"[yellow]  Admin Role ID: {self.admin_role_id}[/yellow]")
 
@@ -675,6 +683,32 @@ class AdvancedQTEBot:
         self._last_save_time = current_time
         self._pending_save = False
         console.print("[green]💾 Data saved to disk[/green]")
+    
+    def _load_channel_config(self):
+        """Load saved channel configuration (QTE channel + HP thread)"""
+        try:
+            config = load_data("channel_config", None)
+            if config:
+                # Override env vars with saved config if present
+                if "qte_channel_id" in config and config["qte_channel_id"]:
+                    self.qte_channel_id = config["qte_channel_id"]
+                if "hp_bar_thread_id" in config and config["hp_bar_thread_id"]:
+                    self.hp_bar_thread_id = config["hp_bar_thread_id"]
+                if "qte_player_role_id" in config and config["qte_player_role_id"]:
+                    self.qte_player_role_id = config["qte_player_role_id"]
+                console.print("[cyan]✓ Loaded saved channel configuration[/cyan]")
+        except Exception as e:
+            console.print(f"[yellow]⚠ Could not load channel config: {e}[/yellow]")
+    
+    def _save_channel_config(self):
+        """Save channel configuration to file"""
+        config = {
+            "qte_channel_id": self.qte_channel_id,
+            "hp_bar_thread_id": self.hp_bar_thread_id,
+            "qte_player_role_id": self.qte_player_role_id
+        }
+        save_data("channel_config", config)
+        console.print("[green]💾 Channel configuration saved[/green]")
     
     def _load_live_config(self):
         """Load saved live configuration from file (set by /config save)"""
@@ -5786,6 +5820,129 @@ Your response (1-2 sentences max):"""
             except Exception as e:
                 log.error(f"Error in bossdefeatgif command: {e}")
                 await interaction.response.send_message("❌ An error occurred.", ephemeral=True)
+
+        # ========== CHANNEL SETUP COMMAND ==========
+        
+        @self.bot.tree.command(
+            name="setchannel",
+            description="[ADMIN] Set up QTE channel and auto-create HP bar thread"
+        )
+        @app_commands.describe(
+            channel="The channel where QTE battles will happen",
+            role="The role for QTE players (optional - keeps current if not set)"
+        )
+        async def setchannel_command(
+            interaction: discord.Interaction, 
+            channel: discord.TextChannel,
+            role: discord.Role = None
+        ):
+            # Check admin permissions
+            if not self.is_admin(interaction.user):
+                await interaction.response.send_message("❌ Admin only!", ephemeral=True)
+                return
+            
+            await interaction.response.defer(ephemeral=True)
+            
+            try:
+                # Set QTE channel
+                old_channel_id = self.qte_channel_id
+                self.qte_channel_id = channel.id
+                
+                # Set player role if provided
+                if role:
+                    self.qte_player_role_id = role.id
+                
+                # Check if HP thread already exists in this channel
+                existing_thread = None
+                for thread in channel.threads:
+                    if thread.name == "📊 HP Bars":
+                        existing_thread = thread
+                        break
+                
+                # Also check archived threads
+                if not existing_thread:
+                    async for thread in channel.archived_threads(limit=50):
+                        if thread.name == "📊 HP Bars":
+                            existing_thread = thread
+                            # Unarchive it
+                            await thread.edit(archived=False)
+                            break
+                
+                if existing_thread:
+                    # Use existing thread
+                    self.hp_bar_thread_id = existing_thread.id
+                    hp_thread = existing_thread
+                    thread_status = "Found existing"
+                else:
+                    # Create new HP bar thread
+                    hp_thread = await channel.create_thread(
+                        name="📊 HP Bars",
+                        type=discord.ChannelType.public_thread,
+                        reason="Auto-created HP bar display thread"
+                    )
+                    self.hp_bar_thread_id = hp_thread.id
+                    thread_status = "Created new"
+                    
+                    # Send initial message to the thread
+                    initial_embed = discord.Embed(
+                        title="📊 HP Bar Display Thread",
+                        description="This thread displays live HP bars for all players and bosses.\n\n"
+                                   "**This thread is managed by the bot.**\n"
+                                   "HP bars will automatically update during battles.",
+                        color=discord.Color.blue()
+                    )
+                    initial_embed.set_footer(text="HP bars appear here when players register and battles begin")
+                    await hp_thread.send(embed=initial_embed)
+                
+                # Save configuration to file
+                self._save_channel_config()
+                
+                # Build response embed
+                embed = discord.Embed(
+                    title="✅ Channel Configuration Saved",
+                    description="QTE system is now linked to this channel!",
+                    color=discord.Color.green()
+                )
+                embed.add_field(
+                    name="🎮 QTE Channel",
+                    value=f"{channel.mention}\nID: `{channel.id}`",
+                    inline=True
+                )
+                embed.add_field(
+                    name="📊 HP Bar Thread",
+                    value=f"{hp_thread.mention}\n{thread_status}",
+                    inline=True
+                )
+                if role:
+                    embed.add_field(
+                        name="👥 Player Role",
+                        value=f"{role.mention}\nID: `{role.id}`",
+                        inline=True
+                    )
+                else:
+                    embed.add_field(
+                        name="👥 Player Role",
+                        value=f"ID: `{self.qte_player_role_id}`\n(unchanged)",
+                        inline=True
+                    )
+                
+                if old_channel_id and old_channel_id != channel.id:
+                    embed.set_footer(text=f"Previous channel: {old_channel_id}")
+                
+                await interaction.followup.send(embed=embed, ephemeral=True)
+                console.print(f"[green]✓ Channel set to #{channel.name} by {interaction.user.name}[/green]")
+                console.print(f"[cyan]  HP Thread: {hp_thread.name} ({hp_thread.id})[/cyan]")
+                
+            except discord.Forbidden:
+                await interaction.followup.send(
+                    "❌ Missing permissions! I need:\n"
+                    "• `Manage Threads` to create the HP bar thread\n"
+                    "• `Send Messages` in the channel",
+                    ephemeral=True
+                )
+            except Exception as e:
+                log.error(f"Error in setchannel: {e}")
+                await interaction.followup.send(f"❌ Error: {e}", ephemeral=True)
 
         @self.bot.tree.command(
             name="synccommands",
