@@ -1,190 +1,176 @@
-# 🎮 EVENTOS APP - Real-time RPG Campaign System
+# 🎮 QTE Discord Bot - Advanced Roleplay Combat System
 
-**Fast-track MVP for December deadline!**
-
-A standalone web application for real-time roleplay campaigns with QTE (Quick Time Events) mechanics, migrated from Discord bot to avoid API rate limits.
+A feature-rich Discord bot for real-time QTE (Quick Time Events) combat with roleplay integration, domain expansions, and AI-powered interactions.
 
 ## ✨ Features
 
-### Core Mechanics
-- **Real-time QTE System**: Evade, Parry, Save actions with precise timing
-- **HP & Damage System**: Variable damage based on difficulty
+### Core Combat Mechanics
+- **Real-time QTE System**: Evade, Parry, Counter actions with precise timing
+- **HP & Damage System**: Variable damage based on difficulty levels
 - **REVENGE Mode**: Activates at 20% HP with enhanced abilities
-- **Black Flash**: Perfect timing special mechanic
-- **Power System**: Charge-based ultimate abilities
-- **WebSocket Real-time**: Instant communication, no Discord rate limits!
+- **Black Flash**: Perfect timing special mechanic with chain combos
+- **Power System**: Charge-based ultimate abilities with cooldowns
 
-### Current Status (MVP)
-- ✅ Backend API with FastAPI
-- ✅ WebSocket real-time communication
-- ✅ Core game engine migrated from Discord bot
-- ✅ Web frontend with live QTE display
-- ✅ HP bars and power gauges
-- ✅ Combat log system
-- 🔨 Discord bridge mode (coming soon)
-- 🔨 Mobile app (next phase)
+### Advanced Features
+- **Domain Expansions**: Special abilities with unique GIFs and effects
+- **Domain Clash**: 1v1 typing competition when domains collide
+- **Status Effects**: Bleed, Burn, Poison, and more
+- **Boss Battles**: Cooperative boss fights with Tupperbox integration
+- **Skill Trees & Achievements**: Progress tracking and rewards
+- **AI Integration**: Optional Ollama-powered responses
+
+### QTE Variations
+- **Standard QTE**: Classic evade/parry timing
+- **Combo QTE**: Multi-button sequences
+- **Direction QTE**: Arrow input challenges
+- **Fake QTE**: Trap QTEs that punish action
 
 ## 🚀 Quick Start
 
-### Method 1: Automatic (Linux/Mac)
+### Prerequisites
+- Python 3.11+
+- Discord Bot Token
+- Discord Server with required channel and roles
+
+### Installation
+
+1. **Clone and setup**:
 ```bash
-chmod +x start.sh
-./start.sh
+cd eventos-app/discord-bot
+pip install -r requirements.txt
 ```
 
-### Method 2: Manual
-```bash
-# 1. Install dependencies
-cd backend
-pip install fastapi uvicorn python-socketio
+2. **Configure environment** (copy `.env.example` to `.env`):
+```env
+DISCORD_TOKEN=your_bot_token_here
+QTE_CHANNEL_ID=your_channel_id
+QTE_PLAYER_ROLE_ID=your_role_id
+ADMIN_ROLE_ID=optional_admin_role_id
+HP_BAR_THREAD_ID=optional_thread_id
 
-# 2. Start backend server
-python -m uvicorn api.main:app --host 0.0.0.0 --port 8000
-
-# 3. Open frontend/index.html in your browser
+# Optional: External AI endpoint (for Railway/cloud deployment)
+OLLAMA_ENDPOINT=http://localhost:11434/api/generate
+OLLAMA_MODEL=elbot
 ```
 
-## 🎯 How to Play
+3. **Run the bot**:
+```bash
+python advanced_qte_hp_system_debug.py
+```
 
-1. **Join Campaign**: Enter username and click "Join Campaign"
-2. **Wait for QTE**: QTEs will appear with countdown timers
-3. **React Quickly**: 
-   - Press **Q/A** for EVADE
-   - Press **W/S** for PARRY
-   - Press **E/D** for SAVE
-4. **Track HP**: Watch your HP bar - at 20% REVENGE mode activates!
-5. **Build Power**: Deal/take damage to charge ultimate abilities
+## 🐳 Docker Deployment
+
+### Local Docker
+```bash
+docker-compose up -d
+```
+
+### Railway Deployment
+1. Connect your GitHub repository to Railway
+2. Set environment variables in Railway dashboard
+3. Deploy automatically via `railway.json`
+
+**Note**: AI features require an external Ollama instance. Set `OLLAMA_ENDPOINT` to your Ollama server URL.
 
 ## 📁 Project Structure
 
 ```
 eventos-app/
-├── backend/
-│   ├── api/
-│   │   └── main.py          # FastAPI server & WebSocket
-│   ├── core/
-│   │   └── game_engine.py   # QTE logic from Discord bot
-│   └── requirements.txt
-├── frontend/
-│   └── index.html           # Single-page web app
-├── start.sh                 # Quick start script
-└── README.md
+├── discord-bot/
+│   ├── advanced_qte_hp_system_debug.py  # Main bot code
+│   ├── special_objects_manager.py       # Special items system
+│   ├── gm_commands.py                   # GM command utilities
+│   ├── attack_validator.py              # Attack validation
+│   ├── changelog_manager.py             # Version tracking
+│   ├── requirements.txt                 # Python dependencies
+│   ├── Dockerfile                       # Container config
+│   ├── docker-compose.yml               # Local deployment
+│   ├── assets/                          # Domain GIFs and media
+│   └── data/                            # Runtime data (JSON)
+├── Dockerfile                           # Railway deployment
+├── railway.json                         # Railway config
+├── Modelfile                            # Custom AI model config
+└── GM_COMMANDS_GUIDE.md                 # GM reference
 ```
 
-## 🔧 Configuration
+## 🎯 QTE Timing Windows
 
-### Backend Settings
-- **Server**: `http://localhost:8000`
-- **WebSocket**: `ws://localhost:8000/ws/{user_id}`
-- **CORS**: Enabled for all origins (development)
-
-### QTE Timing Windows
-| Difficulty | Evade | Parry | Damage |
-|------------|-------|-------|--------|
-| Easy       | 6.0s  | 4-7s  | 1-3    |
-| Medium     | 4.5s  | 3-5s  | 1-5    |
-| Hard       | 4.0s  | 2.5-4.5s | 1-10 |
-| Impossible | 1.5s  | 0.8-1.7s | 15   |
+| Difficulty | Evade Window | Parry Window | Damage |
+|------------|--------------|--------------|--------|
+| Easy       | 6.0s         | 4-7s         | 1-3    |
+| Medium     | 4.5s         | 3-5s         | 1-5    |
+| Hard       | 4.0s         | 2.5-4.5s     | 1-10   |
+| Impossible | 1.5s         | 0.8-1.7s     | 15     |
 
 ## 🌟 Special Mechanics
 
-### REVENGE Mode
-- Triggers at 20% HP
+### REVENGE Mode (20% HP)
 - Parry windows shift 0.3s earlier
 - Windows 30% tighter
 - +50% damage multiplier
 - +10% Black Flash chance
 
-### Black Flash
-- Base 2% chance on perfect parry
-- +1% permanent increase per success
-- Capped at 20% maximum
-- Only on Medium+ difficulty
+### Black Flash Chain
+- Level 1: 25 damage, 10s cooldown
+- Level 2: 50 damage, 30s cooldown
+- Level 3: 100 damage, 60s cooldown
+- Level 4: 200 damage, 120s cooldown
 
-## 🛠️ Development
+## ⚙️ Environment Variables
 
-### Tech Stack
-- **Backend**: Python, FastAPI, WebSocket
-- **Frontend**: Vanilla JS, HTML5, CSS3
-- **Game Engine**: Extracted from Discord bot
-- **Real-time**: WebSocket (no polling!)
+| Variable | Required | Description |
+|----------|----------|-------------|
+| `DISCORD_TOKEN` | Yes | Bot token from Discord Developer Portal |
+| `QTE_CHANNEL_ID` | Yes | Channel ID for QTE messages |
+| `QTE_PLAYER_ROLE_ID` | Yes | Role ID for QTE participants |
+| `ADMIN_ROLE_ID` | No | Role ID for admin commands |
+| `HP_BAR_THREAD_ID` | No | Thread ID for HP bar displays |
+| `OLLAMA_ENDPOINT` | No | External AI API endpoint |
+| `OLLAMA_MODEL` | No | AI model name (default: dolphin-phi:2.7b) |
 
-### Running Tests
+## 📜 Slash Commands
+
+The bot provides 52+ slash commands including:
+- `/qte` - Trigger QTE events
+- `/boss` - Boss management
+- `/domain` - Domain expansion controls
+- `/stats` - Player statistics
+- `/register` - Character registration
+- `/power` - Ultimate abilities
+- `/ai` - AI interaction settings
+
+See `/help` in Discord for full command list.
+
+## 🔧 Local Development
+
+### Keyboard Hotkeys (requires `keyboard` library + root on Linux)
+- `F9-F12`: Trigger QTEs (Easy/Medium/Hard/Impossible)
+- `Shift+F9-F12`: Group QTEs
+- `F8`: Healing checkpoint
+- `F7`: Force sync commands
+- `Alt+F9`: Toggle batch mode
+
+### Running with hotkeys (Linux)
 ```bash
-# Start server
-cd backend
-python -m uvicorn api.main:app --reload
-
-# Open frontend and click "Test QTE"
+sudo python advanced_qte_hp_system_debug.py
 ```
 
-### API Endpoints
-- `GET /` - Health check
-- `POST /api/trigger_qte` - Trigger QTE event
-- `POST /api/campaigns/quick_create` - Create test campaign
-- `GET /api/players/{user_id}/stats` - Player statistics
-- `POST /api/players/{user_id}/hp` - Update HP
+## 📝 Changelog
 
-### WebSocket Events
-- `join_campaign` - Join a campaign
-- `qte_response` - Send QTE action
-- `qte_triggered` - Receive QTE event
-- `hp_update` - HP changes
-- `qte_result` - Action results
+See [CHANGELOG.md](discord-bot/CHANGELOG.md) for version history.
 
-## 📱 Future Plans (December)
+## 🤝 Contributing
 
-### Phase 1: Polish MVP ✅
-- Core mechanics working
-- Web interface complete
-- Real-time combat functional
-
-### Phase 2: Discord Bridge (This Week)
-- Keep Discord bot running
-- Bridge mode for transition
-- Sync between app and Discord
-
-### Phase 3: Mobile App (November)
-- React Native or Capacitor
-- Touch controls
-- Push notifications
-
-### Phase 4: Enhanced Features
-- Campaign persistence
-- Character customization
-- Boss battles
-- Multiplayer campaigns
-
-## 🐛 Known Issues
-- CORS may block file:// protocol in some browsers - use a local server or the start script
-- WebSocket reconnection not yet implemented
-- No persistence yet (resets on server restart)
-
-## 📝 Migration from Discord Bot
-
-This app contains the core mechanics from the original Discord bot:
-- `advanced_qte_hp_system_debug.py` → `game_engine.py`
-- Discord commands → REST API
-- Discord WebSocket → Native WebSocket
-- Message reactions → Button clicks
-
-## 🚢 Deployment
-
-For production deployment:
-
-1. **Update CORS** in `backend/api/main.py`
-2. **Use HTTPS** for secure WebSocket
-3. **Add authentication** for user accounts
-4. **Setup database** for persistence
-5. **Deploy backend** to cloud (Heroku/Railway/etc)
-6. **Host frontend** on CDN/static hosting
+1. Fork the repository
+2. Create a feature branch
+3. Make your changes
+4. Test thoroughly
+5. Submit a pull request
 
 ## 📄 License
 
-Built with urgency for December deadline! 🏃‍♂️💨
+Private project - All rights reserved.
 
 ---
 
-**Need help?** The code is self-documenting - dive in and experiment!
-
-**Remember:** This is a rapid MVP - polish comes after it works!
+**Questions?** Check the in-game `/help` command or review the code comments!

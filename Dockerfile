@@ -27,7 +27,7 @@ COPY discord-bot/ ./
 RUN mkdir -p data/achievements data/skill_trees data/special_objects logs
 
 # Verify Python and critical modules
-RUN python3 -c "import sys; print(f'Python: {sys.version}'); import discord; import requests; print('✓ All dependencies OK')"
+RUN python3 -c "import sys; print(f'Python: {sys.version}'); import discord; import aiohttp; print('✓ All dependencies OK')"
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \

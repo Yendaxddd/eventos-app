@@ -1,10 +1,9 @@
 # Advanced QTE Discord Bot - With Black Flash System
-# Install required packages: pip install discord.py requests keyboard rich python-dotenv
+# Install required packages: pip install discord.py keyboard rich python-dotenv aiohttp
 
 import discord
 from discord.ext import commands
 from discord import app_commands
-import requests
 import time
 import threading
 import asyncio
@@ -23,9 +22,6 @@ from rich.layout import Layout
 from rich.live import Live
 from rich.text import Text
 from rich import box
-
-# Import Eventos API Bridge
-from simple_api_bridge import SimpleEventosAPI
 
 # Import Special Objects Manager
 from special_objects_manager import SpecialObjectsManager, get_manager
@@ -223,19 +219,6 @@ class AdvancedQTEBot:
         if self.admin_role_id:
             console.print(f"[yellow]  Admin Role ID: {self.admin_role_id}[/yellow]")
 
-        # Initialize Eventos API Bridge
-        try:
-            self.eventos_api = SimpleEventosAPI("http://localhost:7001")
-            if self.eventos_api.health_check():
-                console.print("[green]✓ Eventos API connected - using corrected damage formula[/green]")
-                self.api_available = True
-            else:
-                console.print("[yellow]⚠ Eventos API unavailable - using fallback calculations[/yellow]")
-                self.api_available = False
-        except Exception as e:
-            console.print(f"[red]✗ Eventos API connection failed: {e}[/red]")
-            self.api_available = False
-
         # Create assets directory for persistent storage
         self.assets_dir = "assets"
         if not os.path.exists(self.assets_dir):
@@ -293,6 +276,14 @@ class AdvancedQTEBot:
         self.max_hp = 100
         self.hp_bar_messages = {}  # Cache: {user_id_or_boss_name: message_id} - prevents slow history searches
         
+        # ========== QTE TIMING SYSTEM ==========
+        self.qte_timings = {
+            'easy': {'evade_window': 6.0, 'parry_start': 4.0, 'parry_end': 7.0, 'timeout': 10.0},
+            'medium': {'evade_window': 4.5, 'parry_start': 3.0, 'parry_end': 5.0, 'timeout': 7.0},
+            'hard': {'evade_window': 4.0, 'parry_start': 2.5, 'parry_end': 4.5, 'timeout': 5.0},
+            'impossible': {'evade_window': 1.5, 'parry_start': 0.8, 'parry_end': 1.7, 'timeout': 3.0}
+        }
+        
         # Variable damage per difficulty
         self.damage_ranges = {
             'easy': (1, 3),        # Random 1-3 damage
@@ -300,6 +291,9 @@ class AdvancedQTEBot:
             'hard': (1, 10),       # Random 1-10 damage
             'impossible': (15, 15) # Fixed 15 damage
         }
+        
+        # Load saved live config if exists
+        self._load_live_config()
         
         # REVENGE mode configuration (triggers at 20% HP)
         self.revenge_threshold = 0.20  # 20% HP
@@ -403,8 +397,9 @@ class AdvancedQTEBot:
         
         # ========== AI/OLLAMA INTEGRATION ==========
         self.ai_enabled = False  # Master toggle
-        self.ai_endpoint = "http://localhost:11434/api/generate"
-        self.ai_model = "dolphin-phi:2.7b"
+        # AI endpoint can be configured via env var (for Railway/external Ollama)
+        self.ai_endpoint = os.getenv("OLLAMA_ENDPOINT", "http://localhost:11434/api/generate")
+        self.ai_model = os.getenv("OLLAMA_MODEL", "dolphin-phi:2.7b")
         self.ai_channel_id = None  # If set, only respond in this channel
         self.ai_message_counter = {}  # {channel_id: count} - tracks messages since last AI response
         self.ai_trigger_count = 10  # Respond after this many messages
@@ -680,6 +675,47 @@ class AdvancedQTEBot:
         self._last_save_time = current_time
         self._pending_save = False
         console.print("[green]💾 Data saved to disk[/green]")
+    
+    def _load_live_config(self):
+        """Load saved live configuration from file (set by /config save)"""
+        try:
+            config = load_data("live_config", None)
+            if config:
+                # QTE Timings
+                if "qte_timings" in config:
+                    self.qte_timings.update(config["qte_timings"])
+                    console.print("[cyan]✓ Loaded saved QTE timings[/cyan]")
+                
+                # Damage Ranges
+                if "damage_ranges" in config:
+                    for diff, dmg in config["damage_ranges"].items():
+                        if isinstance(dmg, list) and len(dmg) == 2:
+                            self.damage_ranges[diff] = tuple(dmg)
+                    console.print("[cyan]✓ Loaded saved damage ranges[/cyan]")
+                
+                # Revenge Mode
+                if "revenge_threshold" in config:
+                    self.revenge_threshold = config["revenge_threshold"]
+                if "revenge_damage_multiplier" in config:
+                    self.revenge_damage_multiplier = config["revenge_damage_multiplier"]
+                if "revenge_bf_bonus" in config:
+                    self.revenge_bf_bonus = config["revenge_bf_bonus"]
+                
+                # Black Flash
+                if "bf_timing_window" in config:
+                    self.bf_timing_window = config["bf_timing_window"]
+                
+                # Ultimate
+                if "ultimate_base_cooldown" in config:
+                    self.ultimate_base_cooldown = config["ultimate_base_cooldown"]
+                if "charge_per_damage_dealt" in config:
+                    self.charge_per_damage_dealt = config["charge_per_damage_dealt"]
+                if "ultimate_max_damage" in config:
+                    self.ultimate_max_damage = config["ultimate_max_damage"]
+                
+                console.print("[green]✓ Live configuration loaded from file[/green]")
+        except Exception as e:
+            console.print(f"[yellow]⚠ Could not load live config: {e}[/yellow]")
     
     def is_admin(self, user) -> bool:
         """Check if a user has admin privileges (has admin role or is server administrator)"""
@@ -2786,6 +2822,283 @@ Your response (1-2 sentences max):"""
         
         # ========== END AI COMMANDS ==========
         
+        # ========== GM CONFIG COMMAND ==========
+        @self.bot.tree.command(
+            name="config",
+            description="[GM/ADMIN] View and modify bot settings live"
+        )
+        @app_commands.describe(
+            action="What to do: view, qte, damage, revenge, blackflash, ultimate, save, reset",
+            param1="First parameter (depends on action)",
+            param2="Second parameter (depends on action)",
+            param3="Third parameter (depends on action)",
+            param4="Fourth parameter (depends on action)"
+        )
+        @app_commands.choices(action=[
+            app_commands.Choice(name="view - Show current settings", value="view"),
+            app_commands.Choice(name="qte - Set timing (diff, evade, parry_start, parry_end)", value="qte"),
+            app_commands.Choice(name="damage - Set damage range (diff, min, max)", value="damage"),
+            app_commands.Choice(name="revenge - Set revenge mode (threshold, multiplier, bf_bonus)", value="revenge"),
+            app_commands.Choice(name="blackflash - Set BF settings (base_chance, max_chance)", value="blackflash"),
+            app_commands.Choice(name="ultimate - Set ultimate (cooldown, charge_rate, max_damage)", value="ultimate"),
+            app_commands.Choice(name="save - Save current config to file", value="save"),
+            app_commands.Choice(name="reset - Reset to default values", value="reset")
+        ])
+        async def config_command(
+            interaction: discord.Interaction,
+            action: str = "view",
+            param1: str = None,
+            param2: str = None,
+            param3: str = None,
+            param4: str = None
+        ):
+            # Check GM/Admin role
+            if not self.is_admin(interaction.user):
+                await interaction.response.send_message("❌ GM/Admin only!", ephemeral=True)
+                return
+            
+            try:
+                if action == "view":
+                    embed = discord.Embed(
+                        title="⚙️ Bot Configuration",
+                        description="Current live settings (use `/config <action>` to modify)",
+                        color=discord.Color.blue()
+                    )
+                    
+                    # QTE Timing
+                    timing_text = ""
+                    for diff, timing in self.qte_timings.items():
+                        timing_text += f"**{diff.title()}**: Evade {timing['evade_window']}s, Parry {timing['parry_start']}-{timing['parry_end']}s\n"
+                    embed.add_field(name="⏱️ QTE Timing", value=timing_text, inline=False)
+                    
+                    # Damage Ranges
+                    damage_text = ""
+                    for diff, (min_d, max_d) in self.damage_ranges.items():
+                        damage_text += f"**{diff.title()}**: {min_d}-{max_d}\n"
+                    embed.add_field(name="💥 Damage Ranges", value=damage_text, inline=True)
+                    
+                    # Revenge Mode
+                    embed.add_field(
+                        name="😈 Revenge Mode",
+                        value=f"Threshold: {int(self.revenge_threshold*100)}% HP\n"
+                              f"Damage Mult: {self.revenge_damage_multiplier}x\n"
+                              f"BF Bonus: +{int(self.revenge_bf_bonus*100)}%",
+                        inline=True
+                    )
+                    
+                    # Black Flash
+                    embed.add_field(
+                        name="⚡ Black Flash",
+                        value=f"Base: {int(self.bf_timing_window*100)}% chance\n"
+                              f"Chain Window: {self.bf_chain_timing_window}s",
+                        inline=True
+                    )
+                    
+                    # Ultimate
+                    embed.add_field(
+                        name="🔥 Ultimate Powers",
+                        value=f"Base Cooldown: {self.ultimate_base_cooldown}s\n"
+                              f"Max Damage: {self.ultimate_max_damage}\n"
+                              f"Charge/Damage: {self.charge_per_damage_dealt}%",
+                        inline=True
+                    )
+                    
+                    embed.set_footer(text="Use /config <action> to modify values")
+                    await interaction.response.send_message(embed=embed, ephemeral=True)
+                
+                elif action == "qte":
+                    if not param1:
+                        await interaction.response.send_message(
+                            "**Usage:** `/config qte <difficulty> <evade> <parry_start> <parry_end>`\n"
+                            "**Example:** `/config qte medium 4.5 3.0 5.0`\n"
+                            "**Difficulties:** easy, medium, hard, impossible",
+                            ephemeral=True
+                        )
+                        return
+                    
+                    diff = param1.lower()
+                    if diff not in self.qte_timings:
+                        await interaction.response.send_message(f"❌ Invalid difficulty: {diff}", ephemeral=True)
+                        return
+                    
+                    try:
+                        evade = float(param2) if param2 else self.qte_timings[diff]['evade_window']
+                        parry_start = float(param3) if param3 else self.qte_timings[diff]['parry_start']
+                        parry_end = float(param4) if param4 else self.qte_timings[diff]['parry_end']
+                        
+                        self.qte_timings[diff]['evade_window'] = evade
+                        self.qte_timings[diff]['parry_start'] = parry_start
+                        self.qte_timings[diff]['parry_end'] = parry_end
+                        
+                        await interaction.response.send_message(
+                            f"✅ **{diff.title()} QTE timing updated:**\n"
+                            f"Evade: {evade}s, Parry: {parry_start}-{parry_end}s",
+                            ephemeral=True
+                        )
+                        console.print(f"[green]⚙️ {interaction.user.name} updated {diff} QTE timing[/green]")
+                    except ValueError:
+                        await interaction.response.send_message("❌ Invalid numbers provided", ephemeral=True)
+                
+                elif action == "damage":
+                    if not param1:
+                        await interaction.response.send_message(
+                            "**Usage:** `/config damage <difficulty> <min> <max>`\n"
+                            "**Example:** `/config damage hard 1 10`",
+                            ephemeral=True
+                        )
+                        return
+                    
+                    diff = param1.lower()
+                    if diff not in self.damage_ranges:
+                        await interaction.response.send_message(f"❌ Invalid difficulty: {diff}", ephemeral=True)
+                        return
+                    
+                    try:
+                        min_d = int(param2) if param2 else self.damage_ranges[diff][0]
+                        max_d = int(param3) if param3 else self.damage_ranges[diff][1]
+                        self.damage_ranges[diff] = (min_d, max_d)
+                        
+                        await interaction.response.send_message(
+                            f"✅ **{diff.title()} damage updated:** {min_d}-{max_d}",
+                            ephemeral=True
+                        )
+                        console.print(f"[green]⚙️ {interaction.user.name} updated {diff} damage range[/green]")
+                    except ValueError:
+                        await interaction.response.send_message("❌ Invalid numbers provided", ephemeral=True)
+                
+                elif action == "revenge":
+                    if not param1:
+                        await interaction.response.send_message(
+                            "**Usage:** `/config revenge <threshold%> <damage_mult> <bf_bonus%>`\n"
+                            "**Example:** `/config revenge 20 1.5 10`\n"
+                            "(20% HP threshold, 1.5x damage, +10% BF chance)",
+                            ephemeral=True
+                        )
+                        return
+                    
+                    try:
+                        if param1:
+                            self.revenge_threshold = float(param1) / 100
+                        if param2:
+                            self.revenge_damage_multiplier = float(param2)
+                        if param3:
+                            self.revenge_bf_bonus = float(param3) / 100
+                        
+                        await interaction.response.send_message(
+                            f"✅ **Revenge mode updated:**\n"
+                            f"Threshold: {int(self.revenge_threshold*100)}% HP\n"
+                            f"Damage Mult: {self.revenge_damage_multiplier}x\n"
+                            f"BF Bonus: +{int(self.revenge_bf_bonus*100)}%",
+                            ephemeral=True
+                        )
+                        console.print(f"[green]⚙️ {interaction.user.name} updated revenge mode settings[/green]")
+                    except ValueError:
+                        await interaction.response.send_message("❌ Invalid numbers provided", ephemeral=True)
+                
+                elif action == "blackflash":
+                    if not param1:
+                        await interaction.response.send_message(
+                            "**Usage:** `/config blackflash <base_chance%> <max_chance%>`\n"
+                            "**Example:** `/config blackflash 2 20`\n"
+                            "(2% base chance, 20% max chance)",
+                            ephemeral=True
+                        )
+                        return
+                    
+                    try:
+                        if param1:
+                            self.bf_timing_window = float(param1) / 100
+                        if param2:
+                            # Store max BF chance
+                            self._bf_max_chance = float(param2) / 100
+                        
+                        await interaction.response.send_message(
+                            f"✅ **Black Flash updated:**\n"
+                            f"Base Chance: {int(self.bf_timing_window*100)}%\n"
+                            f"Max Chance: {int(getattr(self, '_bf_max_chance', 0.20)*100)}%",
+                            ephemeral=True
+                        )
+                        console.print(f"[green]⚙️ {interaction.user.name} updated Black Flash settings[/green]")
+                    except ValueError:
+                        await interaction.response.send_message("❌ Invalid numbers provided", ephemeral=True)
+                
+                elif action == "ultimate":
+                    if not param1:
+                        await interaction.response.send_message(
+                            "**Usage:** `/config ultimate <cooldown_sec> <charge_rate> <max_damage>`\n"
+                            "**Example:** `/config ultimate 600 2.0 500`\n"
+                            "(600s cooldown, 2% charge per damage, 500 max damage)",
+                            ephemeral=True
+                        )
+                        return
+                    
+                    try:
+                        if param1:
+                            self.ultimate_base_cooldown = int(param1)
+                        if param2:
+                            self.charge_per_damage_dealt = float(param2)
+                        if param3:
+                            self.ultimate_max_damage = int(param3)
+                        
+                        await interaction.response.send_message(
+                            f"✅ **Ultimate settings updated:**\n"
+                            f"Base Cooldown: {self.ultimate_base_cooldown}s\n"
+                            f"Charge Rate: {self.charge_per_damage_dealt}%/damage\n"
+                            f"Max Damage: {self.ultimate_max_damage}",
+                            ephemeral=True
+                        )
+                        console.print(f"[green]⚙️ {interaction.user.name} updated ultimate settings[/green]")
+                    except ValueError:
+                        await interaction.response.send_message("❌ Invalid numbers provided", ephemeral=True)
+                
+                elif action == "save":
+                    # Save current config to a JSON file
+                    config_data = {
+                        "qte_timings": self.qte_timings,
+                        "damage_ranges": {k: list(v) for k, v in self.damage_ranges.items()},
+                        "revenge_threshold": self.revenge_threshold,
+                        "revenge_damage_multiplier": self.revenge_damage_multiplier,
+                        "revenge_bf_bonus": self.revenge_bf_bonus,
+                        "bf_timing_window": self.bf_timing_window,
+                        "ultimate_base_cooldown": self.ultimate_base_cooldown,
+                        "charge_per_damage_dealt": self.charge_per_damage_dealt,
+                        "ultimate_max_damage": self.ultimate_max_damage
+                    }
+                    save_data("live_config", config_data)
+                    await interaction.response.send_message("✅ Configuration saved to `live_config.json`!", ephemeral=True)
+                    console.print(f"[green]💾 {interaction.user.name} saved live config[/green]")
+                
+                elif action == "reset":
+                    # Reset to defaults
+                    self.qte_timings = {
+                        'easy': {'evade_window': 6.0, 'parry_start': 4.0, 'parry_end': 7.0, 'timeout': 10.0},
+                        'medium': {'evade_window': 4.5, 'parry_start': 3.0, 'parry_end': 5.0, 'timeout': 7.0},
+                        'hard': {'evade_window': 4.0, 'parry_start': 2.5, 'parry_end': 4.5, 'timeout': 5.0},
+                        'impossible': {'evade_window': 1.5, 'parry_start': 0.8, 'parry_end': 1.7, 'timeout': 3.0}
+                    }
+                    self.damage_ranges = {
+                        'easy': (1, 3),
+                        'medium': (1, 5),
+                        'hard': (1, 10),
+                        'impossible': (15, 15)
+                    }
+                    self.revenge_threshold = 0.20
+                    self.revenge_damage_multiplier = 1.5
+                    self.revenge_bf_bonus = 0.10
+                    self.bf_timing_window = 0.2
+                    self.ultimate_base_cooldown = 600
+                    self.charge_per_damage_dealt = 2.0
+                    self.ultimate_max_damage = 500
+                    
+                    await interaction.response.send_message("✅ All settings reset to defaults!", ephemeral=True)
+                    console.print(f"[yellow]⚙️ {interaction.user.name} reset all config to defaults[/yellow]")
+                
+            except Exception as e:
+                await interaction.response.send_message(f"❌ Error: {e}", ephemeral=True)
+                log.error(f"Config command error: {e}")
+        
+        # ========== END CONFIG COMMAND ==========
+
         @self.bot.tree.command(
             name="timing",
             description="[ADMIN] Show performance timing report"
@@ -11032,8 +11345,8 @@ Your response (1-2 sentences max):"""
         """
         try:
             if not self.ai_enabled:
-                # No AI - slightly generous random judgment
-                return random.randint(6, 9)
+                # No AI available - use smart heuristic-based scoring
+                return self._fallback_court_scoring(response, round_num, speaker_type)
             
             role = "PROSECUTION" if speaker_type == 'prosecutor' else "DEFENSE"
             
@@ -11088,6 +11401,63 @@ Responde SOLAMENTE con un numero del 1 al 10."""
         if any(word in response.lower() for word in ['guilty', 'crime', 'evidence', 'sentence', 'death', 'innocent', 'honor', 'justice']):
             base_score += 1
         return min(10, base_score)
+    
+    def _fallback_court_scoring(self, response: str, round_num: int, speaker_type: str) -> int:
+        """Smart fallback scoring when AI is unavailable for Deadly Sentencing
+        
+        Uses heuristics based on:
+        - Response length (effort indicator)
+        - Keywords (thematic relevance)
+        - Punctuation/emotion (!! ?)
+        - Round progression (slight bonus for later rounds)
+        - Random variance for unpredictability
+        """
+        base_score = 5  # Start neutral
+        
+        # Length-based scoring (effort matters)
+        word_count = len(response.split())
+        if word_count >= 5:
+            base_score += 1
+        if word_count >= 15:
+            base_score += 1
+        if word_count >= 30:
+            base_score += 1
+        
+        response_lower = response.lower()
+        
+        # Keyword bonuses - court/legal terms
+        legal_keywords = ['guilty', 'innocent', 'evidence', 'crime', 'sentence', 'death', 
+                         'justice', 'honor', 'jury', 'verdict', 'defendant', 'prosecution',
+                         'objection', 'witness', 'testimony', 'law', 'order', 'court']
+        emotional_keywords = ['please', 'mercy', 'truth', 'lies', 'betrayed', 'trust',
+                             'familia', 'honor', 'blood', 'vengeance', 'forgive']
+        
+        keyword_bonus = sum(1 for kw in legal_keywords if kw in response_lower)
+        emotion_bonus = sum(1 for kw in emotional_keywords if kw in response_lower)
+        base_score += min(2, keyword_bonus)  # Cap at +2 for keywords
+        base_score += min(1, emotion_bonus)  # Cap at +1 for emotion
+        
+        # Punctuation passion bonus
+        if '!' in response:
+            base_score += 0.5
+        if '?' in response:
+            base_score += 0.5
+        if response.isupper() or response.count('!') >= 3:
+            base_score += 1  # PASSION!
+        
+        # Round progression bonus (later rounds slightly harder)
+        round_modifier = {1: 0, 2: -0.5, 3: -1}
+        base_score += round_modifier.get(round_num, 0)
+        
+        # Add random variance for unpredictability (-1 to +1)
+        variance = random.uniform(-1, 1)
+        final_score = int(round(base_score + variance))
+        
+        # Clamp between 3-10 (never too harsh, generous ceiling)
+        final_score = max(3, min(10, final_score))
+        
+        console.print(f"[yellow]⚖️ Fallback scoring ({speaker_type} R{round_num}): {final_score}/10 (words:{word_count})[/yellow]")
+        return final_score
     
     def is_player_in_court_trial(self, user_id: int) -> bool:
         """Check if a player is currently participating in a court trial (as prosecutor OR defendant)
