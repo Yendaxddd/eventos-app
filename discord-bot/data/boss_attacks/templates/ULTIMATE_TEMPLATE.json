@@ -1,0 +1,83 @@
+{
+  "attack_id": "template_ultimate",
+  "name": "Template Ultimate",
+  "description": "A devastating ultimate ability with multiple hits and powerful effects",
+  "type": "ultimate",
+  "category": "destructive",
+  
+  "damage": {
+    "base": 120,
+    "hits": 5,
+    "scaling": "combo_based",
+    "variance": 0.15
+  },
+  
+  "requirements": {
+    "charge_required": 100,
+    "cooldown_seconds": 180,
+    "min_boss_hp": 0,
+    "min_combo": 0
+  },
+  
+  "effects": [
+    {
+      "type": "multi_hit_damage",
+      "hits": 5,
+      "damage_per_hit": 120,
+      "target": "selected_player",
+      "can_be_mitigated": true,
+      "black_flash_eligible": false
+    },
+    {
+      "type": "stun_target",
+      "target": "selected_player",
+      "duration": 2.0
+    }
+  ],
+  
+  "qte_chain": {
+    "enabled": true,
+    "difficulty": "medium",
+    "window_per_hit": 3.0,
+    "success_bonus": 50,
+    "failure_penalty": "cancel_remaining_hits"
+  },
+  
+  "visuals": {
+    "gif_urls": [
+      "https://media.tenor.com/hit1.gif",
+      "https://media.tenor.com/hit2.gif",
+      "https://media.tenor.com/hit3.gif",
+      "https://media.tenor.com/hit4.gif",
+      "https://media.tenor.com/hit5.gif"
+    ],
+    "color": "#9b59b6",
+    "icon": "⚡"
+  },
+  
+  "animation_sequence": [
+    {
+      "delay": 0,
+      "message": "⚡ **ULTIMATE ATTACK!** ⚡"
+    },
+    {
+      "delay": 1,
+      "message": "A devastating barrage begins!"
+    },
+    {
+      "delay": 2,
+      "apply_effects": true
+    },
+    {
+      "delay": 5,
+      "message": "The assault ends with a final stunning blow!"
+    }
+  ],
+  
+  "metadata": {
+    "author": "YourName",
+    "created_at": "2026-01-24",
+    "approved_by": null,
+    "version": "1.0"
+  }
+}

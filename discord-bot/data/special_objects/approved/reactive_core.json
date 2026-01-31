@@ -1,0 +1,69 @@
+{
+  "id": "reactive_core",
+  "name": "Reactive Core",
+  "description": "A mysterious artifact that pulses with adaptive energy. When equipped, it allows the wielder to adapt to incoming attacks, building resistance over time.",
+  "lore": "Forged in the depths of the Void, this core learns from every strike it absorbs.",
+  "image_url": null,
+  "version": "1.0",
+  "author": "GM",
+  "type": "adaptation",
+  "rarity": "legendary",
+  "slots_required": 1,
+  "tradeable": false,
+  "unique": true,
+  
+  "trigger": {
+    "command": "*adapt*",
+    "window": "parry",
+    "replaces_action": true,
+    "cooldown": 0
+  },
+  
+  "tracking": {
+    "type": "per_difficulty",
+    "values": ["easy", "medium", "hard", "impossible"],
+    "persist": true
+  },
+  
+  "thresholds": {
+    "easy": [
+      {"spins": 4, "effects": ["damage_reduction:10", "heal:10"]},
+      {"spins": 7, "effects": ["damage_reduction:30", "heal:20"]},
+      {"spins": 10, "effects": ["damage_reduction:50", "heal:50"]}
+    ],
+    "medium": [
+      {"spins": 4, "effects": ["damage_reduction:10", "heal:10"]},
+      {"spins": 6, "effects": ["damage_reduction:40", "heal:20"]},
+      {"spins": 10, "effects": ["damage_reduction:50", "heal:50"]}
+    ],
+    "hard": [
+      {"spins": 3, "effects": ["damage_reduction:15", "heal:10"]},
+      {"spins": 7, "effects": ["damage_reduction:40", "heal:20"]},
+      {"spins": 10, "effects": ["damage_reduction:70", "heal:50"]}
+    ],
+    "impossible": [
+      {"spins": 2, "effects": ["damage_reduction:20", "heal:10"]},
+      {"spins": 6, "effects": ["damage_reduction:60", "heal:20"]},
+      {"spins": 9, "effects": ["damage_reduction:70", "heal:50"]},
+      {"spins": 12, "effects": ["damage_reduction:90"]}
+    ]
+  },
+  
+  "conditionals": [
+    {
+      "if": "spins.impossible >= 12",
+      "then": [
+        "damage_reduction.easy:100",
+        "damage_reduction.medium:+50",
+        "damage_reduction.hard:+10"
+      ]
+    }
+  ],
+  
+  "display": {
+    "color": "#1a1a2e",
+    "emoji": "🔮",
+    "adaptation_message": "**{player}**'s **Reactive Core** pulses with energy!",
+    "threshold_message": "🔄 **ADAPTATION THRESHOLD {threshold}!** {effects_summary}"
+  }
+}

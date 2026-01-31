@@ -1,0 +1,41 @@
+{
+  "id": "your_unique_id",
+  "name": "Your Triggered Ability",
+  "description": "Describe what this triggered ability does",
+  "version": "1.0",
+  "author": "YourName",
+  "type": "triggered",
+  
+  "assignment": {
+    "type": "character",
+    "characters": ["ExactCharacterName"],
+    "transferable": false
+  },
+  
+  "trigger": {
+    "command": "*yourcommand*",
+    "window": "any",
+    "replaces_action": false,
+    "cooldown": 60
+  },
+  
+  "tracking": {
+    "type": "global",
+    "values": [],
+    "persist": false
+  },
+  
+  "thresholds": {},
+  
+  "conditionals": [
+    {
+      "if": "cooldown.ready",
+      "then": ["invoke_qte:medium", "stun_enemy:2"]
+    }
+  ],
+  
+  "effects": [
+    "damage_boss:100",
+    "heal_percent:10"
+  ]
+}

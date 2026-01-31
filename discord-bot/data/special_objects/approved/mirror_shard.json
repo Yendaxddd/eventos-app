@@ -1,0 +1,42 @@
+{
+  "id": "mirror_shard",
+  "name": "Mirror Shard",
+  "description": "A fragment of an ancient mirror that reflects not just images, but techniques. Allows the wielder to study and eventually copy enemy attack patterns.",
+  "lore": "Legend says this shard was once part of a mirror that showed warriors their perfect selves.",
+  "image_url": null,
+  "version": "1.0",
+  "author": "GM",
+  "type": "adaptation",
+  "rarity": "legendary",
+  "slots_required": 1,
+  "tradeable": false,
+  "unique": true,
+  
+  "trigger": {
+    "command": "*adapt*",
+    "window": "counter",
+    "replaces_action": false,
+    "cooldown": 0
+  },
+  
+  "tracking": {
+    "type": "total",
+    "persist": true
+  },
+  
+  "thresholds": [
+    {"spins": 5, "effects": ["auto_evade:easy"]},
+    {"spins": 10, "effects": ["guaranteed_counter"]},
+    {"spins": 15, "effects": ["on_hard_evade:heal:15"]},
+    {"spins": 20, "effects": ["invoke_qte:medium", "on_boss_stunned:black_flash", "on_boss_stunned:boss_damage_percent:20"]}
+  ],
+  
+  "conditionals": [],
+  
+  "display": {
+    "color": "#4169E1",
+    "emoji": "🪞",
+    "adaptation_message": "**{player}**'s **Mirror Shard** glimmers, analyzing the attack...",
+    "threshold_message": "🪞 **COPY PROGRESS {threshold}!** {effects_summary}"
+  }
+}

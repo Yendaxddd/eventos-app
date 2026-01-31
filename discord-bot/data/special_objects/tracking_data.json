@@ -1,0 +1,41 @@
+{
+  "1102073491316023347": {
+    "reactive_core": {
+      "easy": 3,
+      "hard": 0,
+      "impossible": 2,
+      "medium": 1
+    }
+  },
+  "654071438030143488": {
+    "mirror_shard": {
+      "medium": 15,
+      "easy": 0,
+      "hard": 0,
+      "impossible": 0,
+      "total": 1
+    }
+  },
+  "954834739607535709": {
+    "mirror_shard": {
+      "total": 20,
+      "easy": 0,
+      "medium": 0,
+      "hard": 0,
+      "impossible": 0
+    }
+  },
+  "1389975939252883489": {
+    "reactive_core": {
+      "impossible": 0,
+      "hard": 0,
+      "easy": 3,
+      "medium": 0
+    }
+  },
+  "845087866383630356": {
+    "mirror_shard": {
+      "total": 0
+    }
+  }
+}

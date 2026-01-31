@@ -1,0 +1,48 @@
+{
+  "id": "your_unique_id",
+  "name": "Your Object Name",
+  "description": "Describe what this object does",
+  "version": "1.0",
+  "author": "YourName",
+  "type": "adaptation",
+  
+  "assignment": {
+    "type": "character",
+    "characters": ["ExactCharacterName"],
+    "transferable": false
+  },
+  
+  "trigger": {
+    "command": "*adapt*",
+    "window": "parry",
+    "replaces_action": true,
+    "cooldown": 0
+  },
+  
+  "tracking": {
+    "type": "per_difficulty",
+    "values": ["easy", "medium", "hard", "impossible"],
+    "persist": true
+  },
+  
+  "thresholds": {
+    "easy": [
+      {"spins": 5, "effects": ["damage_reduction:10"]},
+      {"spins": 10, "effects": ["damage_reduction:30"]}
+    ],
+    "medium": [
+      {"spins": 5, "effects": ["damage_reduction:10"]},
+      {"spins": 10, "effects": ["damage_reduction:30"]}
+    ],
+    "hard": [
+      {"spins": 5, "effects": ["damage_reduction:10"]},
+      {"spins": 10, "effects": ["damage_reduction:30"]}
+    ],
+    "impossible": [
+      {"spins": 5, "effects": ["damage_reduction:10"]},
+      {"spins": 10, "effects": ["damage_reduction:30"]}
+    ]
+  },
+  
+  "conditionals": []
+}

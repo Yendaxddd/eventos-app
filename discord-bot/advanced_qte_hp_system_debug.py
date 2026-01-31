@@ -14,6 +14,7 @@ import os
 import pathlib
 import logging
 from datetime import datetime, timedelta, timezone
+from typing import List
 from dotenv import load_dotenv
 from rich.console import Console
 from rich.panel import Panel
@@ -25,6 +26,12 @@ from rich import box
 
 # Import Eventos API Bridge
 from simple_api_bridge import SimpleEventosAPI
+
+# Import Special Objects Manager
+from special_objects_manager import SpecialObjectsManager, get_manager
+
+# Ollama/AI imports
+import aiohttp
 
 # Optional keyboard library (requires root on Linux)
 try:
@@ -43,19 +50,124 @@ console = Console()
 # Load environment variables
 load_dotenv()
 
-# Setup logging (file only, console handled by Rich)
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s | %(levelname)-8s | %(message)s",
-    handlers=[
-        logging.FileHandler("qte_bot.log", encoding="utf-8", mode="a")
-    ],
-)
-log = logging.getLogger("QTE_Bot")
+# Setup logging with session rotation - each bot start gets a new log file
+def setup_logging():
+    """Setup logging with timestamped log file per session in central logs folder"""
+    session_time = datetime.now().strftime("%Y%m%d_%H%M%S")
+    # Centralize logs under eventos-app/logs regardless of cwd
+    project_root = pathlib.Path(__file__).resolve().parents[1]
+    logs_dir = project_root / "logs"
+    try:
+        logs_dir.mkdir(parents=True, exist_ok=True)
+    except Exception:
+        # Fallback: write next to script if creation fails
+        logs_dir = pathlib.Path(__file__).resolve().parent
+    
+    log_filename = logs_dir / f"qte_bot_{session_time}.log"
+    
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s | %(levelname)-8s | %(message)s",
+        handlers=[
+            logging.FileHandler(str(log_filename), encoding="utf-8", mode="w")
+        ],
+    )
+    
+    # Try to create/update symlink to latest log for convenience
+    try:
+        latest_link = logs_dir / "qte_bot.log"
+        if latest_link.is_symlink() or latest_link.exists():
+            latest_link.unlink()
+        latest_link.symlink_to(log_filename.name)
+    except Exception:
+        pass  # Symlinks may fail on some systems
+    
+    return logging.getLogger("QTE_Bot"), str(log_filename)
+
+log, LOG_FILENAME = setup_logging()
+console.print(f"[cyan]📝 Logging to: {LOG_FILENAME}[/cyan]")
+
+# Timing profiler for performance diagnostics
+class TimingProfiler:
+    """Track timing of operations for performance diagnostics"""
+    def __init__(self):
+        self.timings = {}  # {operation: [durations]}
+        self.enabled = True
+        self._start_times = {}  # {operation: start_time}
+    
+    def start(self, operation: str):
+        if self.enabled:
+            self._start_times[operation] = time.perf_counter()
+    
+    def stop(self, operation: str):
+        if self.enabled and operation in self._start_times:
+            duration = time.perf_counter() - self._start_times.pop(operation)
+            if operation not in self.timings:
+                self.timings[operation] = []
+            self.timings[operation].append(duration)
+            # Log slow operations (>500ms)
+            if duration > 0.5:
+                log.warning(f"SLOW: {operation} took {duration:.3f}s")
+            return duration
+        return 0
+    
+    def get_stats(self, operation: str = None):
+        """Get timing statistics"""
+        if operation:
+            if operation in self.timings and self.timings[operation]:
+                times = self.timings[operation]
+                return {
+                    'count': len(times),
+                    'avg': sum(times) / len(times),
+                    'min': min(times),
+                    'max': max(times),
+                    'total': sum(times)
+                }
+            return None
+        return {op: self.get_stats(op) for op in self.timings}
+    
+    def clear(self):
+        self.timings.clear()
+        self._start_times.clear()
+    
+    def format_report(self):
+        """Format a human-readable timing report"""
+        lines = ["=== Timing Report ==="]
+        stats = self.get_stats()
+        for op, s in sorted(stats.items(), key=lambda x: x[1]['total'] if x[1] else 0, reverse=True):
+            if s:
+                lines.append(f"{op}: avg={s['avg']*1000:.1f}ms, max={s['max']*1000:.1f}ms, count={s['count']}, total={s['total']:.2f}s")
+        return "\n".join(lines)
+
+profiler = TimingProfiler()
 
 # Persistence helpers
-DATA_DIR = pathlib.Path("data")
-DATA_DIR.mkdir(exist_ok=True)
+def resolve_data_dir():
+    """Pick a writable data directory with a home fallback."""
+    candidates = [
+        pathlib.Path(__file__).parent / "data",
+        pathlib.Path.home() / ".eventos-bot" / "data",
+    ]
+
+    for path in candidates:
+        try:
+            path.mkdir(parents=True, exist_ok=True)
+            test_file = path / ".perm_check"
+            test_file.write_text("ok", encoding="utf-8")
+            try:
+                test_file.unlink()
+            except FileNotFoundError:
+                pass
+            log.info(f"Using data directory: {path}")
+            return path
+        except Exception as e:
+            log.warning(f"Data directory not writable at {path}: {e}")
+            continue
+
+    # Fallback to last candidate even if unwritable so code still runs (will log errors on save)
+    return candidates[-1]
+
+DATA_DIR = resolve_data_dir()
 
 def load_data(name, default):
     """Load JSON data from file"""
@@ -120,6 +232,12 @@ class AdvancedQTEBot:
             console.print(f"[red]✗ Eventos API connection failed: {e}[/red]")
             self.api_available = False
 
+        # Create assets directory for persistent storage
+        self.assets_dir = "assets"
+        if not os.path.exists(self.assets_dir):
+            os.makedirs(self.assets_dir)
+            console.print(f"[green]✓ Created assets directory[/green]")
+        
         # Bot setup with slash commands
         intents = discord.Intents.default()
         intents.message_content = True
@@ -134,6 +252,7 @@ class AdvancedQTEBot:
         self.character_powers = load_data("character_powers", {})
         self.power_charges = load_data("power_charges", {})  # Persist ultimate charges
         self.user_counter_gifs = load_data("user_counter_gifs", {})  # User custom counter GIFs (now supports arrays)
+        self.boss_defeat_gifs = load_data("boss_defeat_gifs", [])  # Boss defeat celebration GIFs (list)
         self.player_buffs = load_data("player_buffs", {})  # Active buffs: {user_id: {buff_type: {value, expires}}}
 
         console.print(f"[yellow]✓ Loaded {len(self.character_registry)} character registrations[/yellow]")
@@ -141,20 +260,18 @@ class AdvancedQTEBot:
         console.print(f"[purple]✓ Loaded powers for {len(self.character_powers)} characters[/purple]")
         console.print(f"[purple]✓ Loaded charges for {len(self.power_charges)} players[/purple]")
         console.print(f"[purple]✓ Loaded counter GIFs for {len(self.user_counter_gifs)} players[/purple]")
+        console.print(f"[gold1]✓ Loaded {len(self.boss_defeat_gifs)} boss defeat GIFs[/gold1]")
 
         # QTE State Management - Support multiple concurrent QTEs
         self.active_qtes = {}  # Dictionary: qte_id -> qte_data
         self.qte_counter = 0   # Counter for unique QTE IDs
         self.afk_users = set()
         self.last_qte_completion = {}  # {user_id: timestamp} for anti-spam
-        
-        # ========== WEBHOOK ROTATION SYSTEM ==========
-        # Each webhook has its own rate limit bucket - rotating = 3x throughput!
-        self.webhooks = []  # List of discord.Webhook objects
-        self.webhook_index = 0  # Current webhook in rotation
-        self.webhook_names = ["QTE-Alpha", "QTE-Beta", "QTE-Gamma"]
-        self.webhooks_initialized = False
-        # =============================================
+        self.hp_cleanup_needed = False  # If true, clear HP thread messages on startup
+        self.reset_choice = None
+        self.save_timestamps = {}  # {user_id: [list of timestamps]} - for save rate limiting
+        self.save_limit = 2  # Max 2 saves per minute
+        self.save_time_window = 60  # Per 60 seconds
         
         # Boss system
         self.active_boss = None  # {name, hp_current, hp_max, gif_url, participants}
@@ -193,34 +310,82 @@ class AdvancedQTEBot:
         self.ultimate_self_recharge = False  # Toggle: Does landing ultimate recharge itself?
         self.ultimate_damage_multiplier = 1.0  # Full damage (reverted)
         self.ultimate_cooldown_per_damage = 0.5  # Extra seconds of cooldown per damage point
+        self.ultimate_max_damage = 500  # Cap: Maximum damage an ultimate can deal
+        self.ultimate_base_cooldown = 600  # 10 minutes base cooldown (fight-time only)
         # =================================================
         
-
+        # ========== FIGHT STATE SYSTEM ==========
+        # Ultimate cooldowns only tick down during active boss fights!
+        self.fight_active = False  # True when boss fight is in progress
+        self.fight_start_time = None  # When the current fight started
+        self.ultimate_fight_cooldowns = {}  # {user_id: {power_key: remaining_seconds}}
+        # =========================================
         
         # ========== COUNTER MECHANIC ==========
         self.counter_enabled_players = {}  # {user_id: qte_id}
+        self.counter_context = {}  # {user_id: {"qte_id": qte_id, "difficulty": difficulty}}
         self.counter_window = 1.5  # LOWERED: 1.5 seconds from QTE start (was 2.0)
         self.enemy_stunned = False
         self.stun_end_time = None
-        self.counter_gif = "https://media.tenor.com/E0-GqnPpV8AAAAAC/jjk-black-flash.gif"
+        self.counter_gif_dir = pathlib.Path("assets/counter_gifs")
         self.counter_streaks = {}  # {user_id: streak_count} - for stun scaling
         # ======================================
+        
+        # ========== BOSS DEFEAT ANIMATION ==========
+        self.default_boss_defeat_gif = "https://media1.tenor.com/m/DQZQ0cXHkjgAAAAd/one-punch-man-saitama.gif"  # Default fallback
+        # boss_defeat_gifs is loaded from file - list of custom GIFs
+        # ===========================================
         
         # ========== BLACK FLASH CHAIN SYSTEM ==========
         self.bf_chain_active = {}  # {user_id: chain_count} - tracks active BF chains (max 4)
         self.bf_chain_damage = {1: 25, 2: 50, 3: 100, 4: 200}  # Damage per chain level
         self.bf_parry_cooldowns = {1: 10, 2: 30, 3: 60, 4: 120}  # Cooldowns in seconds after each BF
-        self.bf_timing_window = 0.5  # First BF timing tolerance (was 0.1)
-        self.bf_chain_timing_window = 0.7  # Subsequent chain BFs timing window
+        self.bf_timing_window = 0.2  # First BF timing tolerance (tighter - 0.2s)
+        self.bf_chain_timing_window = 0.15  # Subsequent chain BFs even tighter (0.15s)
         self.player_parry_cooldown = {}  # {user_id: timestamp} - parry locked until this time
         # ===============================================
+        
+        # ========== BATCHED HP UPDATE SYSTEM ==========
+        # Instead of updating HP bar immediately on every damage event,
+        # we batch updates and flush them periodically to reduce rate limits
+        self._pending_hp_updates = {}  # {cache_key: embed} - pending updates
+        self._hp_update_task = None  # Background task for flushing
+        self._hp_update_interval = 2.0  # Flush every 2 seconds (reduced from 0.5s for rate limits)
+        # ===============================================
+        
+        # ========== GLOBAL MESSAGE QUEUE SYSTEM ==========
+        # Throttle all outgoing messages to prevent rate limits
+        self._message_queue = asyncio.Queue()  # Global message queue
+        self._message_processor_task = None  # Background task for processing
+        self._min_message_interval = 0.15  # Minimum 150ms between messages per channel
+        self._channel_last_send = {}  # {channel_id: timestamp} - track last send per channel
+        self._rate_limit_backoff = {}  # {channel_id: backoff_multiplier} - exponential backoff
+        # =================================================
         
         # ========== QTE BATCH MODE ==========
         self.batch_mode_active = False
         self.pending_qte_batch = []  # List of {'difficulty': str} during batch collection
         self.player_qte_queues = {}  # {user_id: [list of qte dicts]} - sequential processing
         self.player_current_qte = {}  # {user_id: qte_data} - currently active QTE per player
+        
+        # ========== AI/OLLAMA INTEGRATION ==========
+        self.ai_enabled = False  # Master toggle
+        self.ai_endpoint = "http://localhost:11434/api/generate"
+        self.ai_model = "dolphin-phi:2.7b"
+        self.ai_channel_id = None  # If set, only respond in this channel
+        self.ai_message_counter = {}  # {channel_id: count} - tracks messages since last AI response
+        self.ai_trigger_count = 10  # Respond after this many messages
+        self.ai_respond_to_pins = True  # Respond when message is pinned
+        self.ai_system_prompt = "You are a helpful assistant in a Discord server focused on roleplaying and QTE combat. Keep responses brief and engaging."
+        self.ai_last_response = {}  # {channel_id: timestamp} - cooldown per channel
+        self.ai_cooldown = 30  # Seconds between auto-responses
+        # =============================================
         # ====================================
+        
+        # ========== MAX ADAPTATION WARNING TRACKING ==========
+        # Track users who have been warned about max adaptation (prevent spam)
+        self.max_adaptation_warned = {}  # {user_id: {obj_id: {difficulty: bool}}}
+        # ======================================================
         
         # ========== FAITH SYSTEM (LYRA'S SAFEGUARD) ==========
         self.faith_used_players = set()  # Track who used FAITH this event
@@ -234,6 +399,38 @@ class AdvancedQTEBot:
         self.power_types = ["destructive", "support", "defend", "build", "control"]
         # character_powers is already loaded above - do NOT overwrite!
         # ====================================================================
+        
+        # ========== SPECIAL OBJECTS SYSTEM (Data-Driven Mechanics) ==========
+        # Replaces hardcoded adaptation mechanics with JSON-defined objects
+        self.special_objects_manager = get_manager()
+        obj_count, obj_errors = self.special_objects_manager.load_all()
+        self.special_objects_manager.load_tracking()
+        console.print(f"[purple]✓ Loaded {obj_count} special objects[/purple]")
+        if obj_errors:
+            for err in obj_errors:
+                console.print(f"[red]  ✗ {err}[/red]")
+        # ====================================================================
+        
+        # ========== BLOCK MECHANIC ==========
+        # *block* reduces damage but doesn't negate it completely
+        self.block_damage_reduction = 0.50  # 50% damage reduction on successful block
+        self.block_window_multiplier = 1.5  # Block window is 50% wider than evade
+        self.block_cooldown = {}  # {user_id: timestamp} - block cooldown per player
+        self.block_cooldown_duration = 3.0  # 3 seconds between blocks
+        # =====================================
+        
+        # ========== BOSS DEFEAT SYSTEM ==========
+        self.boss_defeat_gifs = [
+            "https://media.tenor.com/your-boss-defeat-gif-1.gif",  # Placeholder
+            "https://media.tenor.com/your-boss-defeat-gif-2.gif"   # Placeholder
+        ]
+        self.boss_defeat_messages = [
+            "The tyrant falls... their reign ends here.",
+            "Victory! The darkness recedes...",
+            "Against all odds, the hero prevails!",
+            "The beast is slain. Rest now, warrior."
+        ]
+        # =========================================
 
         # Role caching
         self.qte_players = []
@@ -293,6 +490,21 @@ class AdvancedQTEBot:
             'impossible': '💀'
         }
 
+        # Load custom QTE settings if they exist
+        self.load_qte_settings()
+
+        # Prompt once on startup: keep or reset HP/charges
+        self.reset_choice = self.prompt_reset_hp_and_charges()
+        if self.reset_choice == "reset":
+            console.print("[yellow]⚠️  Resetting HP, power charges, and buffs on startup[/yellow]")
+            self.player_hp = {}
+            self.power_charges = {}
+            self.player_buffs = {}
+            self.hp_cleanup_needed = True
+            self.save_all_data(force=True)
+        else:
+            console.print("[green]Keeping existing HP and charges[/green]")
+
         self.setup_events()
         self.setup_slash_commands()
         if KEYBOARD_AVAILABLE:
@@ -315,7 +527,11 @@ class AdvancedQTEBot:
         save_data("character_powers", self.character_powers)
         save_data("power_charges", self.power_charges)  # Persist ultimate charges
         save_data("user_counter_gifs", self.user_counter_gifs)  # User custom counter GIFs
+        save_data("boss_defeat_gifs", self.boss_defeat_gifs)  # Boss defeat celebration GIFs
         save_data("player_buffs", self.player_buffs)  # Active buffs
+        
+        # Save special objects tracking data
+        self.special_objects_manager.save_tracking()
         
         self._last_save_time = current_time
         self._pending_save = False
@@ -326,186 +542,521 @@ class AdvancedQTEBot:
         if self._pending_save:
             self.save_all_data(force=True)
 
-    # ========== RATE-LIMITED MESSAGING ==========
-    # ========== WEBHOOK ROTATION SYSTEM ==========
-    async def initialize_webhooks(self):
-        """Create or get existing webhooks for the QTE channel"""
-        if self.webhooks_initialized:
-            return
+    # ========== AI/OLLAMA INTEGRATION METHODS ==========
+    
+    async def ollama_list_models(self) -> list:
+        """Get list of available models from Ollama"""
+        try:
+            # Ollama API endpoint for listing models
+            list_url = self.ai_endpoint.replace("/api/generate", "/api/tags")
+            async with aiohttp.ClientSession() as session:
+                async with session.get(list_url, timeout=aiohttp.ClientTimeout(total=10)) as resp:
+                    if resp.status == 200:
+                        data = await resp.json()
+                        models = data.get('models', [])
+                        return [m.get('name', 'unknown') for m in models]
+                    else:
+                        console.print(f"[red]❌ Failed to list models: {resp.status}[/red]")
+                        return []
+        except Exception as e:
+            console.print(f"[red]❌ Error listing models: {e}[/red]")
+            return []
+    
+    async def ollama_load_model(self, model_name: str) -> bool:
+        """Load/pull a model in Ollama (makes it ready for use)"""
+        try:
+            # Send a simple request to load the model into memory
+            payload = {
+                "model": model_name,
+                "prompt": "",  # Empty prompt just loads the model
+                "stream": False,
+                "options": {"num_predict": 1}  # Minimal generation
+            }
+            async with aiohttp.ClientSession() as session:
+                async with session.post(self.ai_endpoint, json=payload, timeout=aiohttp.ClientTimeout(total=60)) as resp:
+                    if resp.status == 200:
+                        console.print(f"[green]✅ Model {model_name} loaded[/green]")
+                        return True
+                    else:
+                        error_text = await resp.text()
+                        console.print(f"[red]❌ Failed to load model: {error_text}[/red]")
+                        return False
+        except Exception as e:
+            console.print(f"[red]❌ Error loading model: {e}[/red]")
+            return False
+    
+    async def ollama_unload_model(self, model_name: str) -> bool:
+        """Unload a model from Ollama memory"""
+        try:
+            # Ollama uses keep_alive: 0 to unload immediately
+            payload = {
+                "model": model_name,
+                "keep_alive": 0
+            }
+            unload_url = self.ai_endpoint.replace("/api/generate", "/api/generate")
+            async with aiohttp.ClientSession() as session:
+                async with session.post(unload_url, json=payload, timeout=aiohttp.ClientTimeout(total=10)) as resp:
+                    if resp.status == 200:
+                        console.print(f"[yellow]📤 Model {model_name} unloaded from memory[/yellow]")
+                        return True
+                    else:
+                        # Model might not be loaded, that's fine
+                        return True
+        except Exception as e:
+            console.print(f"[yellow]⚠️ Could not unload model (may not be loaded): {e}[/yellow]")
+            return True  # Not critical if unload fails
+    
+    async def call_ollama(self, prompt: str, system_prompt: str = None) -> str:
+        """Call Ollama API and return response text"""
+        if system_prompt is None:
+            system_prompt = self.ai_system_prompt
+        
+        payload = {
+            "model": self.ai_model,
+            "prompt": prompt,
+            "system": system_prompt,
+            "stream": False,
+            "options": {
+                "temperature": 0.7,
+                "num_predict": 300  # Limit response length
+            }
+        }
         
         try:
-            channel = self.bot.get_channel(self.qte_channel_id)
-            if not channel:
-                console.print("[red]✗ Cannot initialize webhooks - channel not found[/red]")
-                return
-            
-            # Get existing webhooks
-            existing_webhooks = await channel.webhooks()
-            
-            # Find or create our webhooks
-            for name in self.webhook_names:
-                found = None
-                for wh in existing_webhooks:
-                    if wh.name == name:
-                        found = wh
-                        break
-                
-                if found:
-                    self.webhooks.append(found)
-                    console.print(f"[cyan]🪝 Found existing webhook: {name}[/cyan]")
-                else:
-                    # Create new webhook
-                    new_wh = await channel.create_webhook(name=name)
-                    self.webhooks.append(new_wh)
-                    console.print(f"[green]🪝 Created webhook: {name}[/green]")
-            
-            self.webhooks_initialized = True
-            console.print(f"[green]✓ {len(self.webhooks)} webhooks ready for rate-limit bypass![/green]")
-            
-        except discord.errors.Forbidden:
-            console.print("[yellow]⚠️ No permission to manage webhooks - using fallback[/yellow]")
-        except Exception as e:
-            console.print(f"[red]✗ Webhook init error: {e}[/red]")
-    
-    def get_next_webhook(self):
-        """Get the next webhook in rotation"""
-        if not self.webhooks:
+            async with aiohttp.ClientSession() as session:
+                async with session.post(self.ai_endpoint, json=payload, timeout=aiohttp.ClientTimeout(total=30)) as resp:
+                    if resp.status == 200:
+                        data = await resp.json()
+                        return data.get('response', '').strip()
+                    else:
+                        error_text = await resp.text()
+                        console.print(f"[red]❌ Ollama API error: {resp.status} - {error_text}[/red]")
+                        return None
+        except asyncio.TimeoutError:
+            console.print("[red]❌ Ollama request timed out[/red]")
             return None
-        webhook = self.webhooks[self.webhook_index]
-        self.webhook_index = (self.webhook_index + 1) % len(self.webhooks)
-        return webhook
+        except aiohttp.ClientError as e:
+            console.print(f"[red]❌ Ollama connection error: {e}[/red]")
+            return None
+        except Exception as e:
+            console.print(f"[red]❌ Ollama error: {e}[/red]")
+            return None
     
-    async def webhook_send(self, content=None, embed=None):
-        """Send via rotating webhooks for rate limit bypass. Uses bot's name and avatar."""
-        if not self.webhooks:
-            # Fallback to regular channel send
+    async def handle_ai_prompt(self, message, prompt: str):
+        """Handle direct AI prompt (-- prefix)"""
+        async with message.channel.typing():
+            console.print(f"[cyan]🤖 AI prompt from {message.author.name}: {prompt[:50]}...[/cyan]")
+            
+            response = await self.call_ollama(prompt)
+            
+            if response:
+                # Truncate if too long for Discord
+                if len(response) > 1900:
+                    response = response[:1900] + "..."
+                
+                await message.reply(response, mention_author=False)
+                console.print(f"[green]✓ AI responded ({len(response)} chars)[/green]")
+            else:
+                await message.reply("❌ Sorry, I couldn't generate a response. Is Ollama running?", mention_author=False)
+    
+    async def get_channel_context(self, channel, limit: int = 5) -> str:
+        """Get recent messages from channel as context"""
+        messages = []
+        async for msg in channel.history(limit=limit):
+            if not msg.author.bot:
+                messages.append(f"{msg.author.display_name}: {msg.content[:100]}")
+        messages.reverse()  # Oldest first
+        return "\n".join(messages)
+    
+    async def handle_ai_auto_response(self, channel, context: str):
+        """Generate automatic AI response based on channel context"""
+        try:
+            prompt = f"""Based on this recent conversation in a Discord server, provide a brief, natural response or comment. Don't repeat what others said. Be engaging but concise.
+
+Recent messages:
+{context}
+
+Your response (1-2 sentences max):"""
+            
+            async with channel.typing():
+                response = await self.call_ollama(prompt)
+                
+                if response:
+                    if len(response) > 500:
+                        response = response[:500] + "..."
+                    
+                    await channel.send(f"🤖 {response}")
+                    self.ai_last_response[channel.id] = time.time()
+                    console.print(f"[cyan]🤖 AI auto-response in #{channel.name}[/cyan]")
+        except Exception as e:
+            console.print(f"[red]❌ AI auto-response error: {e}[/red]")
+    
+    # ========== END AI INTEGRATION ==========
+
+    async def cleanup_hp_thread_messages(self):
+        """Delete all messages in the HP bar thread when resetting data"""
+        if not self.hp_bar_thread_id:
+            return
+        channel = self.bot.get_channel(self.hp_bar_thread_id)
+        if not channel:
+            return
+        try:
+            await channel.purge(limit=None)
+        except Exception as e:
+            console.print(f"[yellow]⚠️ Could not purge HP thread: {e}[/yellow]")
+
+    # ========== RATE-LIMITED MESSAGING ==========
+    
+    def save_qte_settings(self):
+        """Save QTE timing and damage settings to JSON"""
+        settings = {
+            'qte_times': self.qte_times,
+            'damage_ranges': self.damage_ranges
+        }
+        save_data("qte_settings", settings)
+        console.print("[green]💾 QTE settings saved[/green]")
+    
+    def load_qte_settings(self):
+        """Load QTE timing and damage settings from JSON"""
+        settings = load_data("qte_settings", {})
+        if settings:
+            if 'qte_times' in settings:
+                # Merge with defaults (in case new difficulties added)
+                for diff, timing in settings['qte_times'].items():
+                    if diff in self.qte_times:
+                        self.qte_times[diff] = timing
+                        # Convert parry_window list to tuple if needed
+                        if isinstance(self.qte_times[diff]['parry_window'], list):
+                            self.qte_times[diff]['parry_window'] = tuple(self.qte_times[diff]['parry_window'])
+            if 'damage_ranges' in settings:
+                for diff, dmg in settings['damage_ranges'].items():
+                    if diff in self.damage_ranges:
+                        # Convert list to tuple if needed
+                        self.damage_ranges[diff] = tuple(dmg) if isinstance(dmg, list) else dmg
+            console.print("[cyan]✓ Loaded custom QTE settings[/cyan]")
+
+    def prompt_reset_hp_and_charges(self):
+        """Ask operator whether to keep HP/charges or reset on startup"""
+        try:
+            choice = input("Keep existing HP/charges? (Y/n): ").strip().lower()
+            if choice in ("n", "no"):  # reset
+                return "reset"
+        except Exception:
+            pass
+        return "keep"
+    
+    async def download_and_store_asset(self, url, asset_type, identifier):
+        """Download image from URL and store locally. Returns local file path or URL if download fails"""
+        try:
+            import aiohttp
+            import hashlib
+            
+            # Create type subdirectory
+            type_dir = os.path.join(self.assets_dir, asset_type)
+            if not os.path.exists(type_dir):
+                os.makedirs(type_dir)
+            
+            # Generate filename from URL hash + identifier
+            url_hash = hashlib.md5(url.encode()).hexdigest()[:8]
+            file_ext = '.gif' if 'gif' in url.lower() else '.png'
+            filename = f"{identifier}_{url_hash}{file_ext}"
+            filepath = os.path.join(type_dir, filename)
+            
+            # If already downloaded, return local path
+            if os.path.exists(filepath):
+                return filepath
+            
+            # Download the file
+            async with aiohttp.ClientSession() as session:
+                async with session.get(url, timeout=aiohttp.ClientTimeout(total=10)) as resp:
+                    if resp.status == 200:
+                        with open(filepath, 'wb') as f:
+                            f.write(await resp.read())
+                        console.print(f"[green]✓ Downloaded asset: {filename}[/green]")
+                        return filepath
+        except Exception as e:
+            console.print(f"[yellow]⚠ Failed to download asset from {url}: {e}[/yellow]")
+        
+        # Return original URL if download fails
+        return url
+    
+    def get_local_asset_url(self, filepath):
+        """Convert local file path to Discord-compatible URL path"""
+        # For now, just return the filepath - in production, you'd host these or embed them
+        return filepath
+    
+    async def webhook_send(self, content=None, embed=None, file=None):
+        """Send message to QTE channel with rate limit protection"""
+        profiler.start('webhook_send')
+        try:
             channel = self.bot.get_channel(self.qte_channel_id)
             if channel:
-                return await channel.send(content=content, embed=embed)
-            return None
-        
-        webhook = self.get_next_webhook()
-        try:
-            # Use bot's name and avatar for seamless appearance
-            bot_name = self.bot.user.display_name if self.bot.user else "QTE Bot"
-            bot_avatar = str(self.bot.user.avatar.url) if self.bot.user and self.bot.user.avatar else None
-            
-            # wait=True returns the message object
-            msg = await webhook.send(
-                content=content, 
-                embed=embed, 
-                username=bot_name, 
-                avatar_url=bot_avatar,
-                wait=True
-            )
-            return msg
-        except discord.errors.HTTPException as e:
-            if e.status == 429:
-                # Even webhooks can rate limit - rotate to next and retry
-                retry_after = getattr(e, 'retry_after', 0.3)
-                await asyncio.sleep(retry_after)
-                webhook = self.get_next_webhook()
-                try:
-                    return await webhook.send(
-                        content=content, 
-                        embed=embed, 
-                        username=bot_name, 
-                        avatar_url=bot_avatar,
-                        wait=True
-                    )
-                except:
-                    return None
+                # Use safe_send for rate limit protection (but pass file separately if needed)
+                if file:
+                    # Direct send for files (safe_send doesn't handle files)
+                    result = await channel.send(content=content, embed=embed, file=file)
+                else:
+                    result = await self.safe_send(channel, content=content, embed=embed)
+                profiler.stop('webhook_send')
+                return result
+            profiler.stop('webhook_send')
             return None
         except Exception as e:
-            log.error(f"Webhook send error: {e}")
+            profiler.stop('webhook_send')
+            console.print(f"[red]✗ Error sending message: {e}[/red]")
             return None
 
     async def safe_send(self, channel, content=None, embed=None, priority=False, use_webhook=True):
-        """Send a message. Uses webhook rotation for QTE channel, regular send otherwise."""
+        """Send a message with rate limit protection and exponential backoff."""
         if channel is None:
             return None
         
-        # Use webhook for QTE channel (fast path)
-        if use_webhook and channel.id == self.qte_channel_id and self.webhooks:
-            return await self.webhook_send(content=content, embed=embed)
+        profiler.start('safe_send')
+        channel_id = channel.id
         
-        # Regular send for other channels
-        try:
-            return await channel.send(content=content, embed=embed)
-        except discord.errors.HTTPException as e:
-            if e.status == 429:
-                retry_after = getattr(e, 'retry_after', 1.0)
-                await asyncio.sleep(retry_after)
-                try:
-                    return await channel.send(content=content, embed=embed)
-                except:
+        # Check minimum interval between sends to this channel
+        now = time.time()
+        last_send = self._channel_last_send.get(channel_id, 0)
+        backoff = self._rate_limit_backoff.get(channel_id, 1.0)
+        min_wait = self._min_message_interval * backoff
+        
+        if now - last_send < min_wait:
+            await asyncio.sleep(min_wait - (now - last_send))
+        
+        max_retries = 4
+        for attempt in range(max_retries):
+            try:
+                result = await channel.send(content=content, embed=embed)
+                self._channel_last_send[channel_id] = time.time()
+                # Reduce backoff on success (slowly return to normal)
+                if channel_id in self._rate_limit_backoff:
+                    self._rate_limit_backoff[channel_id] = max(1.0, self._rate_limit_backoff[channel_id] * 0.9)
+                profiler.stop('safe_send')
+                return result
+            except discord.errors.HTTPException as e:
+                if e.status == 429:
+                    retry_after = getattr(e, 'retry_after', 1.0 * (2 ** attempt))
+                    # Increase backoff for this channel
+                    self._rate_limit_backoff[channel_id] = min(8.0, backoff * 2)
+                    log.warning(f"Rate limited (attempt {attempt+1}/{max_retries}), waiting {retry_after:.1f}s, backoff now {self._rate_limit_backoff[channel_id]}x")
+                    await asyncio.sleep(retry_after)
+                else:
+                    profiler.stop('safe_send')
                     return None
-            return None
-        except Exception as e:
-            log.error(f"Error sending message: {e}")
-            return None
+            except Exception as e:
+                profiler.stop('safe_send')
+                log.error(f"Error sending message: {e}")
+                return None
+        
+        profiler.stop('safe_send')
+        log.error(f"Failed to send message after {max_retries} retries")
+        return None
     
     async def safe_add_reaction(self, message, emoji):
-        """Add a reaction with rate limit protection"""
-        try:
-            await message.add_reaction(emoji)
-        except discord.errors.HTTPException as e:
-            if e.status == 429:
-                retry_after = getattr(e, 'retry_after', 0.5)
-                await asyncio.sleep(retry_after)
-                try:
-                    await message.add_reaction(emoji)
-                except:
-                    pass
-        except:
-            pass
+        """Add a reaction with rate limit protection and exponential backoff"""
+        max_retries = 3
+        for attempt in range(max_retries):
+            try:
+                await message.add_reaction(emoji)
+                return True
+            except discord.errors.HTTPException as e:
+                if e.status == 429:
+                    retry_after = getattr(e, 'retry_after', 0.5 * (2 ** attempt))
+                    if attempt < max_retries - 1:
+                        await asyncio.sleep(retry_after)
+                else:
+                    return False
+            except:
+                return False
+        return False
+    
+    async def safe_edit_message(self, message, content=None, embed=None):
+        """Edit a message with rate limit protection and exponential backoff"""
+        if message is None:
+            return None
+        
+        channel_id = message.channel.id
+        backoff = self._rate_limit_backoff.get(channel_id, 1.0)
+        
+        max_retries = 4
+        for attempt in range(max_retries):
+            try:
+                result = await message.edit(content=content, embed=embed)
+                # Reduce backoff on success
+                if channel_id in self._rate_limit_backoff:
+                    self._rate_limit_backoff[channel_id] = max(1.0, self._rate_limit_backoff[channel_id] * 0.9)
+                return result
+            except discord.errors.HTTPException as e:
+                if e.status == 429:
+                    retry_after = getattr(e, 'retry_after', 1.0 * (2 ** attempt))
+                    self._rate_limit_backoff[channel_id] = min(8.0, backoff * 2)
+                    log.warning(f"Rate limited on edit (attempt {attempt+1}/{max_retries}), waiting {retry_after:.1f}s")
+                    await asyncio.sleep(retry_after)
+                else:
+                    return None
+            except Exception as e:
+                log.error(f"Error editing message: {e}")
+                return None
+        return None
+    
+    async def safe_delete_message(self, message):
+        """Delete a message with rate limit protection"""
+        if message is None:
+            return False
+        
+        max_retries = 3
+        for attempt in range(max_retries):
+            try:
+                await message.delete()
+                return True
+            except discord.errors.HTTPException as e:
+                if e.status == 429:
+                    retry_after = getattr(e, 'retry_after', 0.5 * (2 ** attempt))
+                    if attempt < max_retries - 1:
+                        await asyncio.sleep(retry_after)
+                elif e.status == 404:
+                    return True  # Already deleted
+                else:
+                    return False
+            except:
+                return False
+        return False
     # =============================================
 
+    async def persist_attachment(self, attachment: discord.Attachment) -> str:
+        """
+        Re-upload an attachment to get a permanent Discord CDN URL AND download locally for persistence.
+        Discord slash command attachment URLs expire, but message attachment URLs are permanent.
+        We also store locally as backup.
+        
+        Returns the permanent URL or the original URL if re-upload fails.
+        """
+        try:
+            # Download the attachment data
+            image_data = await attachment.read()
+            
+            # Get the QTE channel to upload to
+            channel = self.bot.get_channel(self.qte_channel_id)
+            if not channel:
+                console.print("[yellow]⚠️ Could not get channel for image persistence, using temporary URL[/yellow]")
+                return attachment.url
+            
+            # Create a discord.File from the data
+            import io
+            file = discord.File(io.BytesIO(image_data), filename=attachment.filename)
+            
+            # Also save locally as backup
+            local_path = await self.download_and_store_asset(
+                attachment.url, 
+                "counter_gifs",
+                attachment.filename.split('.')[0]
+            )
+            console.print(f"[green]✓ Asset backed up locally: {local_path}[/green]")
+            
+            # Send a message with the file for persistence (direct send, no webhook)
+            try:
+                msg = await channel.send(
+                    content="📁 (Image storage - ignore)",
+                    file=file
+                )
+                
+                # Get the permanent URL from the attachment
+                if msg.attachments:
+                    permanent_url = msg.attachments[0].url
+                    
+                    # DON'T delete the storage message - Discord CDN URLs expire when the message is deleted!
+                    # The message will stay in the channel but be hidden among normal messages
+                    console.print(f"[green]✓ Image persisted: {attachment.filename}[/green]")
+                    return permanent_url
+            except:
+                pass
+            
+            # Fallback: return original URL
+            console.print("[yellow]⚠️ Could not persist image, using temporary URL[/yellow]")
+            return attachment.url
+            
+        except Exception as e:
+            log.error(f"Error persisting attachment: {e}")
+            return attachment.url
+
     def check_black_flash(self, user_id, response_time, difficulty, is_chain=False):
-        """Check if a black flash occurred"""
-        # Get player's current black flash chance
+        """Check if a black flash occurred - TIMING + RNG based (harder to get)"""
+        # Get player's current stats
         if user_id not in self.player_stats:
             return False
 
         stats = self.player_stats[user_id]
-        if 'black_flash_chance' not in stats:
-            stats['black_flash_chance'] = self.black_flash_base_chance
+        if 'black_flashes' not in stats:
             stats['black_flashes'] = 0
 
         # Get adjusted perfect timing if in REVENGE mode
         perfect_timing = self.get_adjusted_parry_center(difficulty, user_id)
         timing_deviation = abs(response_time - perfect_timing)
 
-        # Use wider timing for first BF (0.5s), tighter for chains (0.3s)
-        timing_window = self.bf_chain_timing_window if is_chain else self.bf_timing_window
-        if timing_deviation > timing_window:
-            return False  # Not perfect enough timing
-
-        # Base chance + REVENGE bonus if active + buff bonus
-        chance = stats['black_flash_chance']
-        if user_id in self.player_hp and self.player_hp[user_id].get("revenge_mode", False):
-            chance += self.revenge_bf_bonus
+        # Use tighter timing for first BF (0.2s), even tighter for chains (0.15s base)
+        base_window = self.bf_chain_timing_window if is_chain else self.bf_timing_window
         
-        # Add buff bonus from support skills
-        chance += self.get_bf_boost(user_id)
-            
-        roll = random.random()
-
-        if roll < chance:
-            # BLACK FLASH!
+        # REVENGE mode widens the window slightly
+        timing_window = base_window
+        if user_id in self.player_hp and self.player_hp[user_id].get("revenge_mode", False):
+            timing_window += 0.05  # +0.05s forgiveness in revenge mode (reduced from 0.1)
+        
+        # STEP 1: Check if within timing window (MUST be close to perfect)
+        if timing_deviation > timing_window:
+            return False  # Not even close enough to roll
+        
+        # STEP 2: RNG roll using player's luck modifier (timing qualifies, now roll for it!)
+        bf_chance = stats.get('black_flash_chance', self.black_flash_base_chance)
+        
+        # Add REVENGE bonus to chance
+        if user_id in self.player_hp and self.player_hp[user_id].get("revenge_mode", False):
+            bf_chance += self.revenge_bf_bonus
+        
+        # Add buff bonus
+        bf_chance += self.get_bf_boost(user_id)
+        
+        # Roll the dice!
+        if random.random() < bf_chance:
+            # BLACK FLASH! Timing + Luck aligned!
             stats['black_flashes'] += 1
-
-            # Increase permanent chance (capped)
-            if stats['black_flash_chance'] < self.black_flash_cap:
-                stats['black_flash_chance'] += self.black_flash_increment
-                stats['black_flash_chance'] = min(stats['black_flash_chance'], self.black_flash_cap)
-
             self.session_stats['black_flashes_today'] += 1
+            
+            # Increase luck for next time (capped)
+            if stats.get('black_flash_chance', 0) < self.black_flash_cap:
+                stats['black_flash_chance'] = min(
+                    stats.get('black_flash_chance', self.black_flash_base_chance) + self.black_flash_increment,
+                    self.black_flash_cap
+                )
+            
+            console.print(f"[bold magenta]⚡ BLACK FLASH! Timing: {timing_deviation:.3f}s, Chance: {bf_chance:.1%}[/bold magenta]")
             return True
 
+        console.print(f"[dim]BF roll failed - Timing: {timing_deviation:.3f}s (good!), Chance: {bf_chance:.1%} (bad luck)[/dim]")
         return False
+
+    def can_save_qte(self, user_id):
+        """Check if player can perform a save (rate limited to 2 per minute)"""
+        current_time = time.time()
+        
+        # Initialize timestamps list if first time
+        if user_id not in self.save_timestamps:
+            self.save_timestamps[user_id] = []
+        
+        # Remove timestamps older than the time window
+        self.save_timestamps[user_id] = [
+            ts for ts in self.save_timestamps[user_id] 
+            if current_time - ts < self.save_time_window
+        ]
+        
+        # Check if at limit
+        if len(self.save_timestamps[user_id]) >= self.save_limit:
+            return False
+        
+        # Add current timestamp and return True
+        self.save_timestamps[user_id].append(current_time)
+        return True
     
-    async def trigger_bf_chain_qte(self, user_id, channel, member, difficulty, chain_level):
+    async def trigger_bf_chain_qte(self, user_id, channel, member, difficulty, chain_level, origin_message=None):
         """Trigger a Black Flash chain QTE - special QTE that only checks for BF, no damage on fail"""
         try:
             qte_id = self.qte_counter
@@ -531,16 +1082,27 @@ class AdvancedQTEBot:
             chain_name = chain_names.get(chain_level, "CHAIN")
             
             # Dramatic chain announcement
+            # Calculate perfect timing for display
+            perfect_timing = self.get_adjusted_parry_center(difficulty, user_id)
+            parry_min, parry_max = self.get_adjusted_parry_window(difficulty, user_id)
+            
             embed = discord.Embed(
                 title=f"⚡🔥 {chain_name} BLACK FLASH CHAIN! 🔥⚡",
                 description=f"**{member.mention}** is in the zone!\n\n"
                            f"🎯 Land another `*parry*` for **{damage} DAMAGE!**\n"
                            f"⏱️ You have **3 seconds!**\n\n"
+                           f"⭐ **AIM FOR {perfect_timing:.2f}s** ⭐\n"
+                           f"📍 Window: {parry_min:.2f}s - {parry_max:.2f}s\n\n"
                            f"*No damage on miss - just chain ends!*",
                 color=discord.Color.from_rgb(255, 0, 255)  # Hot pink
             )
-            embed.set_footer(text=f"Chain {chain_level}/4 | Perfect timing required!")
+            embed.set_image(url=self.black_flash_gif)  # Add BF GIF to chain announcement
+            embed.set_footer(text=f"Chain {chain_level}/4 | ⭐=BF Window | Perfect ~{perfect_timing:.1f}s")
             await self.safe_send(channel, embed=embed)
+
+            # React on the player's successful parry message to signal the new window
+            if origin_message:
+                asyncio.create_task(self.add_reaction_to_response(channel, user_id, origin_message, "⭐"))
             
             # Add exclamation reaction to indicate chain opportunity
             try:
@@ -649,7 +1211,7 @@ class AdvancedQTEBot:
                     if chain_level < 4:
                         # Trigger next chain QTE after short delay
                         await asyncio.sleep(0.5)
-                        await self.trigger_bf_chain_qte(user_id, channel, target, difficulty, chain_level + 1)
+                        await self.trigger_bf_chain_qte(user_id, channel, target, difficulty, chain_level + 1, origin_message=message)
                     else:
                         # Max chain reached! Apply full cooldown
                         cooldown_seconds = self.bf_parry_cooldowns.get(4, 120)
@@ -668,6 +1230,10 @@ class AdvancedQTEBot:
                     return True
                 else:
                     # Parry success but NO Black Flash - chain ends (no damage penalty)
+                    # Show how close they were to the BF window
+                    parry_indicator = self.get_parry_visual_indicator(response_time, difficulty, user_id)
+                    timing_feedback = self.get_parry_timing_feedback(response_time, difficulty, user_id)
+                    
                     cooldown_seconds = self.bf_parry_cooldowns.get(chain_level, 10)
                     self.player_parry_cooldown[user_id] = time.time() + cooldown_seconds
                     
@@ -677,10 +1243,10 @@ class AdvancedQTEBot:
                     self.active_qtes.pop(qte_id, None)
                     
                     await self.webhook_send(
-                        content=f"⚔️ {message.author.mention} **parried but no Black Flash!** Chain ends.\n"
+                        content=f"{parry_indicator} {message.author.mention} **parried [{timing_feedback}] but no Black Flash!** Chain ends.\n"
                         f"Parry cooldown: **{cooldown_seconds}s**"
                     )
-                    console.print(f"[yellow]⚔ BF Chain ended (no flash) - {message.author.name}[/yellow]")
+                    console.print(f"[yellow]⚔ BF Chain ended (no flash, {timing_feedback}) - {message.author.name}[/yellow]")
                     self.save_all_data()
                     return True
             else:
@@ -785,6 +1351,11 @@ class AdvancedQTEBot:
                 config_table.add_row("Admin Role", "Not set", "-", "[yellow]⚠️[/yellow]")
             
             console.print(config_table)
+
+            # If reset was requested, clear HP thread messages once
+            if self.hp_cleanup_needed:
+                await self.cleanup_hp_thread_messages()
+                console.print("[yellow]✓ HP thread cleared and data reset[/yellow]")
             # ================================================
 
             try:
@@ -815,9 +1386,6 @@ class AdvancedQTEBot:
                 except Exception as e:
                     console.print(f"[yellow]⚠ Could not auto-cleanup commands: {e}[/yellow]")
                 
-                # Initialize webhooks for rate-limit bypass
-                await self.initialize_webhooks()
-                
                 # Start periodic save task
                 self.bot.loop.create_task(self._periodic_save_loop())
                 console.print("[green]✓ Periodic save task started (every 30s)[/green]")
@@ -839,11 +1407,44 @@ class AdvancedQTEBot:
             if message.author.bot:
                 return
             
-            content_lower = message.content.lower()
+            content = message.content
+            content_lower = content.lower()
+            
+            # ========== AI PROMPT HANDLING (-- prefix) ==========
+            if content.startswith('--') and len(content) > 2:
+                prompt = content[2:].strip()
+                if prompt and self.ai_enabled:
+                    await self.handle_ai_prompt(message, prompt)
+                    return
+                elif prompt and not self.ai_enabled:
+                    await message.reply("❌ AI is currently disabled. Use `/ai enable:True` to enable it.", mention_author=False)
+                    return
+            
+            # ========== AI MESSAGE COUNTER (auto-respond) ==========
+            if self.ai_enabled and message.channel.id:
+                channel_id = message.channel.id
+                # Only track in AI channel if set, otherwise track everywhere
+                if self.ai_channel_id is None or channel_id == self.ai_channel_id:
+                    self.ai_message_counter[channel_id] = self.ai_message_counter.get(channel_id, 0) + 1
+                    
+                    # Check if we should auto-respond
+                    if self.ai_message_counter[channel_id] >= self.ai_trigger_count:
+                        # Check cooldown
+                        last_response = self.ai_last_response.get(channel_id, 0)
+                        if time.time() - last_response >= self.ai_cooldown:
+                            # Get recent context
+                            context = await self.get_channel_context(message.channel, limit=5)
+                            await self.handle_ai_auto_response(message.channel, context)
+                            self.ai_message_counter[channel_id] = 0
 
             # Handle *attack* counter command
             if '*attack*' in content_lower:
                 await self.handle_counter_attack(message)
+                return
+            
+            # Handle *adapt* during counter window (allows adapt while counter is enabled)
+            if '*adapt*' in content_lower:
+                await self.handle_adapt_command(message)
                 return
             
             # Handle *power1* and *power2* activation
@@ -888,6 +1489,274 @@ class AdvancedQTEBot:
             log.exception(f"Unhandled error in event: {event}")
 
     def setup_slash_commands(self):
+        # ========== AI CONFIGURATION COMMAND ==========
+        @self.bot.tree.command(
+            name="ai",
+            description="[ADMIN] Configure AI/Ollama integration"
+        )
+        @app_commands.describe(
+            enable="Enable or disable AI features",
+            channel="Restrict AI to this channel only (leave empty for all channels)",
+            trigger_count="Number of messages before auto-response (0 to disable)",
+            cooldown="Seconds between auto-responses",
+            model="Ollama model name (default: dolphin-phi:2.7b)"
+        )
+        async def ai_config_command(
+            interaction: discord.Interaction,
+            enable: bool = None,
+            channel: discord.TextChannel = None,
+            trigger_count: int = None,
+            cooldown: int = None,
+            model: str = None
+        ):
+            # Check admin role
+            if self.admin_role_id and self.admin_role_id not in [role.id for role in interaction.user.roles]:
+                await interaction.response.send_message("❌ Admin only!", ephemeral=True)
+                return
+            
+            changes = []
+            
+            if enable is not None:
+                self.ai_enabled = enable
+                changes.append(f"**Enabled**: {enable}")
+            
+            if channel is not None:
+                self.ai_channel_id = channel.id
+                changes.append(f"**Channel**: {channel.mention}")
+            elif channel == "":
+                self.ai_channel_id = None
+                changes.append("**Channel**: All channels")
+            
+            if trigger_count is not None:
+                self.ai_trigger_count = max(0, trigger_count)
+                changes.append(f"**Auto-trigger**: Every {trigger_count} messages" if trigger_count > 0 else "**Auto-trigger**: Disabled")
+            
+            if cooldown is not None:
+                self.ai_cooldown = max(5, cooldown)
+                changes.append(f"**Cooldown**: {cooldown}s")
+            
+            if model is not None:
+                self.ai_model = model
+                changes.append(f"**Model**: {model}")
+            
+            if not changes:
+                # Show current settings
+                embed = discord.Embed(
+                    title="🤖 AI Configuration",
+                    color=discord.Color.blue()
+                )
+                embed.add_field(name="Enabled", value="✅ Yes" if self.ai_enabled else "❌ No", inline=True)
+                embed.add_field(name="Model", value=f"`{self.ai_model}`", inline=True)
+                embed.add_field(name="Endpoint", value=f"`{self.ai_endpoint}`", inline=True)
+                embed.add_field(name="Channel", value=f"<#{self.ai_channel_id}>" if self.ai_channel_id else "All channels", inline=True)
+                embed.add_field(name="Auto-trigger", value=f"Every {self.ai_trigger_count} messages" if self.ai_trigger_count > 0 else "Disabled", inline=True)
+                embed.add_field(name="Cooldown", value=f"{self.ai_cooldown}s", inline=True)
+                embed.set_footer(text="Use --your message to prompt the AI directly")
+                await interaction.response.send_message(embed=embed, ephemeral=True)
+            else:
+                embed = discord.Embed(
+                    title="🤖 AI Settings Updated",
+                    description="\n".join(changes),
+                    color=discord.Color.green()
+                )
+                await interaction.response.send_message(embed=embed, ephemeral=True)
+                console.print(f"[cyan]🤖 AI config updated by {interaction.user.name}: {', '.join(changes)}[/cyan]")
+        
+        @self.bot.tree.command(
+            name="aitest",
+            description="Test AI connection with a simple prompt"
+        )
+        @app_commands.describe(prompt="Test prompt to send to the AI")
+        async def aitest_command(interaction: discord.Interaction, prompt: str = "Hello, respond with a brief greeting."):
+            await interaction.response.defer(ephemeral=True)
+            
+            response = await self.call_ollama(prompt)
+            
+            if response:
+                embed = discord.Embed(
+                    title="🤖 AI Test Successful!",
+                    color=discord.Color.green()
+                )
+                embed.add_field(name="Prompt", value=prompt[:200], inline=False)
+                embed.add_field(name="Response", value=response[:1000] if len(response) <= 1000 else response[:1000] + "...", inline=False)
+                embed.add_field(name="Model", value=self.ai_model, inline=True)
+                await interaction.followup.send(embed=embed, ephemeral=True)
+            else:
+                embed = discord.Embed(
+                    title="❌ AI Test Failed",
+                    description="Could not connect to Ollama.\n\nMake sure:\n• Ollama is running (`ollama serve`)\n• Model is loaded (`ollama run dolphin-phi:2.7b`)\n• Endpoint is correct",
+                    color=discord.Color.red()
+                )
+                embed.add_field(name="Endpoint", value=f"`{self.ai_endpoint}`", inline=True)
+                embed.add_field(name="Model", value=f"`{self.ai_model}`", inline=True)
+                await interaction.followup.send(embed=embed, ephemeral=True)
+        
+        @self.bot.tree.command(
+            name="aimodel",
+            description="[ADMIN] List available AI models or switch to a different one"
+        )
+        @app_commands.describe(
+            action="Action to perform",
+            model_name="Model name to switch to (for 'switch' action)"
+        )
+        @app_commands.choices(action=[
+            app_commands.Choice(name="List available models", value="list"),
+            app_commands.Choice(name="Switch model", value="switch"),
+            app_commands.Choice(name="Reload current model", value="reload"),
+        ])
+        async def aimodel_command(
+            interaction: discord.Interaction, 
+            action: str = "list",
+            model_name: str = None
+        ):
+            # Check admin role
+            if self.admin_role_id and self.admin_role_id not in [role.id for role in interaction.user.roles]:
+                await interaction.response.send_message("❌ Admin only!", ephemeral=True)
+                return
+            
+            await interaction.response.defer(ephemeral=True)
+            
+            if action == "list":
+                # List all available models
+                models = await self.ollama_list_models()
+                
+                if not models:
+                    embed = discord.Embed(
+                        title="❌ No Models Found",
+                        description="Could not retrieve model list.\n\nMake sure Ollama is running.",
+                        color=discord.Color.red()
+                    )
+                    embed.add_field(name="Endpoint", value=f"`{self.ai_endpoint}`", inline=False)
+                    await interaction.followup.send(embed=embed, ephemeral=True)
+                    return
+                
+                embed = discord.Embed(
+                    title="🤖 Available AI Models",
+                    description=f"**{len(models)}** model(s) installed",
+                    color=discord.Color.blue()
+                )
+                
+                model_list = ""
+                for m in models:
+                    is_active = "✅ " if m == self.ai_model else "   "
+                    model_list += f"{is_active}`{m}`\n"
+                
+                embed.add_field(name="Models", value=model_list or "None", inline=False)
+                embed.add_field(name="Current Model", value=f"`{self.ai_model}`", inline=True)
+                embed.set_footer(text="Use /aimodel action:Switch model_name:<name> to change")
+                await interaction.followup.send(embed=embed, ephemeral=True)
+            
+            elif action == "switch":
+                if not model_name:
+                    await interaction.followup.send("❌ Please specify a model name to switch to!", ephemeral=True)
+                    return
+                
+                # Check if model exists
+                models = await self.ollama_list_models()
+                if model_name not in models:
+                    embed = discord.Embed(
+                        title="❌ Model Not Found",
+                        description=f"Model `{model_name}` is not installed.\n\nAvailable models:\n" + 
+                                   "\n".join([f"• `{m}`" for m in models[:10]]),
+                        color=discord.Color.red()
+                    )
+                    embed.set_footer(text="Install models with: ollama pull <model_name>")
+                    await interaction.followup.send(embed=embed, ephemeral=True)
+                    return
+                
+                old_model = self.ai_model
+                
+                # Unload old model
+                await interaction.followup.send(f"📤 Unloading `{old_model}`...", ephemeral=True)
+                await self.ollama_unload_model(old_model)
+                
+                # Update model name
+                self.ai_model = model_name
+                
+                # Load new model
+                await interaction.edit_original_response(content=f"📥 Loading `{model_name}`...")
+                success = await self.ollama_load_model(model_name)
+                
+                if success:
+                    embed = discord.Embed(
+                        title="✅ Model Switched!",
+                        description=f"Successfully switched from `{old_model}` to `{model_name}`",
+                        color=discord.Color.green()
+                    )
+                    embed.add_field(name="Previous", value=f"`{old_model}`", inline=True)
+                    embed.add_field(name="Current", value=f"`{model_name}`", inline=True)
+                    await interaction.edit_original_response(content=None, embed=embed)
+                    console.print(f"[green]🤖 AI model switched: {old_model} → {model_name} by {interaction.user.name}[/green]")
+                else:
+                    # Revert on failure
+                    self.ai_model = old_model
+                    embed = discord.Embed(
+                        title="❌ Model Switch Failed",
+                        description=f"Could not load `{model_name}`. Reverted to `{old_model}`.",
+                        color=discord.Color.red()
+                    )
+                    await interaction.edit_original_response(content=None, embed=embed)
+            
+            elif action == "reload":
+                # Reload current model (unload then load)
+                current = self.ai_model
+                
+                await interaction.followup.send(f"🔄 Reloading `{current}`...", ephemeral=True)
+                await self.ollama_unload_model(current)
+                
+                await interaction.edit_original_response(content=f"📥 Loading `{current}`...")
+                success = await self.ollama_load_model(current)
+                
+                if success:
+                    embed = discord.Embed(
+                        title="✅ Model Reloaded!",
+                        description=f"Successfully reloaded `{current}`",
+                        color=discord.Color.green()
+                    )
+                    await interaction.edit_original_response(content=None, embed=embed)
+                    console.print(f"[green]🤖 AI model reloaded: {current} by {interaction.user.name}[/green]")
+                else:
+                    embed = discord.Embed(
+                        title="⚠️ Reload May Have Failed",
+                        description=f"Model `{current}` may not have loaded correctly. Try testing with `/aitest`.",
+                        color=discord.Color.orange()
+                    )
+                    await interaction.edit_original_response(content=None, embed=embed)
+        
+        # ========== END AI COMMANDS ==========
+        
+        @self.bot.tree.command(
+            name="timing",
+            description="[ADMIN] Show performance timing report"
+        )
+        async def timing_command(interaction: discord.Interaction, clear: bool = False):
+            try:
+                # Check admin role
+                if self.admin_role_id and self.admin_role_id not in [role.id for role in interaction.user.roles]:
+                    await interaction.response.send_message("❌ Admin only!", ephemeral=True)
+                    return
+                
+                if clear:
+                    profiler.clear()
+                    await interaction.response.send_message("🧹 Timing data cleared!", ephemeral=True)
+                    return
+                
+                report = profiler.format_report()
+                if len(report) > 1900:
+                    # Split into chunks if too long
+                    report = report[:1900] + "\n... (truncated)"
+                
+                embed = discord.Embed(
+                    title="⏱️ Performance Timing Report",
+                    description=f"```\n{report}\n```",
+                    color=discord.Color.blue()
+                )
+                embed.add_field(name="Log File", value=LOG_FILENAME, inline=False)
+                await interaction.response.send_message(embed=embed, ephemeral=True)
+            except Exception as e:
+                log.error(f"Error in timing command: {e}")
+                await interaction.response.send_message("❌ An error occurred.", ephemeral=True)
+        
         @self.bot.tree.command(name="qte", description="Toggle your QTE participation status")
         async def qte_command(interaction: discord.Interaction):
             try:
@@ -963,6 +1832,244 @@ class AdvancedQTEBot:
                 log.error(f"Error in mycharacters command: {e}")
                 await interaction.response.send_message("❌ An error occurred.", ephemeral=True)
 
+        # ========== OBJECT CHARGES VIEW & MODAL ==========
+        class ObjectChargesView(discord.ui.View):
+            def __init__(self, bot_instance, target_user_id):
+                super().__init__(timeout=300)
+                self.bot_instance = bot_instance
+                self.target_user_id = target_user_id
+            
+            def build_embed(self):
+                """Build the embed showing object spins"""
+                # Start with inventory-listed objects (use int key)
+                inventory = list(self.bot_instance.special_objects_manager.player_inventory.get(self.target_user_id, []))
+                # Include unique objects owned by this user
+                owners_map = getattr(self.bot_instance.special_objects_manager, 'unique_object_owners', {})
+                for obj_id, owner_id in owners_map.items():
+                    if owner_id == self.target_user_id and obj_id not in inventory:
+                        inventory.append(obj_id)
+                
+                embed = discord.Embed(
+                    title="🔮 Object Charges (Adaptation Spins)",
+                    description="Track your special object adaptation progress per difficulty.",
+                    color=discord.Color.purple()
+                )
+                
+                if not inventory:
+                    embed.description = "No special objects found."
+                    return embed
+                
+                for obj_id in inventory:
+                    obj = self.bot_instance.special_objects_manager.objects.get(obj_id)
+                    if not obj:
+                        continue
+                    
+                    obj_name = obj.get('name', obj_id)
+                    emoji = obj.get('display', {}).get('emoji', '🔮')
+                    
+                    # Check tracking type
+                    tracking_config = obj.get('tracking', {})
+                    tracking_type = tracking_config.get('type', 'per_difficulty') if isinstance(tracking_config, dict) else 'per_difficulty'
+                    
+                    spin_text = []
+                    thresholds = obj.get('thresholds', [])
+                    
+                    if tracking_type == 'total':
+                        # Total tracking - single counter
+                        spins = self.bot_instance.special_objects_manager.get_tracking(self.target_user_id, obj_id, 'total')
+                        if isinstance(thresholds, list) and thresholds:
+                            max_threshold = max(t['spins'] for t in thresholds)
+                            status = "✅ MAXED" if spins >= max_threshold else f"{spins}/{max_threshold}"
+                            spin_text.append(f"**Total Spins**: {status}")
+                        else:
+                            spin_text.append(f"**Total Spins**: {spins}")
+                    else:
+                        # Per-difficulty tracking
+                        for difficulty in ['easy', 'medium', 'hard', 'impossible']:
+                            spins = self.bot_instance.special_objects_manager.get_tracking(self.target_user_id, obj_id, difficulty)
+                            diff_thresholds = thresholds.get(difficulty, []) if isinstance(thresholds, dict) else []
+                            
+                            if diff_thresholds:
+                                max_threshold = max(t['spins'] for t in diff_thresholds)
+                                status = "✅" if spins >= max_threshold else f"{spins}/{max_threshold}"
+                                spin_text.append(f"**{difficulty.capitalize()}**: {status}")
+                            elif spins > 0:
+                                spin_text.append(f"**{difficulty.capitalize()}**: {spins}")
+                    
+                    field_value = "\n".join(spin_text) if spin_text else "*No adaptation tracking*"
+                    embed.add_field(name=f"{emoji} {obj_name}", value=field_value, inline=False)
+                
+                embed.set_footer(text="GMs can edit spins using the button below")
+                return embed
+            
+            @discord.ui.button(label="✏️ Edit Spins (GM Only)", style=discord.ButtonStyle.danger, row=0)
+            async def edit_spins_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+                # Check if user is GM/admin
+                if not interaction.user.guild_permissions.administrator:
+                    await interaction.response.send_message("❌ Only GMs/Admins can edit object spins!", ephemeral=True)
+                    return
+                
+                # Get inventory (use int key)
+                inventory = self.bot_instance.special_objects_manager.player_inventory.get(self.target_user_id, [])
+                
+                if not inventory:
+                    await interaction.response.send_message("❌ This user has no special objects!", ephemeral=True)
+                    return
+                
+                # For now, open modal for first object (TODO: add object selector)
+                obj_id = inventory[0]
+                modal = ObjectSpinsModal(self.bot_instance, self.target_user_id, obj_id)
+                await interaction.response.send_modal(modal)
+        
+        class ObjectSpinsModal(discord.ui.Modal):
+            def __init__(self, bot_instance, target_user_id, obj_id):
+                super().__init__(title="Edit Object Spins")
+                self.bot_instance = bot_instance
+                self.target_user_id = target_user_id
+                self.obj_id = obj_id
+                
+                obj = self.bot_instance.special_objects_manager.objects.get(obj_id)
+                obj_name = obj.get('name', obj_id) if obj else obj_id
+                
+                # Check tracking type
+                tracking_config = obj.get('tracking', {}) if obj else {}
+                self.tracking_type = tracking_config.get('type', 'per_difficulty') if isinstance(tracking_config, dict) else 'per_difficulty'
+                
+                if self.tracking_type == 'total':
+                    # Total tracking - single input
+                    total_spins = self.bot_instance.special_objects_manager.get_tracking(
+                        target_user_id, obj_id, 'total'
+                    )
+                    self.total_input = discord.ui.TextInput(
+                        label=f"{obj_name} - Total Spins",
+                        placeholder="Enter total number of spins",
+                        default=str(total_spins),
+                        required=True,
+                        max_length=5
+                    )
+                    self.add_item(self.total_input)
+                    self.easy_input = None
+                    self.medium_input = None
+                    self.hard_input = None
+                    self.impossible_input = None
+                else:
+                    # Per-difficulty tracking
+                    self.total_input = None
+                    current_spins = {}
+                    for difficulty in ['easy', 'medium', 'hard', 'impossible']:
+                        current_spins[difficulty] = self.bot_instance.special_objects_manager.get_tracking(
+                            target_user_id, obj_id, difficulty
+                        )
+                    
+                    self.easy_input = discord.ui.TextInput(
+                        label=f"{obj_name} - Easy Spins",
+                        placeholder="Enter number of easy spins",
+                        default=str(current_spins.get('easy', 0)),
+                        required=True,
+                        max_length=5
+                    )
+                    self.add_item(self.easy_input)
+                    
+                    self.medium_input = discord.ui.TextInput(
+                        label=f"{obj_name} - Medium Spins",
+                        placeholder="Enter number of medium spins",
+                        default=str(current_spins.get('medium', 0)),
+                        required=True,
+                        max_length=5
+                    )
+                    self.add_item(self.medium_input)
+                    
+                    self.hard_input = discord.ui.TextInput(
+                        label=f"{obj_name} - Hard Spins",
+                        placeholder="Enter number of hard spins",
+                        default=str(current_spins.get('hard', 0)),
+                        required=True,
+                        max_length=5
+                    )
+                    self.add_item(self.hard_input)
+                    
+                    self.impossible_input = discord.ui.TextInput(
+                        label=f"{obj_name} - Impossible Spins",
+                        placeholder="Enter number of impossible spins",
+                        default=str(current_spins.get('impossible', 0)),
+                        required=True,
+                        max_length=5
+                    )
+                    self.add_item(self.impossible_input)
+            
+            async def on_submit(self, interaction: discord.Interaction):
+                try:
+                    obj = self.bot_instance.special_objects_manager.objects.get(self.obj_id)
+                    obj_name = obj.get('name', self.obj_id) if obj else self.obj_id
+                    
+                    # Get target user
+                    target_user = await interaction.guild.fetch_member(self.target_user_id)
+                    target_name = target_user.display_name if target_user else f"User {self.target_user_id}"
+                    
+                    if self.tracking_type == 'total':
+                        # Total tracking - single value
+                        total_spins = int(self.total_input.value)
+                        if total_spins < 0:
+                            await interaction.response.send_message("❌ Spins must be non-negative!", ephemeral=True)
+                            return
+                        
+                        self.bot_instance.special_objects_manager.set_tracking(
+                            self.target_user_id, self.obj_id, 'total', total_spins
+                        )
+                        
+                        # Save to file
+                        self.bot_instance.special_objects_manager.save_tracking()
+                        
+                        embed = discord.Embed(
+                            title="✅ Object Spins Updated",
+                            description=f"Updated **{obj_name}** spins for **{target_name}**",
+                            color=discord.Color.green()
+                        )
+                        embed.add_field(name="Total Spins", value=total_spins, inline=True)
+                        
+                        await interaction.response.send_message(embed=embed, ephemeral=True)
+                    else:
+                        # Per-difficulty tracking
+                        new_spins = {
+                            'easy': int(self.easy_input.value),
+                            'medium': int(self.medium_input.value),
+                            'hard': int(self.hard_input.value),
+                            'impossible': int(self.impossible_input.value)
+                        }
+                        
+                        # Validate non-negative
+                        for difficulty, spins in new_spins.items():
+                            if spins < 0:
+                                await interaction.response.send_message(f"❌ Spins must be non-negative! ({difficulty})", ephemeral=True)
+                                return
+                        
+                        # Update tracking data
+                        for difficulty, spins in new_spins.items():
+                            self.bot_instance.special_objects_manager.set_tracking(
+                                self.target_user_id, self.obj_id, difficulty, spins
+                            )
+                        
+                        # Save to file
+                        self.bot_instance.special_objects_manager.save_tracking()
+                        
+                        embed = discord.Embed(
+                            title="✅ Object Spins Updated",
+                            description=f"Updated **{obj_name}** spins for **{target_name}**",
+                            color=discord.Color.green()
+                        )
+                        embed.add_field(name="Easy", value=new_spins['easy'], inline=True)
+                        embed.add_field(name="Medium", value=new_spins['medium'], inline=True)
+                        embed.add_field(name="Hard", value=new_spins['hard'], inline=True)
+                        embed.add_field(name="Impossible", value=new_spins['impossible'], inline=True)
+                        
+                        await interaction.response.send_message(embed=embed, ephemeral=True)
+                    
+                except ValueError:
+                    await interaction.response.send_message("❌ Invalid input! Please enter numbers only.", ephemeral=True)
+                except Exception as e:
+                    log.error(f"Error updating object spins: {e}")
+                    await interaction.response.send_message(f"❌ Error updating spins: {e}", ephemeral=True)
+
         # ========== DASHBOARD WITH MODAL ==========
         
         class DashboardView(discord.ui.View):
@@ -1002,7 +2109,28 @@ class AdvancedQTEBot:
                 
                 await interaction.response.send_message(embed=embed, ephemeral=True)
             
-            @discord.ui.button(label="🎨 Counter Images", style=discord.ButtonStyle.secondary, row=0)
+            @discord.ui.button(label="🔮 Object Charges", style=discord.ButtonStyle.primary, row=0)
+            async def object_charges_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+                user_id = interaction.user.id
+                
+                # Get player's special objects from inventory (use int key)
+                inventory = self.bot_instance.special_objects_manager.player_inventory.get(user_id, [])
+                
+                if not inventory:
+                    embed = discord.Embed(
+                        title="🔮 Object Charges",
+                        description="You don't have any special objects yet!\n\nAsk a GM to grant you items with `/giveobject`.",
+                        color=discord.Color.purple()
+                    )
+                    await interaction.response.send_message(embed=embed, ephemeral=True)
+                    return
+                
+                # Show objects view with edit button for GMs
+                view = ObjectChargesView(self.bot_instance, user_id)
+                embed = view.build_embed()
+                await interaction.response.send_message(embed=embed, view=view, ephemeral=True)
+            
+            @discord.ui.button(label="🎨 Counter Images", style=discord.ButtonStyle.secondary, row=1)
             async def images_button(self, interaction: discord.Interaction, button: discord.ui.Button):
                 user_id = interaction.user.id
                 gifs = self.bot_instance.user_counter_gifs.get(user_id, [])
@@ -1293,6 +2421,7 @@ class AdvancedQTEBot:
             app_commands.Choice(name="Parry Streak", value="parry_streak"),
             app_commands.Choice(name="Total Attempts", value="total_attempts"),
             app_commands.Choice(name="Best Time", value="best_time"),
+            app_commands.Choice(name="Saves", value="saves"),
         ])
         async def leaderboard_command(interaction: discord.Interaction, category: str = "success_rate"):
             try:
@@ -1339,6 +2468,9 @@ class AdvancedQTEBot:
                         value = stats['best_time'] if stats['best_time'] != float('inf') else 999
                         display = f"{value:.2f}s" if value != 999 else "N/A"
                         value = -value  # Invert for sorting (lower is better)
+                    elif category == "saves":
+                        value = stats.get('saves', 0)
+                        display = str(value)
                     else:
                         value = 0
                         display = "0"
@@ -1354,7 +2486,8 @@ class AdvancedQTEBot:
                     "black_flashes": "⚡ Black Flashes",
                     "parry_streak": "⚔️ Best Parry Streak",
                     "total_attempts": "📊 Total Attempts",
-                    "best_time": "⏱️ Best Response Time"
+                    "best_time": "⏱️ Best Response Time",
+                    "saves": "🛡️ Total Saves"
                 }
                 
                 embed = discord.Embed(
@@ -1418,10 +2551,21 @@ class AdvancedQTEBot:
                     'participants': []
                 }
                 
+                # ========== AUTO-START FIGHT ==========
+                # Automatically start the fight when a boss is registered!
+                self.fight_active = True
+                self.fight_start_time = time.time()
+                
+                # Resume any paused ultimate cooldowns
+                self._resume_ultimate_cooldowns()
+                console.print(f"[green]⚔️ FIGHT STARTED - Ultimate cooldowns now ticking![/green]")
+                # ======================================
+                
                 # Create boss embed
                 embed = discord.Embed(
-                    title=f"👹 BOSS REGISTERED: {name}",
-                    description=f"**HP**: {hp}\n**Status**: Ready for battle!",
+                    title=f"⚔️ BOSS FIGHT STARTED: {name}",
+                    description=f"**HP**: {hp}\n**Status**: ⚔️ **FIGHT IN PROGRESS!**\n\n"
+                               f"🔥 Ultimate cooldowns are now active!",
                     color=discord.Color.dark_red()
                 )
                 embed.set_image(url=gif_url)
@@ -1562,6 +2706,162 @@ class AdvancedQTEBot:
                 await interaction.response.send_message("❌ An error occurred.", ephemeral=True)
 
         @self.bot.tree.command(
+            name="targetqte",
+            description="[ADMIN] Target a specific player with a QTE"
+        )
+        @app_commands.describe(
+            player="The player to target",
+            difficulty="QTE difficulty level"
+        )
+        @app_commands.choices(difficulty=[
+            app_commands.Choice(name="Easy", value="easy"),
+            app_commands.Choice(name="Medium", value="medium"),
+            app_commands.Choice(name="Hard", value="hard"),
+            app_commands.Choice(name="Impossible", value="impossible"),
+        ])
+        async def targetqte_command(interaction: discord.Interaction, player: discord.Member, difficulty: str):
+            try:
+                # Check admin role
+                if self.admin_role_id and self.admin_role_id not in [role.id for role in interaction.user.roles]:
+                    await interaction.response.send_message("❌ Admin only!", ephemeral=True)
+                    return
+                
+                # Check if QTE channel is set
+                channel = self.bot.get_channel(self.qte_channel_id)
+                if not channel:
+                    await interaction.response.send_message("❌ QTE channel not found!", ephemeral=True)
+                    return
+                
+                # Trigger the QTE
+                await interaction.response.send_message(
+                    f"⚡ Targeting **{player.display_name}** with **{difficulty.upper()}** QTE!",
+                    ephemeral=True
+                )
+                
+                # Trigger targeted QTE for this specific player
+                await self.trigger_single_qte(difficulty, target_member=player, is_targeted=True)
+                
+            except Exception as e:
+                log.error(f"Error in targetqte command: {e}")
+                await interaction.response.send_message("❌ An error occurred.", ephemeral=True)
+
+        @self.bot.tree.command(
+            name="editqte",
+            description="[ADMIN] Edit QTE timing and damage values"
+        )
+        @app_commands.describe(
+            difficulty="Which difficulty to edit",
+            evade_window="Evade time window in seconds",
+            parry_start="Parry window start time in seconds",
+            parry_end="Parry window end time in seconds",
+            perfect_parry="Perfect parry timing (for Black Flash)",
+            damage_min="Minimum damage",
+            damage_max="Maximum damage"
+        )
+        @app_commands.choices(difficulty=[
+            app_commands.Choice(name="Easy", value="easy"),
+            app_commands.Choice(name="Medium", value="medium"),
+            app_commands.Choice(name="Hard", value="hard"),
+            app_commands.Choice(name="Impossible", value="impossible"),
+        ])
+        async def editqte_command(
+            interaction: discord.Interaction,
+            difficulty: str,
+            evade_window: float = None,
+            parry_start: float = None,
+            parry_end: float = None,
+            perfect_parry: float = None,
+            damage_min: int = None,
+            damage_max: int = None
+        ):
+            try:
+                # Check admin role
+                if self.admin_role_id and self.admin_role_id not in [role.id for role in interaction.user.roles]:
+                    await interaction.response.send_message("❌ Admin only!", ephemeral=True)
+                    return
+                
+                changes = []
+                
+                # Update evade window
+                if evade_window is not None and evade_window > 0:
+                    old = self.qte_times[difficulty]['evade_window']
+                    self.qte_times[difficulty]['evade_window'] = evade_window
+                    changes.append(f"Evade window: {old}s → {evade_window}s")
+                
+                # Update parry window
+                if parry_start is not None and parry_end is not None:
+                    if parry_start >= parry_end:
+                        await interaction.response.send_message("❌ Parry start must be less than parry end!", ephemeral=True)
+                        return
+                    old = self.qte_times[difficulty]['parry_window']
+                    self.qte_times[difficulty]['parry_window'] = (parry_start, parry_end)
+                    changes.append(f"Parry window: {old} → ({parry_start}, {parry_end})")
+                elif parry_start is not None or parry_end is not None:
+                    await interaction.response.send_message("❌ Must provide both parry_start and parry_end!", ephemeral=True)
+                    return
+                
+                # Update perfect parry
+                if perfect_parry is not None:
+                    old = self.qte_times[difficulty]['perfect_parry']
+                    self.qte_times[difficulty]['perfect_parry'] = perfect_parry
+                    changes.append(f"Perfect parry: {old}s → {perfect_parry}s")
+                
+                # Update damage range
+                if damage_min is not None and damage_max is not None:
+                    if damage_min > damage_max:
+                        await interaction.response.send_message("❌ Min damage must be ≤ max damage!", ephemeral=True)
+                        return
+                    old = self.damage_ranges[difficulty]
+                    self.damage_ranges[difficulty] = (damage_min, damage_max)
+                    changes.append(f"Damage: {old} → ({damage_min}, {damage_max})")
+                elif damage_min is not None or damage_max is not None:
+                    await interaction.response.send_message("❌ Must provide both damage_min and damage_max!", ephemeral=True)
+                    return
+                
+                if changes:
+                    # Save to JSON file
+                    self.save_qte_settings()
+                    
+                    embed = discord.Embed(
+                        title=f"⚡ QTE Settings Updated: {difficulty.upper()}",
+                        description="\n".join(f"• {c}" for c in changes),
+                        color=discord.Color.blue()
+                    )
+                    # Show current values
+                    embed.add_field(
+                        name="Current Settings",
+                        value=f"**Evade Window:** {self.qte_times[difficulty]['evade_window']}s\n"
+                              f"**Parry Window:** {self.qte_times[difficulty]['parry_window']}\n"
+                              f"**Perfect Parry:** {self.qte_times[difficulty]['perfect_parry']}s\n"
+                              f"**Damage:** {self.damage_ranges[difficulty]}",
+                        inline=False
+                    )
+                    await interaction.response.send_message(embed=embed)
+                else:
+                    # Just show current values
+                    embed = discord.Embed(
+                        title=f"⚡ QTE Settings: {difficulty.upper()}",
+                        color=discord.Color.blue()
+                    )
+                    embed.add_field(
+                        name="Timing",
+                        value=f"**Evade Window:** {self.qte_times[difficulty]['evade_window']}s\n"
+                              f"**Parry Window:** {self.qte_times[difficulty]['parry_window']}\n"
+                              f"**Perfect Parry:** {self.qte_times[difficulty]['perfect_parry']}s",
+                        inline=True
+                    )
+                    embed.add_field(
+                        name="Damage",
+                        value=f"**Range:** {self.damage_ranges[difficulty]}",
+                        inline=True
+                    )
+                    await interaction.response.send_message(embed=embed, ephemeral=True)
+                    
+            except Exception as e:
+                log.error(f"Error in editqte command: {e}")
+                await interaction.response.send_message("❌ An error occurred.", ephemeral=True)
+
+        @self.bot.tree.command(
             name="registerpower",
             description="Register a custom power/attack for your character. Character must be registered first!"
         )
@@ -1684,6 +2984,11 @@ class AdvancedQTEBot:
             target: discord.Member = None
         ):
             try:
+                # GM ONLY - command not finished
+                if not self.is_admin(interaction.user):
+                    await interaction.response.send_message("❌ This command is for GMs only (still in development).", ephemeral=True)
+                    return
+                
                 caster_id = interaction.user.id
                 target_id = target.id if target else caster_id
                 target_name = target.display_name if target else interaction.user.display_name
@@ -1725,19 +3030,35 @@ class AdvancedQTEBot:
         async def setcountergif_command(interaction: discord.Interaction, action: str = "add", image: discord.Attachment = None):
             try:
                 user_id = interaction.user.id
+
+                # Acknowledge early to avoid unknown interaction errors
+                deferred = False
+                try:
+                    await interaction.response.defer(ephemeral=True, thinking=True)
+                    deferred = True
+                except discord.NotFound:
+                    log.error("setcountergif interaction expired before defer")
+                    return
+                except Exception as e:
+                    log.warning(f"setcountergif defer failed: {e}")
+
+                async def respond(**kwargs):
+                    if deferred or interaction.response.is_done():
+                        return await interaction.followup.send(**kwargs)
+                    return await interaction.response.send_message(**kwargs)
                 
                 if action == "add":
                     if not image:
-                        await interaction.response.send_message("⚠️ Please upload an image to add!", ephemeral=True)
+                        await respond(content="⚠️ Please upload an image to add!", ephemeral=True)
                         return
                     
                     # Validate it's an image/gif
                     if not image.content_type or not image.content_type.startswith(('image/', 'video/')):
-                        await interaction.response.send_message("⚠️ Please upload an image or GIF file!", ephemeral=True)
+                        await respond(content="⚠️ Please upload an image or GIF file!", ephemeral=True)
                         return
                     
-                    # Use the Discord CDN URL (always works!)
-                    image_url = image.url
+                    # Persist the image to get a permanent URL
+                    image_url = await self.persist_attachment(image)
                     
                     # Initialize as list if not exists or convert from string
                     if user_id not in self.user_counter_gifs:
@@ -1756,14 +3077,14 @@ class AdvancedQTEBot:
                         color=discord.Color.orange()
                     )
                     embed.set_image(url=image_url)
-                    await interaction.response.send_message(embed=embed)
+                    await respond(embed=embed)
                     console.print(f"[orange1]⚡ Counter image added for {interaction.user.display_name} (total: {count})[/orange1]")
                 
                 elif action == "clear":
                     if user_id in self.user_counter_gifs:
                         del self.user_counter_gifs[user_id]
                         self.save_all_data()
-                    await interaction.response.send_message("✅ All counter images cleared! Using default now.", ephemeral=True)
+                    await respond(content="✅ All counter images cleared! Using default now.", ephemeral=True)
                 
                 elif action == "view":
                     gifs = self.user_counter_gifs.get(user_id, [])
@@ -1771,7 +3092,7 @@ class AdvancedQTEBot:
                         gifs = [gifs]
                     
                     if not gifs:
-                        await interaction.response.send_message("📭 No custom counter images set. Using default.", ephemeral=True)
+                        await respond(content="📭 No custom counter images set. Using default.", ephemeral=True)
                         return
                     
                     embed = discord.Embed(
@@ -1784,10 +3105,98 @@ class AdvancedQTEBot:
                     if len(gifs) > 5:
                         embed.set_footer(text=f"... and {len(gifs) - 5} more")
                     embed.set_thumbnail(url=gifs[0])
-                    await interaction.response.send_message(embed=embed, ephemeral=True)
+                    await respond(embed=embed, ephemeral=True)
                     
             except Exception as e:
                 log.error(f"Error in setcountergif command: {e}")
+                try:
+                    if interaction.response.is_done():
+                        await interaction.followup.send("❌ An error occurred.", ephemeral=True)
+                    else:
+                        await interaction.response.send_message("❌ An error occurred.", ephemeral=True)
+                except Exception:
+                    pass
+
+        @self.bot.tree.command(
+            name="bossdefeatgif",
+            description="[ADMIN] Manage boss defeat celebration GIFs. Multiple GIFs will be randomized!"
+        )
+        @app_commands.describe(
+            image="Upload a victory GIF/image to ADD to the collection.",
+            action="Action to perform"
+        )
+        @app_commands.choices(action=[
+            app_commands.Choice(name="Add GIF", value="add"),
+            app_commands.Choice(name="Clear All", value="clear"),
+            app_commands.Choice(name="View Collection", value="view"),
+        ])
+        async def bossdefeatgif_command(interaction: discord.Interaction, action: str = "add", image: discord.Attachment = None):
+            try:
+                # Check admin role
+                if self.admin_role_id and self.admin_role_id not in [role.id for role in interaction.user.roles]:
+                    await interaction.response.send_message("❌ You don't have permission to use this command!", ephemeral=True)
+                    return
+                
+                if action == "add":
+                    if not image:
+                        await interaction.response.send_message("⚠️ Please attach an image or GIF to add!", ephemeral=True)
+                        return
+                    
+                    # Validate it's an image/gif
+                    if not image.content_type or not image.content_type.startswith(('image/', 'video/')):
+                        await interaction.response.send_message("⚠️ Please upload an image or GIF file!", ephemeral=True)
+                        return
+                    
+                    # Defer response since persisting might take a moment
+                    await interaction.response.defer()
+                    
+                    # Persist the image to get a permanent URL
+                    image_url = await self.persist_attachment(image)
+                    
+                    # Add to list
+                    self.boss_defeat_gifs.append(image_url)
+                    self.save_all_data()
+                    
+                    count = len(self.boss_defeat_gifs)
+                    embed = discord.Embed(
+                        title="🎉 Boss Defeat GIF Added!",
+                        description=f"Collection now has **{count}** GIF(s)!\nThey will be randomized on boss defeat.",
+                        color=discord.Color.gold()
+                    )
+                    embed.set_image(url=image_url)
+                    await interaction.followup.send(embed=embed)
+                    console.print(f"[gold1]🎉 Boss defeat GIF added (total: {count})[/gold1]")
+                
+                elif action == "clear":
+                    self.boss_defeat_gifs.clear()
+                    self.save_all_data()
+                    await interaction.response.send_message("✅ All boss defeat GIFs cleared! Using default now.", ephemeral=True)
+                    console.print("[yellow]Boss defeat GIFs cleared[/yellow]")
+                
+                elif action == "view":
+                    gifs = self.boss_defeat_gifs
+                    
+                    if not gifs:
+                        await interaction.response.send_message(
+                            f"📭 No custom boss defeat GIFs set.\nUsing default: {self.default_boss_defeat_gif}", 
+                            ephemeral=True
+                        )
+                        return
+                    
+                    embed = discord.Embed(
+                        title="🏆 Boss Defeat GIF Collection",
+                        description=f"**{len(gifs)}** GIF(s) in rotation",
+                        color=discord.Color.gold()
+                    )
+                    for i, url in enumerate(gifs[:5], 1):  # Show first 5
+                        embed.add_field(name=f"GIF {i}", value=f"[Link]({url})", inline=True)
+                    if len(gifs) > 5:
+                        embed.set_footer(text=f"... and {len(gifs) - 5} more")
+                    embed.set_thumbnail(url=gifs[0])
+                    await interaction.response.send_message(embed=embed, ephemeral=True)
+                    
+            except Exception as e:
+                log.error(f"Error in bossdefeatgif command: {e}")
                 await interaction.response.send_message("❌ An error occurred.", ephemeral=True)
 
         @self.bot.tree.command(
@@ -1852,6 +3261,864 @@ class AdvancedQTEBot:
                 )
             else:
                 await interaction.followup.send("✅ No old commands found!", ephemeral=True)
+        
+        # ========== SPECIAL OBJECTS MANAGEMENT COMMANDS ==========
+        
+        @self.bot.tree.command(
+            name="debuginventory",
+            description="[ADMIN] Debug: Show raw inventory data for a player"
+        )
+        @app_commands.describe(player="Player to check (leave empty for self)")
+        async def debuginventory_command(interaction: discord.Interaction, player: discord.Member = None):
+            # Check admin role
+            if self.admin_role_id and not any(role.id == self.admin_role_id for role in interaction.user.roles):
+                await interaction.response.send_message("❌ Admin only!", ephemeral=True)
+                return
+            
+            target = player or interaction.user
+            user_id = target.id
+            
+            # Get raw inventory data
+            raw_inv = self.special_objects_manager.player_inventory
+            user_inv = raw_inv.get(user_id, None)
+            
+            # Get all keys to show type info
+            all_keys = list(raw_inv.keys())[:10]  # First 10 keys
+            
+            embed = discord.Embed(
+                title=f"🔧 Debug: Inventory for {target.display_name}",
+                description=f"User ID: `{user_id}` (type: {type(user_id).__name__})",
+                color=discord.Color.dark_grey()
+            )
+            
+            embed.add_field(
+                name="Raw Inventory Keys (first 10)",
+                value="\n".join([f"`{k}` (type: {type(k).__name__})" for k in all_keys]) or "*Empty*",
+                inline=False
+            )
+            
+            embed.add_field(
+                name=f"Lookup Result for user_id={user_id}",
+                value=f"`{user_inv}`" if user_inv is not None else "*Not found / None*",
+                inline=False
+            )
+            
+            # Also check with str key
+            str_inv = raw_inv.get(str(user_id), None)
+            embed.add_field(
+                name=f"Lookup Result for str({user_id})",
+                value=f"`{str_inv}`" if str_inv is not None else "*Not found / None*",
+                inline=False
+            )
+            
+            # Show loaded objects count
+            embed.add_field(
+                name="Loaded Objects",
+                value=f"{len(self.special_objects_manager.objects)} objects",
+                inline=True
+            )
+            
+            embed.add_field(
+                name="Total Inventories",
+                value=f"{len(raw_inv)} players",
+                inline=True
+            )
+            
+            await interaction.response.send_message(embed=embed, ephemeral=True)
+        
+        @self.bot.tree.command(
+            name="listobjects",
+            description="[ADMIN] List all approved special objects"
+        )
+        async def listobjects_command(interaction: discord.Interaction):
+            # Check admin role
+            if self.admin_role_id and not any(role.id == self.admin_role_id for role in interaction.user.roles):
+                await interaction.response.send_message("❌ Admin only!", ephemeral=True)
+                return
+            
+            objects = self.special_objects_manager.objects
+            
+            if not objects:
+                await interaction.response.send_message("📦 No special objects loaded.", ephemeral=True)
+                return
+            
+            embed = discord.Embed(
+                title="📦 Special Objects",
+                description=f"**{len(objects)}** objects loaded",
+                color=discord.Color.purple()
+            )
+            
+            rarity_colors = {
+                'common': '⬜', 'uncommon': '🟩', 'rare': '🟦',
+                'epic': '🟪', 'legendary': '🟧', 'mythic': '🟥'
+            }
+            
+            for obj_id, obj in objects.items():
+                rarity = obj.get('rarity', 'common')
+                emoji = obj.get('display', {}).get('emoji', rarity_colors.get(rarity, '📦'))
+                unique_text = "👤 UNIQUE" if obj.get('unique', False) else ""
+                owner_id = self.special_objects_manager.unique_object_owners.get(obj_id)
+                owner_text = f"\nOwner: <@{owner_id}>" if owner_id else ""
+                
+                embed.add_field(
+                    name=f"{emoji} {obj['name']}",
+                    value=f"ID: `{obj_id}`\nType: {obj['type']} | {rarity.upper()} {unique_text}{owner_text}",
+                    inline=True
+                )
+            
+            await interaction.response.send_message(embed=embed, ephemeral=True)
+        
+        @self.bot.tree.command(
+            name="listpending",
+            description="[ADMIN] List special objects awaiting approval"
+        )
+        async def listpending_command(interaction: discord.Interaction):
+            # Check admin role
+            if self.admin_role_id and not any(role.id == self.admin_role_id for role in interaction.user.roles):
+                await interaction.response.send_message("❌ Admin only!", ephemeral=True)
+                return
+            
+            pending_files = list(self.special_objects_manager.pending_path.glob("*.json"))
+            
+            if not pending_files:
+                await interaction.response.send_message("✅ No pending objects!", ephemeral=True)
+                return
+            
+            embed = discord.Embed(
+                title="⏳ Pending Special Objects",
+                description=f"**{len(pending_files)}** objects awaiting review",
+                color=discord.Color.orange()
+            )
+            
+            for filepath in pending_files[:10]:  # Limit to 10
+                try:
+                    with open(filepath, 'r', encoding='utf-8') as f:
+                        data = json.load(f)
+                    embed.add_field(
+                        name=f"📄 {filepath.name}",
+                        value=f"Name: {data.get('name', 'Unknown')}\nType: {data.get('type', 'Unknown')}",
+                        inline=True
+                    )
+                except:
+                    embed.add_field(name=f"📄 {filepath.name}", value="⚠️ Error reading file", inline=True)
+            
+            if len(pending_files) > 10:
+                embed.set_footer(text=f"...and {len(pending_files) - 10} more")
+            
+            await interaction.response.send_message(embed=embed, ephemeral=True)
+        
+        @self.bot.tree.command(
+            name="approveobject",
+            description="[ADMIN] Approve a pending special object"
+        )
+        @app_commands.describe(filename="Filename of the object to approve (e.g., my_object.json)")
+        async def approveobject_command(interaction: discord.Interaction, filename: str):
+            # Check admin role
+            if self.admin_role_id and not any(role.id == self.admin_role_id for role in interaction.user.roles):
+                await interaction.response.send_message("❌ Admin only!", ephemeral=True)
+                return
+            
+            success, message = self.special_objects_manager.approve_object(filename)
+            
+            if success:
+                await interaction.response.send_message(f"✅ {message}")
+                console.print(f"[green]✓ Special object approved: {filename}[/green]")
+            else:
+                await interaction.response.send_message(f"❌ {message}", ephemeral=True)
+        
+        @self.bot.tree.command(
+            name="rejectobject",
+            description="[ADMIN] Reject a pending special object"
+        )
+        @app_commands.describe(
+            filename="Filename to reject",
+            reason="Optional reason for rejection"
+        )
+        async def rejectobject_command(interaction: discord.Interaction, filename: str, reason: str = ""):
+            # Check admin role
+            if self.admin_role_id and not any(role.id == self.admin_role_id for role in interaction.user.roles):
+                await interaction.response.send_message("❌ Admin only!", ephemeral=True)
+                return
+            
+            success, message = self.special_objects_manager.reject_object(filename, reason)
+            
+            if success:
+                await interaction.response.send_message(f"🗑️ {message}")
+            else:
+                await interaction.response.send_message(f"❌ {message}", ephemeral=True)
+        
+        @self.bot.tree.command(
+            name="reloadobjects",
+            description="[ADMIN] Hot-reload all special objects"
+        )
+        async def reloadobjects_command(interaction: discord.Interaction):
+            # Check admin role
+            if self.admin_role_id and not any(role.id == self.admin_role_id for role in interaction.user.roles):
+                await interaction.response.send_message("❌ Admin only!", ephemeral=True)
+                return
+            
+            count, errors = self.special_objects_manager.load_all()
+            
+            embed = discord.Embed(
+                title="🔄 Special Objects Reloaded",
+                description=f"Loaded **{count}** objects",
+                color=discord.Color.green() if not errors else discord.Color.orange()
+            )
+            
+            if errors:
+                embed.add_field(
+                    name="⚠️ Errors",
+                    value="\n".join(errors[:5]) + ("\n..." if len(errors) > 5 else ""),
+                    inline=False
+                )
+            
+            await interaction.response.send_message(embed=embed, ephemeral=True)
+            console.print(f"[cyan]🔄 Special objects reloaded: {count} loaded, {len(errors)} errors[/cyan]")
+        
+        @self.bot.tree.command(
+            name="testobject",
+            description="[ADMIN] Validate a pending object without approving"
+        )
+        @app_commands.describe(filename="Filename to test")
+        async def testobject_command(interaction: discord.Interaction, filename: str):
+            # Check admin role
+            if self.admin_role_id and not any(role.id == self.admin_role_id for role in interaction.user.roles):
+                await interaction.response.send_message("❌ Admin only!", ephemeral=True)
+                return
+            
+            filepath = self.special_objects_manager.pending_path / filename
+            if not filepath.exists():
+                filepath = self.special_objects_manager.approved_path / filename
+            
+            if not filepath.exists():
+                await interaction.response.send_message(f"❌ File not found: {filename}", ephemeral=True)
+                return
+            
+            valid, errors, warnings = self.special_objects_manager.test_object(filepath)
+            
+            embed = discord.Embed(
+                title=f"🧪 Test Results: {filename}",
+                color=discord.Color.green() if valid else discord.Color.red()
+            )
+            embed.add_field(name="Status", value="✅ Valid" if valid else "❌ Invalid", inline=False)
+            
+            if errors:
+                embed.add_field(name="❌ Errors", value="\n".join(f"• {e}" for e in errors[:5]), inline=False)
+            
+            if warnings:
+                embed.add_field(name="⚠️ Warnings", value="\n".join(f"• {w}" for w in warnings[:5]), inline=False)
+            
+            await interaction.response.send_message(embed=embed, ephemeral=True)
+        
+        @self.bot.tree.command(
+            name="checkadaptation",
+            description="Check your or another player's adaptation progress"
+        )
+        @app_commands.describe(player="Player to check (leave empty for self)")
+        async def checkadaptation_command(interaction: discord.Interaction, player: discord.Member = None):
+            target = player or interaction.user
+            user_id = target.id
+            
+            # Get objects from player's INVENTORY
+            objects = self.special_objects_manager.get_player_inventory(user_id)
+            adaptation_objects = [o for o in objects if o['type'] == 'adaptation']
+            
+            if not adaptation_objects:
+                await interaction.response.send_message(
+                    f"❌ {target.display_name} has no adaptation objects equipped.",
+                    ephemeral=True
+                )
+                return
+            
+            embed = discord.Embed(
+                title=f"🔄 Adaptation Progress: {target.display_name}",
+                description=f"Objects with adaptation in inventory",
+                color=discord.Color.purple()
+            )
+            
+            for obj in adaptation_objects:
+                obj_id = obj['id']
+                tracking = self.special_objects_manager.get_all_tracking(user_id, obj_id)
+                
+                field_value = ""
+                for difficulty in ['easy', 'medium', 'hard', 'impossible']:
+                    spins = tracking.get(difficulty, 0)
+                    # Pass empty list for character names since we use inventory now
+                    reduction = self.special_objects_manager.get_damage_reduction(user_id, [], difficulty)
+                    
+                    # Find next threshold
+                    thresholds = obj.get('thresholds', {}).get(difficulty, [])
+                    next_threshold = None
+                    for t in thresholds:
+                        if t['spins'] > spins:
+                            next_threshold = t['spins']
+                            break
+                    
+                    next_text = f" (next: {next_threshold})" if next_threshold else " ✅"
+                    field_value += f"**{difficulty.capitalize()}**: {spins} spins → {reduction:.0f}% reduction{next_text}\n"
+                
+                embed.add_field(
+                    name=f"{obj.get('display', {}).get('emoji', '📦')} {obj['name']}",
+                    value=field_value,
+                    inline=False
+                )
+            
+            await interaction.response.send_message(embed=embed, ephemeral=True)
+        
+        # ========== INVENTORY MANAGEMENT COMMANDS ==========
+        
+        @self.bot.tree.command(
+            name="gmobjects",
+            description="[ADMIN] View and manage any player's object spins"
+        )
+        @app_commands.describe(player="The player to view/edit")
+        async def gmobjects_command(interaction: discord.Interaction, player: discord.Member):
+            # Check admin role
+            if self.admin_role_id and not any(role.id == self.admin_role_id for role in interaction.user.roles):
+                await interaction.response.send_message("❌ Admin only!", ephemeral=True)
+                return
+            
+            user_id = player.id
+            
+            # Get inventory from both sources
+            inventory = list(self.special_objects_manager.player_inventory.get(user_id, []))
+            
+            # Also check unique owners
+            for obj_id, owner_id in self.special_objects_manager.unique_object_owners.items():
+                if owner_id == user_id and obj_id not in inventory:
+                    inventory.append(obj_id)
+            
+            if not inventory:
+                await interaction.response.send_message(
+                    f"❌ {player.mention} has no special objects!\n\nUse `/giveobject` to grant them one.",
+                    ephemeral=True
+                )
+                return
+            
+            # Build embed showing all objects and their spins
+            embed = discord.Embed(
+                title=f"🔮 {player.display_name}'s Objects (GM View)",
+                description=f"**{len(inventory)}** object(s) in inventory",
+                color=discord.Color.purple()
+            )
+            
+            for obj_id in inventory:
+                obj = self.special_objects_manager.objects.get(obj_id)
+                if not obj:
+                    embed.add_field(name=f"❓ {obj_id}", value="*Object not found*", inline=False)
+                    continue
+                
+                obj_name = obj.get('name', obj_id)
+                emoji = obj.get('display', {}).get('emoji', '🔮')
+                
+                # Get tracking info
+                tracking_config = obj.get('tracking', {})
+                tracking_type = tracking_config.get('type', 'per_difficulty') if isinstance(tracking_config, dict) else 'per_difficulty'
+                
+                spins_info = []
+                thresholds = obj.get('thresholds', [])
+                
+                if tracking_type == 'total':
+                    spins = self.special_objects_manager.get_tracking(user_id, obj_id, 'total')
+                    if isinstance(thresholds, list) and thresholds:
+                        max_t = max(t['spins'] for t in thresholds)
+                        status = "✅ MAXED" if spins >= max_t else f"{spins}/{max_t}"
+                    else:
+                        status = str(spins)
+                    spins_info.append(f"**Total**: {status}")
+                else:
+                    for diff in ['easy', 'medium', 'hard', 'impossible']:
+                        spins = self.special_objects_manager.get_tracking(user_id, obj_id, diff)
+                        diff_ts = thresholds.get(diff, []) if isinstance(thresholds, dict) else []
+                        if diff_ts:
+                            max_t = max(t['spins'] for t in diff_ts)
+                            status = "✅" if spins >= max_t else f"{spins}/{max_t}"
+                        else:
+                            status = str(spins)
+                        spins_info.append(f"**{diff.capitalize()}**: {status}")
+                
+                embed.add_field(
+                    name=f"{emoji} {obj_name} (`{obj_id}`)",
+                    value="\n".join(spins_info),
+                    inline=False
+                )
+            
+            embed.set_footer(text="Use /setobjectspins to change values | /resetobjectspins to reset")
+            
+            # Show with ObjectChargesView for editing
+            view = ObjectChargesView(self, user_id)
+            await interaction.response.send_message(embed=embed, view=view, ephemeral=True)
+        
+        # Autocomplete function for object IDs
+        async def object_id_autocomplete(interaction: discord.Interaction, current: str) -> List[app_commands.Choice[str]]:
+            objects = self.special_objects_manager.objects
+            choices = []
+            for obj_id, obj in objects.items():
+                if current.lower() in obj_id.lower() or current.lower() in obj['name'].lower():
+                    display_name = f"{obj['name']} ({obj_id})"
+                    choices.append(app_commands.Choice(name=display_name[:100], value=obj_id))
+                if len(choices) >= 25:
+                    break
+            return choices
+        
+        @self.bot.tree.command(
+            name="giveobject",
+            description="[ADMIN] Give a special object to a player"
+        )
+        @app_commands.describe(
+            player="The player to give the object to",
+            object_id="The ID of the object (e.g., reactive_core)"
+        )
+        @app_commands.autocomplete(object_id=object_id_autocomplete)
+        async def giveobject_command(interaction: discord.Interaction, player: discord.Member, object_id: str):
+            # Check admin role
+            if self.admin_role_id and not any(role.id == self.admin_role_id for role in interaction.user.roles):
+                await interaction.response.send_message("❌ Admin only!", ephemeral=True)
+                return
+            
+            success, message = self.special_objects_manager.give_object(player.id, object_id)
+            
+            if success:
+                obj = self.special_objects_manager.objects.get(object_id, {})
+                rarity = obj.get('rarity', 'common').upper()
+                rarity_colors = {
+                    'COMMON': '⬜', 'UNCOMMON': '🟩', 'RARE': '🟦',
+                    'EPIC': '🟪', 'LEGENDARY': '🟧', 'MYTHIC': '🟥'
+                }
+                emoji = rarity_colors.get(rarity, '📦')
+                
+                embed = discord.Embed(
+                    title=f"{emoji} Object Granted!",
+                    description=f"**{obj.get('name', object_id)}** given to {player.mention}",
+                    color=discord.Color.green()
+                )
+                embed.add_field(name="Rarity", value=rarity, inline=True)
+                embed.add_field(name="Slots Used", value=str(obj.get('slots_required', 1)), inline=True)
+                embed.add_field(
+                    name="Player's Inventory",
+                    value=f"{self.special_objects_manager.get_used_slots(player.id)}/{self.special_objects_manager.get_player_max_slots(player.id)} slots",
+                    inline=True
+                )
+                
+                if obj.get('image_url'):
+                    embed.set_thumbnail(url=obj['image_url'])
+                
+                await interaction.response.send_message(embed=embed)
+            else:
+                await interaction.response.send_message(f"❌ {message}", ephemeral=True)
+        
+        @self.bot.tree.command(
+            name="takeobject",
+            description="[ADMIN] Remove a special object from a player"
+        )
+        @app_commands.describe(
+            player="The player to remove the object from",
+            object_id="The ID of the object to remove"
+        )
+        @app_commands.autocomplete(object_id=object_id_autocomplete)
+        async def takeobject_command(interaction: discord.Interaction, player: discord.Member, object_id: str):
+            # Check admin role
+            if self.admin_role_id and not any(role.id == self.admin_role_id for role in interaction.user.roles):
+                await interaction.response.send_message("❌ Admin only!", ephemeral=True)
+                return
+            
+            success, message = self.special_objects_manager.take_object(player.id, object_id)
+            
+            if success:
+                await interaction.response.send_message(f"🗑️ {message} from {player.mention}")
+            else:
+                await interaction.response.send_message(f"❌ {message}", ephemeral=True)
+        
+        @self.bot.tree.command(
+            name="inventory",
+            description="View your special objects inventory or another player's"
+        )
+        @app_commands.describe(player="Player to check (leave empty for self)")
+        async def inventory_command(interaction: discord.Interaction, player: discord.Member = None):
+            target = player or interaction.user
+            user_id = target.id
+            
+            inventory = self.special_objects_manager.get_player_inventory(user_id)
+            used_slots = self.special_objects_manager.get_used_slots(user_id)
+            max_slots = self.special_objects_manager.get_player_max_slots(user_id)
+            
+            embed = discord.Embed(
+                title=f"🎒 {target.display_name}'s Inventory",
+                description=f"**{used_slots}/{max_slots}** slots used",
+                color=discord.Color.blue()
+            )
+            
+            if not inventory:
+                embed.add_field(name="Empty!", value="No objects in inventory.", inline=False)
+            else:
+                rarity_colors = {
+                    'common': '⬜', 'uncommon': '🟩', 'rare': '🟦',
+                    'epic': '🟪', 'legendary': '🟧', 'mythic': '🟥'
+                }
+                
+                for obj in inventory:
+                    rarity = obj.get('rarity', 'common')
+                    emoji = obj.get('display', {}).get('emoji', rarity_colors.get(rarity, '📦'))
+                    
+                    value = f"**Rarity:** {rarity.capitalize()}\n"
+                    value += f"**Slots:** {obj.get('slots_required', 1)}\n"
+                    value += f"**Type:** {obj.get('type', 'unknown').capitalize()}\n"
+                    if obj.get('description'):
+                        value += f"*{obj['description'][:100]}...*" if len(obj.get('description', '')) > 100 else f"*{obj['description']}*"
+                    
+                    embed.add_field(
+                        name=f"{emoji} {obj['name']}",
+                        value=value,
+                        inline=True
+                    )
+            
+            await interaction.response.send_message(embed=embed, ephemeral=True)
+        
+        @self.bot.tree.command(
+            name="objectinfo",
+            description="View detailed info about a special object"
+        )
+        @app_commands.describe(object_id="The ID of the object to view")
+        @app_commands.autocomplete(object_id=object_id_autocomplete)
+        async def objectinfo_command(interaction: discord.Interaction, object_id: str):
+            obj = self.special_objects_manager.objects.get(object_id)
+            
+            if not obj:
+                await interaction.response.send_message(f"❌ Object '{object_id}' not found.", ephemeral=True)
+                return
+            
+            rarity = obj.get('rarity', 'common')
+            rarity_colors_hex = {
+                'common': 0xAAAAAA, 'uncommon': 0x1EFF00, 'rare': 0x0070DD,
+                'epic': 0xA335EE, 'legendary': 0xFF8000, 'mythic': 0xFF0000
+            }
+            
+            embed = discord.Embed(
+                title=f"{obj.get('display', {}).get('emoji', '📦')} {obj['name']}",
+                description=obj.get('description', 'No description'),
+                color=rarity_colors_hex.get(rarity, 0x888888)
+            )
+            
+            embed.add_field(name="ID", value=f"`{object_id}`", inline=True)
+            embed.add_field(name="Type", value=obj.get('type', 'unknown').capitalize(), inline=True)
+            embed.add_field(name="Rarity", value=rarity.upper(), inline=True)
+            embed.add_field(name="Slots Required", value=str(obj.get('slots_required', 1)), inline=True)
+            embed.add_field(name="Tradeable", value="Yes" if obj.get('tradeable', True) else "No", inline=True)
+            embed.add_field(name="Unique", value="Yes" if obj.get('unique', False) else "No", inline=True)
+            
+            if obj.get('lore'):
+                embed.add_field(name="📜 Lore", value=f"*{obj['lore']}*", inline=False)
+            
+            # Show who owns it if unique
+            if obj.get('unique', False):
+                owner_id = self.special_objects_manager.unique_object_owners.get(object_id)
+                if owner_id:
+                    embed.add_field(name="👤 Owner", value=f"<@{owner_id}>", inline=False)
+                else:
+                    embed.add_field(name="👤 Owner", value="*Unclaimed*", inline=False)
+            
+            if obj.get('image_url'):
+                embed.set_image(url=obj['image_url'])
+            
+            await interaction.response.send_message(embed=embed, ephemeral=True)
+        
+        @self.bot.tree.command(
+            name="setobjectimage",
+            description="[ADMIN] Set the image URL for a special object"
+        )
+        @app_commands.describe(
+            object_id="The ID of the object",
+            image_url="The URL of the image (or 'clear' to remove)"
+        )
+        @app_commands.autocomplete(object_id=object_id_autocomplete)
+        async def setobjectimage_command(interaction: discord.Interaction, object_id: str, image_url: str):
+            # Check admin role
+            if self.admin_role_id and not any(role.id == self.admin_role_id for role in interaction.user.roles):
+                await interaction.response.send_message("❌ Admin only!", ephemeral=True)
+                return
+            
+            if object_id not in self.special_objects_manager.objects:
+                await interaction.response.send_message(f"❌ Object '{object_id}' not found.", ephemeral=True)
+                return
+            
+            # Update in memory
+            if image_url.lower() == 'clear':
+                self.special_objects_manager.objects[object_id]['image_url'] = None
+            else:
+                self.special_objects_manager.objects[object_id]['image_url'] = image_url
+            
+            # Update JSON file
+            filepath = self.special_objects_manager.approved_path / f"{object_id}.json"
+            if filepath.exists():
+                try:
+                    with open(filepath, 'r', encoding='utf-8') as f:
+                        data = json.load(f)
+                    data['image_url'] = None if image_url.lower() == 'clear' else image_url
+                    with open(filepath, 'w', encoding='utf-8') as f:
+                        json.dump(data, f, indent=2)
+                except Exception as e:
+                    await interaction.response.send_message(f"⚠️ Updated in memory but failed to save: {e}", ephemeral=True)
+                    return
+            
+            if image_url.lower() == 'clear':
+                await interaction.response.send_message(f"✅ Cleared image for **{object_id}**", ephemeral=True)
+            else:
+                embed = discord.Embed(
+                    title=f"✅ Image Set!",
+                    description=f"Image for **{object_id}** has been updated.",
+                    color=discord.Color.green()
+                )
+                embed.set_image(url=image_url)
+                await interaction.response.send_message(embed=embed, ephemeral=True)
+        
+        @self.bot.tree.command(
+            name="resetobjectspins",
+            description="[ADMIN] Reset adaptation spins for a player's special object"
+        )
+        @app_commands.describe(
+            player="The player whose object spins to reset",
+            object_id="The ID of the object to reset"
+        )
+        @app_commands.autocomplete(object_id=object_id_autocomplete)
+        async def resetobjectspins_command(interaction: discord.Interaction, player: discord.Member, object_id: str):
+            # Check admin role
+            if self.admin_role_id and not any(role.id == self.admin_role_id for role in interaction.user.roles):
+                await interaction.response.send_message("❌ Admin only!", ephemeral=True)
+                return
+            
+            # Check if object exists
+            if object_id not in self.special_objects_manager.objects:
+                await interaction.response.send_message(f"❌ Object '{object_id}' not found.", ephemeral=True)
+                return
+            
+            # Check if player has the object (either in inventory or as unique owner)
+            has_by_inventory = object_id in self.special_objects_manager.player_inventory.get(player.id, [])
+            owner_id = self.special_objects_manager.unique_object_owners.get(object_id)
+            has_by_ownership = owner_id == player.id
+            if not (has_by_inventory or has_by_ownership):
+                owner_info = f" (owned by <@{owner_id}>)" if owner_id else ""
+                await interaction.response.send_message(
+                    f"❌ {player.mention} doesn't have **{object_id}**{owner_info}.",
+                    ephemeral=True
+                )
+                return
+            
+            obj = self.special_objects_manager.objects.get(object_id, {})
+            obj_name = obj.get('name', object_id)
+            
+            # Check tracking type to reset the correct keys
+            tracking_config = obj.get('tracking', {})
+            tracking_type = tracking_config.get('type', 'per_difficulty') if isinstance(tracking_config, dict) else 'per_difficulty'
+            
+            if tracking_type == 'total':
+                # Total tracking - reset 'total' key
+                self.special_objects_manager.set_tracking(player.id, object_id, 'total', 0)
+                reset_info = "Total"
+            else:
+                # Per-difficulty tracking - reset all difficulty keys
+                for difficulty in ['easy', 'medium', 'hard', 'impossible']:
+                    self.special_objects_manager.set_tracking(player.id, object_id, difficulty, 0)
+                reset_info = "Easy/Medium/Hard/Impossible"
+            
+            # Clear max adaptation warnings for this object
+            if player.id in self.max_adaptation_warned and object_id in self.max_adaptation_warned[player.id]:
+                del self.max_adaptation_warned[player.id][object_id]
+            
+            # Save tracking data
+            self.special_objects_manager.save_tracking()
+            
+            embed = discord.Embed(
+                title="🔄 Object Spins Reset",
+                description=f"Reset all adaptation spins for **{obj_name}** ({object_id})\n\nPlayer: {player.mention}",
+                color=discord.Color.blue()
+            )
+            
+            if tracking_type == 'total':
+                embed.add_field(name="Total Spins", value="0", inline=True)
+            else:
+                embed.add_field(name="Easy", value="0", inline=True)
+                embed.add_field(name="Medium", value="0", inline=True)
+                embed.add_field(name="Hard", value="0", inline=True)
+                embed.add_field(name="Impossible", value="0", inline=True)
+            
+            await interaction.response.send_message(embed=embed)
+            console.print(f"[blue]🔄 {interaction.user.name} reset {obj_name} spins for {player.name}[/blue]")
+        
+        @self.bot.tree.command(
+            name="setobjectspins",
+            description="[ADMIN] Set adaptation spins for a player's special object"
+        )
+        @app_commands.describe(
+            player="The player whose object spins to set",
+            object_id="The ID of the object",
+            spins="Number of spins to set"
+        )
+        @app_commands.autocomplete(object_id=object_id_autocomplete)
+        async def setobjectspins_command(interaction: discord.Interaction, player: discord.Member, object_id: str, spins: int):
+            # Check admin role
+            if self.admin_role_id and not any(role.id == self.admin_role_id for role in interaction.user.roles):
+                await interaction.response.send_message("❌ Admin only!", ephemeral=True)
+                return
+            
+            # Check if object exists
+            if object_id not in self.special_objects_manager.objects:
+                await interaction.response.send_message(f"❌ Object '{object_id}' not found.", ephemeral=True)
+                return
+            
+            # Check if player has the object (either in inventory or as unique owner)
+            has_by_inventory = object_id in self.special_objects_manager.player_inventory.get(player.id, [])
+            owner_id = self.special_objects_manager.unique_object_owners.get(object_id)
+            has_by_ownership = owner_id == player.id
+            if not (has_by_inventory or has_by_ownership):
+                owner_info = f" (owned by <@{owner_id}>)" if owner_id else ""
+                await interaction.response.send_message(
+                    f"❌ {player.mention} doesn't have **{object_id}**{owner_info}.",
+                    ephemeral=True
+                )
+                return
+            
+            if spins < 0:
+                await interaction.response.send_message("❌ Spins must be non-negative!", ephemeral=True)
+                return
+            
+            obj = self.special_objects_manager.objects.get(object_id, {})
+            obj_name = obj.get('name', object_id)
+            
+            # Check tracking type to set the correct key
+            tracking_config = obj.get('tracking', {})
+            tracking_type = tracking_config.get('type', 'per_difficulty') if isinstance(tracking_config, dict) else 'per_difficulty'
+            
+            if tracking_type == 'total':
+                # Total tracking - set 'total' key
+                old_spins = self.special_objects_manager.get_tracking(player.id, object_id, 'total')
+                self.special_objects_manager.set_tracking(player.id, object_id, 'total', spins)
+            else:
+                # Per-difficulty - ask for specific difficulty or set all
+                await interaction.response.send_message(
+                    f"⚠️ **{obj_name}** uses per-difficulty tracking. Use the dashboard Edit Spins button to set individual difficulties.",
+                    ephemeral=True
+                )
+                return
+            
+            # Save tracking data
+            self.special_objects_manager.save_tracking()
+            
+            embed = discord.Embed(
+                title="✅ Object Spins Set",
+                description=f"Set spins for **{obj_name}** ({object_id})\n\nPlayer: {player.mention}",
+                color=discord.Color.green()
+            )
+            embed.add_field(name="Old Spins", value=str(old_spins), inline=True)
+            embed.add_field(name="New Spins", value=str(spins), inline=True)
+            
+            await interaction.response.send_message(embed=embed)
+            console.print(f"[blue]✏️ {interaction.user.name} set {obj_name} spins for {player.name}: {old_spins} → {spins}[/blue]")
+        
+        @self.bot.tree.command(
+            name="setplayerslots",
+            description="[ADMIN] Set max inventory slots for a player"
+        )
+        @app_commands.describe(
+            player="The player to modify",
+            max_slots="Maximum number of inventory slots"
+        )
+        async def setplayerslots_command(interaction: discord.Interaction, player: discord.Member, max_slots: int):
+            # Check admin role
+            if self.admin_role_id and not any(role.id == self.admin_role_id for role in interaction.user.roles):
+                await interaction.response.send_message("❌ Admin only!", ephemeral=True)
+                return
+            
+            if max_slots < 1:
+                await interaction.response.send_message("❌ Slots must be at least 1!", ephemeral=True)
+                return
+            
+            old_slots = self.special_objects_manager.get_player_max_slots(player.id)
+            self.special_objects_manager.set_player_max_slots(player.id, max_slots)
+            
+            await interaction.response.send_message(
+                f"✅ Set {player.mention}'s inventory slots: **{old_slots}** → **{max_slots}**",
+                ephemeral=True
+            )
+        
+        @self.bot.tree.command(
+            name="mirrorinvoke",
+            description="Use Mirror Shard to invoke a QTE against the enemy (requires 20 total spins)"
+        )
+        async def mirrorinvoke_command(interaction: discord.Interaction):
+            """Invoke a medium QTE against the boss using Mirror Shard at 20+ spins"""
+            user_id = interaction.user.id
+            
+            # Check if user has Mirror Shard
+            inventory = self.special_objects_manager.player_inventory.get(user_id, [])
+            has_mirror_shard = 'mirror_shard' in inventory
+            
+            # Also check unique ownership
+            if not has_mirror_shard:
+                owner_id = self.special_objects_manager.unique_object_owners.get('mirror_shard')
+                has_mirror_shard = owner_id == user_id
+            
+            if not has_mirror_shard:
+                await interaction.response.send_message("❌ You don't have the **Mirror Shard**!", ephemeral=True)
+                return
+            
+            # Check spins
+            spins = self.special_objects_manager.get_tracking(user_id, 'mirror_shard', 'total')
+            if spins < 20:
+                await interaction.response.send_message(
+                    f"❌ Mirror Shard needs **20 total spins** to invoke QTE!\n"
+                    f"Your current spins: **{spins}/20**",
+                    ephemeral=True
+                )
+                return
+            
+            # Check if there's an active boss
+            if not self.active_boss:
+                await interaction.response.send_message(
+                    "❌ No active boss to invoke QTE against!\n"
+                    "Wait for a boss to appear in combat.",
+                    ephemeral=True
+                )
+                return
+            
+            # Invoke the medium QTE against the boss!
+            await interaction.response.send_message(
+                f"🪞⚡ **Mirror Shard Invocation!**\n"
+                f"{interaction.user.mention} reflects a **MEDIUM QTE** back at **{self.active_boss['name']}**!",
+            )
+            
+            # Create the boss QTE - the boss must evade
+            boss_name = self.active_boss['name']
+            
+            # For now, auto-resolve: boss takes damage since NPCs can't respond
+            # This simulates invoking a QTE that the boss "fails"
+            base_damage = 15  # Medium QTE damage
+            
+            # Apply boss damage
+            await self.damage_boss(boss_name, base_damage)
+            
+            embed = discord.Embed(
+                title="🪞💥 Mirror Shard - QTE Reflected!",
+                description=f"**{boss_name}** failed to evade the reflected attack!\n\n"
+                           f"💢 **{base_damage} damage** dealt!",
+                color=discord.Color.purple()
+            )
+            
+            # Check for black flash effect at 20 spins
+            mirror_effects = self.special_objects_manager.get_active_effects(user_id, 'medium')
+            if mirror_effects.get('on_boss_stunned', {}).get('black_flash', False):
+                embed.add_field(
+                    name="⚡ Black Flash Ready!",
+                    value="Boss stunned! Black Flash opportunity!",
+                    inline=False
+                )
+                # Stun the enemy
+                self.enemy_stunned = True
+                self.stun_end_time = time.time() + 2.0  # 2 second stun
+            
+            await self.webhook_send(embed=embed)
+            console.print(f"[magenta]🪞 MIRROR INVOKE - {interaction.user.name} reflected QTE at {boss_name} for {base_damage} damage[/magenta]")
+        
+        # ========== END SPECIAL OBJECTS COMMANDS ==========
         
         @self.bot.tree.command(
             name="restart",
@@ -2258,6 +4525,17 @@ class AdvancedQTEBot:
         # Calculate variable damage
         damage = self.calculate_damage(difficulty)
         
+        # ========== SPECIAL OBJECTS: DAMAGE REDUCTION ==========
+        # Uses INVENTORY-based system now (no character names needed)
+        damage_reduction = self.special_objects_manager.get_damage_reduction(user_id, [], difficulty)
+        
+        if damage_reduction > 0:
+            reduced_damage = int(damage * (1 - damage_reduction / 100))
+            reduction_amount = damage - reduced_damage
+            console.print(f"[cyan]🛡️ Damage reduction {damage_reduction:.0f}%: {damage} → {reduced_damage} (-{reduction_amount})[/cyan]")
+            damage = reduced_damage
+        # =======================================================
+        
         # Apply damage
         old_hp = hp_data["current"]
         hp_data["current"] = max(0, hp_data["current"] - damage)
@@ -2493,26 +4771,48 @@ class AdvancedQTEBot:
             log.error(f"Error updating HP bar: {e}")
 
     async def _send_or_edit_hp_embed(self, thread, cache_key, embed):
-        """Helper: Edit cached message or send new one - avoids slow history search"""
-        try:
-            # Try to use cached message ID
-            if cache_key in self.hp_bar_messages:
-                try:
-                    message = await thread.fetch_message(self.hp_bar_messages[cache_key])
-                    await message.edit(embed=embed)
-                    return
-                except discord.NotFound:
-                    # Message was deleted, remove from cache
-                    del self.hp_bar_messages[cache_key]
-                except Exception:
-                    pass
-            
-            # No cached message, send new one and cache the ID
-            new_message = await thread.send(embed=embed)
-            self.hp_bar_messages[cache_key] = new_message.id
-            
-        except Exception as e:
-            log.error(f"Error in HP bar send/edit: {e}")
+        """Helper: Queue HP update for batched sending - reduces rate limits"""
+        # Queue the update instead of sending immediately
+        self._pending_hp_updates[cache_key] = (thread, embed)
+        
+        # Start flush task if not running
+        if self._hp_update_task is None or self._hp_update_task.done():
+            self._hp_update_task = asyncio.create_task(self._flush_hp_updates())
+    
+    async def _flush_hp_updates(self):
+        """Flush all pending HP updates after a short delay - batches rapid updates"""
+        await asyncio.sleep(self._hp_update_interval)
+        
+        # Copy and clear pending updates
+        updates = dict(self._pending_hp_updates)
+        self._pending_hp_updates.clear()
+        
+        # Process updates with small delays between each to avoid rate limits
+        update_delay = 0.3  # 300ms between HP bar edits
+        
+        for cache_key, (thread, embed) in updates.items():
+            try:
+                # Try to use cached message ID
+                if cache_key in self.hp_bar_messages:
+                    try:
+                        message = await thread.fetch_message(self.hp_bar_messages[cache_key])
+                        await self.safe_edit_message(message, embed=embed)
+                        await asyncio.sleep(update_delay)  # Throttle between edits
+                        continue
+                    except discord.NotFound:
+                        # Message was deleted, remove from cache
+                        del self.hp_bar_messages[cache_key]
+                    except Exception:
+                        pass
+                
+                # No cached message, send new one and cache the ID
+                new_message = await self.safe_send(thread, embed=embed)
+                if new_message:
+                    self.hp_bar_messages[cache_key] = new_message.id
+                await asyncio.sleep(update_delay)  # Throttle between sends
+                
+            except Exception as e:
+                log.error(f"Error in HP bar flush: {e}")
 
     async def trigger_death(self, user_id):
         """Handle player death or FAITH resurrection - single embed for rate limiting"""
@@ -2546,7 +4846,7 @@ class AdvancedQTEBot:
                 color=discord.Color.dark_grey()
             )
             embed.set_footer(text="Rest in peace...")
-            await channel.send(embed=embed)
+            await self.safe_send(channel, embed=embed)
 
             # Update HP bar to show defeated
             await self.update_hp_bar_display(user_id)
@@ -2566,18 +4866,51 @@ class AdvancedQTEBot:
         
         if user_id in self.counter_enabled_players and self.counter_enabled_players[user_id] == qte_id:
             del self.counter_enabled_players[user_id]
+            # Clear stored counter context
+            if user_id in self.counter_context:
+                ctx = self.counter_context.get(user_id, {})
+                if ctx.get('qte_id') == qte_id:
+                    del self.counter_context[user_id]
         
         # Delete the counter window message
         if hasattr(self, 'counter_messages') and user_id in self.counter_messages:
             try:
-                await self.counter_messages[user_id].delete()
+                await self.safe_delete_message(self.counter_messages[user_id])
                 del self.counter_messages[user_id]
             except Exception:
                 pass  # Message might already be deleted
 
-    async def send_success_with_counter(self, channel, author_mention, response_time, user_id, qte_id):
+    def get_random_counter_gif(self):
+        """Get a random counter GIF from local assets directory"""
+        try:
+            if not self.counter_gif_dir.exists():
+                log.warning(f"Counter GIF directory not found: {self.counter_gif_dir}")
+                return None
+            
+            # Get all image files from counter_gifs directory
+            gif_files = list(self.counter_gif_dir.glob("*.png")) + \
+                       list(self.counter_gif_dir.glob("*.jpg")) + \
+                       list(self.counter_gif_dir.glob("*.gif"))
+            
+            if not gif_files:
+                log.warning("No counter GIF files found in assets/counter_gifs/")
+                return None
+            
+            # Pick random file
+            chosen_file = random.choice(gif_files)
+            
+            # Create discord.File object
+            return discord.File(chosen_file, filename=chosen_file.name)
+            
+        except Exception as e:
+            log.error(f"Error loading counter GIF: {e}")
+            return None
+
+    async def send_success_with_counter(self, channel, author_mention, response_time, user_id, qte_id, difficulty):
         """Send SUCCESS + COUNTER message merged into one - saves rate limit"""
         self.counter_enabled_players[user_id] = qte_id
+        # Store difficulty for accurate adaptation tracking during counter
+        self.counter_context[user_id] = {"qte_id": qte_id, "difficulty": difficulty}
         
         # Initialize counter_messages dict if needed
         if not hasattr(self, 'counter_messages'):
@@ -2593,6 +4926,36 @@ class AdvancedQTEBot:
         
         # Set counter window timeout (will delete message when expired)
         asyncio.create_task(self.counter_window_timeout(user_id, qte_id, 5.0))
+    
+    def get_parry_visual_indicator(self, response_time: float, difficulty: str, user_id: int) -> str:
+        """Get visual indicator for parry timing - shows Black Flash zones (GUARANTEED if in window!)"""
+        # Get the center of parry window (perfect timing)
+        perfect_timing = self.get_adjusted_parry_center(difficulty, user_id)
+        timing_deviation = abs(response_time - perfect_timing)
+        
+        # BF window check - within bf_timing_window = GUARANTEED BF!
+        if timing_deviation <= 0.1:
+            return "⭐💫"  # PERFECT - dead center, guaranteed BF
+        elif timing_deviation <= 0.25:
+            return "⭐"  # Great - guaranteed BF
+        elif timing_deviation <= self.bf_timing_window:
+            return "✨"  # In BF window - guaranteed BF
+        else:
+            return "✅"  # Outside BF window - no BF but still success
+    
+    def get_parry_timing_feedback(self, response_time: float, difficulty: str, user_id: int) -> str:
+        """Get detailed timing feedback for parry - shows if BF will trigger"""
+        perfect_timing = self.get_adjusted_parry_center(difficulty, user_id)
+        timing_deviation = abs(response_time - perfect_timing)
+        
+        if timing_deviation <= 0.1:
+            return "⚡PERFECT⚡"
+        elif timing_deviation <= 0.25:
+            return "Great!"
+        elif timing_deviation <= self.bf_timing_window:
+            return "Good"
+        else:
+            return "OK"
 
     async def enable_counter_window(self, user_id, qte_id, channel, author_mention):
         """Enable counter window for a player - LEGACY, use send_success_with_counter instead"""
@@ -2675,22 +5038,100 @@ class AdvancedQTEBot:
             
             # Check if boss defeated
             if boss['hp_current'] == 0:
+                # ========== END FIGHT - PAUSE COOLDOWNS ==========
+                self._pause_ultimate_cooldowns()
+                self.fight_active = False
+                self.fight_start_time = None
+                console.print(f"[yellow]⏸️ FIGHT ENDED - Ultimate cooldowns PAUSED![/yellow]")
+                # ================================================
+                
+                # ========== BOSS DEFEAT ANIMATION ==========
+                # Select random GIF from user-defined list or use default
+                if self.boss_defeat_gifs and len(self.boss_defeat_gifs) > 0:
+                    defeat_gif = random.choice(self.boss_defeat_gifs)
+                else:
+                    defeat_gif = self.default_boss_defeat_gif
+                # ===========================================
+                
                 channel = self.bot.get_channel(self.qte_channel_id)
                 if channel:
+                    # Dramatic delay before victory announcement
+                    await asyncio.sleep(0.5)
+                    
                     embed = discord.Embed(
-                        title="💀 BOSS DEFEATED! 💀",
-                        description=f"**{boss_name}** has been vanquished!",
+                        title="💀🎉 BOSS DEFEATED! 🎉💀",
+                        description=f"**{boss_name}** has been vanquished!\n\n"
+                                   f"🏆 **VICTORY!**\n"
+                                   f"⏸️ Ultimate cooldowns are now **paused** until next fight!",
                         color=discord.Color.gold()
                     )
+                    embed.set_image(url=defeat_gif)
+                    embed.set_footer(text="Use /bossdefeatgif to add custom victory GIFs!")
                     await channel.send(embed=embed)
                 console.print(f"[gold]👹 Boss {boss_name} DEFEATED![/gold]")
+                
+                # Clear the boss
+                self.active_boss = None
                 return False
             
             return True
         except Exception as e:
             log.error(f"Error damaging boss: {e}")
             return False
+
+    # ========== FIGHT-BASED COOLDOWN SYSTEM ==========
     
+    def _pause_ultimate_cooldowns(self):
+        """Pause ultimate cooldowns when fight ends - save remaining time"""
+        current_time = time.time()
+        
+        for user_id, cooldowns in self.power_cooldowns.items():
+            if user_id not in self.ultimate_fight_cooldowns:
+                self.ultimate_fight_cooldowns[user_id] = {}
+            
+            for power_key, cooldown_end in cooldowns.items():
+                remaining = max(0, cooldown_end - current_time)
+                if remaining > 0:
+                    self.ultimate_fight_cooldowns[user_id][power_key] = remaining
+                    console.print(f"[yellow]⏸️ Paused {power_key} cooldown for user {user_id}: {remaining:.1f}s remaining[/yellow]")
+    
+    def _resume_ultimate_cooldowns(self):
+        """Resume ultimate cooldowns when fight starts - restore remaining time"""
+        current_time = time.time()
+        
+        for user_id, paused in self.ultimate_fight_cooldowns.items():
+            if user_id not in self.power_cooldowns:
+                self.power_cooldowns[user_id] = {}
+            
+            for power_key, remaining in paused.items():
+                if remaining > 0:
+                    self.power_cooldowns[user_id][power_key] = current_time + remaining
+                    console.print(f"[green]▶️ Resumed {power_key} cooldown for user {user_id}: {remaining:.1f}s[/green]")
+        
+        # Clear paused cooldowns after resuming
+        self.ultimate_fight_cooldowns.clear()
+    
+    def get_ultimate_cooldown_remaining(self, user_id, power_key):
+        """Get remaining cooldown for an ultimate, accounting for fight state"""
+        # If fight is not active, check paused cooldowns
+        if not self.fight_active:
+            return self.ultimate_fight_cooldowns.get(user_id, {}).get(power_key, 0)
+        
+        # Fight is active, check real cooldowns
+        if user_id not in self.power_cooldowns:
+            return 0
+        
+        cooldown_end = self.power_cooldowns[user_id].get(power_key, 0)
+        remaining = max(0, cooldown_end - time.time())
+        return remaining
+    
+    def is_ultimate_ready(self, user_id, power_key):
+        """Check if an ultimate is ready (cooldown complete and fight active for use)"""
+        remaining = self.get_ultimate_cooldown_remaining(user_id, power_key)
+        return remaining <= 0
+    
+    # =================================================
+
     async def cleanup_old_commands(self):
         """Remove old/deprecated commands from Discord"""
         try:
@@ -2915,17 +5356,44 @@ class AdvancedQTEBot:
         except Exception as e:
             console.print(f"[red]✗ Error finishing QTE failure: {qte_id}[/red]")
 
-    async def trigger_single_qte(self, difficulty):
-        """Trigger a single-target QTE"""
+    async def trigger_single_qte(self, difficulty, target_member=None, is_targeted=False):
+        """Trigger a single-target QTE - optionally targeted to specific player"""
         try:
             if self.should_update_cache():
                 await self.update_qte_player_cache()
 
-            if not self.qte_players:
+            if not self.qte_players and not target_member:
                 console.print("[red]✗ No QTE players available![/red]")
                 return
 
-            target_member = random.choice(self.qte_players)
+            if not target_member:
+                target_member = random.choice(self.qte_players)
+            
+            # MIRROR SHARD: Check for auto-evade on easy QTEs
+            mirror_effects = self.special_objects_manager.get_active_effects(target_member.id, difficulty)
+            auto_evade_difficulty = mirror_effects.get('auto_evade')
+            
+            if auto_evade_difficulty and difficulty == auto_evade_difficulty:
+                # Auto-evade this QTE!
+                channel = self.bot.get_channel(self.qte_channel_id)
+                console.print(f"[green]🪞 AUTO-EVADE (Mirror Shard) - {target_member.name} auto-evades {difficulty.upper()} QTE[/green]")
+                
+                await self.webhook_send(
+                    content=f"🪞✨ **{target_member.mention}** auto-evades the **{difficulty.upper()}** attack!\n"
+                           f"_Mirror Shard reflects the technique back!_"
+                )
+                
+                # Still counts as session stat
+                self.session_stats['qtes_triggered'] += 1
+                
+                # Enable counter window for auto-evade too (with guaranteed_counter)
+                if mirror_effects.get('guaranteed_counter', False):
+                    qte_id = self.qte_counter
+                    self.qte_counter += 1
+                    await self.send_success_with_counter(channel, target_member.mention, 0.0, target_member.id, qte_id, difficulty)
+                    console.print(f"[yellow]⚡🪞 COUNTER ENABLED (auto-evade) for {target_member.name}[/yellow]")
+                
+                return  # QTE handled, don't actually trigger it
 
             qte_id = self.qte_counter
             self.qte_counter += 1
@@ -2936,7 +5404,8 @@ class AdvancedQTEBot:
                 'start': datetime.now(timezone.utc),
                 'target': target_member,
                 'participants': {},
-                'responses': set()
+                'responses': set(),
+                'is_targeted': is_targeted  # Flag: this QTE only accepts evade/adapt, not parry
             }
 
             self.session_stats['qtes_triggered'] += 1
@@ -2964,7 +5433,7 @@ class AdvancedQTEBot:
             bf_window_start = perfect_center - self.bf_timing_window  # When BF window begins
             
             # Schedule star at parry start, then exclamation at BF window
-            asyncio.create_task(self.send_parry_and_bf_warning(qte_message, parry_min, bf_window_start))
+            asyncio.create_task(self.send_parry_and_bf_warning(qte_message, parry_min, bf_window_start, qte_id))
 
             asyncio.create_task(
                 self.qte_timeout_handler(qte_id, difficulty, 'single', target_member)
@@ -2973,18 +5442,33 @@ class AdvancedQTEBot:
         except Exception as e:
             console.print(f"[red]✗ Error triggering single QTE: {e}[/red]")
 
-    async def send_parry_and_bf_warning(self, qte_message, parry_start, bf_start):
+    async def send_parry_and_bf_warning(self, qte_message, parry_start, bf_start, qte_id=None):
         """Add parry warning star, then replace with exclamation when BF window opens"""
         try:
             # Wait until parry window starts
             if parry_start > 0:
                 await asyncio.sleep(parry_start)
+            
+            # Check if QTE is still active before adding star
+            if qte_id and qte_id not in self.active_qtes:
+                return
+            
             await self.safe_add_reaction(qte_message, "⭐")
             
             # Wait until black flash window starts, then replace star with exclamation
             bf_delay = max(0, bf_start - parry_start)
             if bf_delay > 0:
                 await asyncio.sleep(bf_delay)
+            
+            # Check AGAIN if QTE is still active before adding exclamation
+            if qte_id and qte_id not in self.active_qtes:
+                # QTE ended (player evaded/parried), clean up the star
+                try:
+                    await qte_message.clear_reaction("⭐")
+                except:
+                    pass
+                return
+            
             # Remove star and add exclamation to signal BF window
             try:
                 await qte_message.clear_reaction("⭐")
@@ -3180,6 +5664,38 @@ class AdvancedQTEBot:
 
             qte_id = self.qte_counter
             self.qte_counter += 1
+            
+            channel = self.bot.get_channel(self.qte_channel_id)
+            
+            # MIRROR SHARD: Check for auto-evade on group QTEs
+            auto_evaded_players = []
+            remaining_players = []
+            
+            for member in self.qte_players:
+                mirror_effects = self.special_objects_manager.get_active_effects(member.id, difficulty)
+                auto_evade_difficulty = mirror_effects.get('auto_evade')
+                
+                if auto_evade_difficulty and difficulty == auto_evade_difficulty:
+                    auto_evaded_players.append((member, mirror_effects))
+                else:
+                    remaining_players.append(member)
+            
+            # Announce auto-evades
+            for member, effects in auto_evaded_players:
+                console.print(f"[green]🪞 AUTO-EVADE (Group) - {member.name} auto-evades {difficulty.upper()} QTE[/green]")
+                await self.webhook_send(
+                    content=f"🪞✨ **{member.mention}** auto-evades the **{difficulty.upper()}** attack!"
+                )
+                
+                # Enable counter window if has guaranteed_counter
+                if effects.get('guaranteed_counter', False):
+                    await self.send_success_with_counter(channel, member.mention, 0.0, member.id, qte_id, difficulty)
+            
+            # If everyone auto-evaded, no QTE needed
+            if not remaining_players:
+                self.session_stats['qtes_triggered'] += 1
+                console.print(f"[green]🪞 All players auto-evaded group {difficulty.upper()} QTE![/green]")
+                return
 
             self.active_qtes[qte_id] = {
                 'difficulty': difficulty,
@@ -3187,13 +5703,13 @@ class AdvancedQTEBot:
                 'start': datetime.now(timezone.utc),
                 'target': None,
                 'participants': {member.id: {'responded': False, 'success': False, 'member': member} 
-                                for member in self.qte_players},
-                'responses': set()
+                                for member in remaining_players},
+                'responses': set(),
+                'auto_evaded': [m.id for m, _ in auto_evaded_players]  # Track who auto-evaded
             }
 
             self.session_stats['qtes_triggered'] += 1
 
-            channel = self.bot.get_channel(self.qte_channel_id)
             role = channel.guild.get_role(self.qte_player_role_id)
             emoji = self.difficulty_emoji.get(difficulty, '⚡')
 
@@ -3204,7 +5720,7 @@ class AdvancedQTEBot:
             table.add_row("[magenta]🚨 GROUP QTE TRIGGERED[/magenta]")
             table.add_row(f"[white]ID:[/white] [red]{qte_id}[/red]")
             table.add_row(f"[white]Difficulty:[/white] [red]{difficulty.upper()}[/red]")
-            table.add_row(f"[white]Players:[/white] [cyan]{len(self.qte_players)}[/cyan]")
+            table.add_row(f"[white]Players:[/white] [cyan]{len(remaining_players)}[/cyan] (auto-evaded: {len(auto_evaded_players)})")
             console.print(table)
 
             asyncio.create_task(
@@ -3216,22 +5732,50 @@ class AdvancedQTEBot:
 
     async def handle_qte_response(self, message):
         """Handle player responses to QTE events - OPTIMIZED"""
+        profiler.start('handle_qte_response')
         try:
             # Early exits for performance
             if not self.active_qtes:
+                profiler.stop('handle_qte_response')
                 return
 
             if message.channel.id != self.qte_channel_id:
+                profiler.stop('handle_qte_response')
                 return
             
             content = message.content.lower()
             
             # Fast check: Only process if message contains a QTE command
-            if '*evade*' not in content and '*parry*' not in content and '*save*' not in content:
+            qte_commands = ('*evade*', '*parry*', '*save*', '*adapt*', '*counter*', '*block*')
+            if not any(cmd in content for cmd in qte_commands):
+                profiler.stop('handle_qte_response')
                 return
 
             user_id = self.resolve_user_id(message)
             now = datetime.now(timezone.utc)
+
+            # Check if user is in active QTE and using slash commands while QTE is active
+            # (This auto-fails the QTE if they use slash commands during active QTE)
+            user_has_active_qte = any(
+                (qte_data.get('target') is not None and qte_data.get('target').id == user_id) or 
+                user_id in qte_data.get('participants', {})
+                for qte_data in self.active_qtes.values()
+            )
+            
+            # If message doesn't match expected QTE response pattern, it's auto-fail
+            if message.content.startswith('/') and user_has_active_qte:
+                # User tried to use a slash command during active QTE - auto-fail
+                for qte_id in list(self.active_qtes.keys()):
+                    qte_data = self.active_qtes.get(qte_id)
+                    if not qte_data:
+                        continue
+                    target = qte_data.get('target')
+                    if target and target.id == user_id:
+                        await message.channel.send(f"❌ {message.author.mention} **Using commands during QTE = automatic fail!**")
+                        await self.damage_player(user_id, qte_data['difficulty'])
+                        self.active_qtes.pop(qte_id, None)
+                        self.save_all_data()
+                        return
 
             # Iterate over copy of keys to allow safe deletion
             for qte_id in list(self.active_qtes.keys()):
@@ -3268,6 +5812,8 @@ class AdvancedQTEBot:
 
         except Exception as e:
             console.print(f"[red]✗ Error handling QTE response: {e}[/red]")
+        finally:
+            profiler.stop('handle_qte_response')
 
     def resolve_user_id(self, message):
         """Resolve user ID, handling Tupperbox characters"""
@@ -3275,6 +5821,218 @@ class AdvancedQTEBot:
         if author_name in self.character_registry:
             return self.character_registry[author_name]
         return message.author.id
+
+    def get_user_characters(self, user_id: int) -> list:
+        """Get all character names registered to a user"""
+        return [
+            char_name for char_name, owner_id in self.character_registry.items()
+            if owner_id == user_id
+        ]
+
+    async def process_adaptation(self, user_id: int, difficulty: str, objects: list, message) -> dict:
+        """Process adaptation objects for a user during a successful *adapt* command"""
+        results = {
+            'total_spins': {},
+            'new_thresholds': [],
+            'effects_applied': [],
+            'heals': 0,
+            'damage_reduction': 0
+        }
+        
+        channel = message.channel
+        # Inventory-based: no longer need character names
+        
+        for obj in objects:
+            # Validate obj is a dict
+            if not isinstance(obj, dict):
+                log.error(f"process_adaptation: obj is {type(obj)}, not dict")
+                continue
+            
+            obj_id = obj.get('id', 'UNKNOWN')
+            obj_name = obj.get('name', 'UNKNOWN')
+            
+            # Check tracking type - safely handle if tracking config is missing
+            tracking_config = obj.get('tracking', {})
+            if isinstance(tracking_config, list):
+                # Old format where thresholds was stored as tracking config (shouldn't happen)
+                tracking_config = {}
+            tracking_type = tracking_config.get('type', 'per_difficulty')
+            
+            if tracking_type == 'total':
+                # Total tracking - one unified counter regardless of difficulty
+                tracking_key = 'total'
+                tracking_display = 'total'
+                new_spins = self.special_objects_manager.increment_tracking(user_id, obj_id, tracking_key)
+                results['total_spins'][obj_id] = {'total': new_spins}
+                
+                # Thresholds is a flat list
+                thresholds = obj.get('thresholds', [])
+                if isinstance(thresholds, dict):
+                    # Old format - shouldn't happen but handle it
+                    thresholds = thresholds.get(difficulty, [])
+            else:
+                # Per-difficulty tracking (default)
+                tracking_key = difficulty
+                tracking_display = difficulty
+                new_spins = self.special_objects_manager.increment_tracking(user_id, obj_id, difficulty)
+                results['total_spins'][obj_id] = {difficulty: new_spins}
+                
+                # Thresholds is per-difficulty dict
+                thresholds_config = obj.get('thresholds', {})
+                if isinstance(thresholds_config, list):
+                    # New format but with per-difficulty - shouldn't happen
+                    thresholds = thresholds_config
+                else:
+                    # Old per-difficulty dict format
+                    thresholds = thresholds_config.get(difficulty, [])
+            
+            old_threshold = None
+            new_threshold = None
+            
+            # Find old and new threshold levels
+            for t in thresholds:
+                if new_spins - 1 >= t['spins']:
+                    old_threshold = t
+                if new_spins >= t['spins']:
+                    new_threshold = t
+            
+            # If we reached a new threshold, announce it!
+            if new_threshold and (not old_threshold or new_threshold['spins'] > old_threshold.get('spins', 0)):
+                results['new_thresholds'].append({
+                    'object': obj_name,
+                    'spins': new_threshold['spins'],
+                    'effects': new_threshold['effects']
+                })
+                
+                # Parse and apply effects
+                effects = self.special_objects_manager.parse_effects(new_threshold['effects'])
+                
+                # Check for heal effects on threshold unlock
+                if effects.get('heal_percent', 0) > 0:
+                    heal_amount = await self.heal_player_percent(user_id, effects['heal_percent'])
+                    results['heals'] += heal_amount
+                
+                if effects.get('heal', 0) > 0:
+                    self.player_hp[user_id]['current'] = min(
+                        self.player_hp[user_id]['max'],
+                        self.player_hp[user_id]['current'] + effects['heal']
+                    )
+                    results['heals'] += effects['heal']
+                
+                # Build announcement embed
+                threshold_num = thresholds.index(new_threshold) + 1
+                max_thresholds = len(thresholds)
+                
+                # Check if this is the max threshold (first time only warning)
+                is_max_threshold = (threshold_num == max_thresholds)
+                if is_max_threshold:
+                    # Check if we've already warned this user about this object+difficulty/total
+                    if user_id not in self.max_adaptation_warned:
+                        self.max_adaptation_warned[user_id] = {}
+                    if obj_id not in self.max_adaptation_warned[user_id]:
+                        self.max_adaptation_warned[user_id][obj_id] = {}
+                    
+                    already_warned = self.max_adaptation_warned[user_id][obj_id].get(tracking_key, False)
+                
+                embed = discord.Embed(
+                    title=f"🔮 {obj_name} - THRESHOLD {threshold_num}/{max_thresholds}!",
+                    description=f"**{message.author.mention}** reached **{new_spins} {tracking_display}** spins!\n\n"
+                               f"📈 **New Effects Unlocked:**",
+                    color=discord.Color.purple()
+                )
+                
+                # If max threshold and first time, add warning
+                if is_max_threshold and not already_warned:
+                    if tracking_type == 'total':
+                        embed.description += f"\n\n🌟 **MAX ADAPTATION REACHED!**\nFurther adapts provide no additional bonuses."
+                    else:
+                        embed.description += f"\n\n🌟 **MAX ADAPTATION REACHED!**\nFurther adapts on **{difficulty}** provide no additional bonuses."
+                    self.max_adaptation_warned[user_id][obj_id][tracking_key] = True
+                
+                # List effects in a readable format
+                effect_text = []
+                for effect in new_threshold['effects']:
+                    if 'damage_reduction' in effect:
+                        val = effect.split(':')[-1].replace('+', '')
+                        effect_text.append(f"🛡️ {val}% damage reduction")
+                    elif 'heal_percent' in effect:
+                        val = effect.split(':')[-1]
+                        effect_text.append(f"💚 Healed {val}% HP!")
+                    elif 'heal:' in effect:
+                        val = effect.split(':')[-1]
+                        effect_text.append(f"💚 Healed {val} HP!")
+                    elif 'bf_chance' in effect:
+                        val = effect.split(':')[-1]
+                        effect_text.append(f"⚡ +{val}% Black Flash chance")
+                    elif 'damage_boost' in effect:
+                        val = effect.split(':')[-1]
+                        effect_text.append(f"💢 +{val} damage boost")
+                    else:
+                        effect_text.append(f"✨ {effect}")
+                
+                embed.add_field(name="Effects", value="\n".join(effect_text), inline=False)
+                
+                # Add GIF if object has one
+                if obj.get('visuals', {}).get('threshold_gif'):
+                    embed.set_image(url=obj['visuals']['threshold_gif'])
+                
+                await self.safe_send(channel, embed=embed)
+            
+            # Check conditionals
+            for cond in obj.get('conditionals', []):
+                if self.special_objects_manager._evaluate_condition(cond['if'], user_id, obj_id, difficulty):
+                    results['effects_applied'].extend(cond['then'])
+                    
+                    # Special conditional announcements (e.g., impossible@12 bonuses)
+                    if 'impossible' in cond['if'] and '>= 12' in cond['if']:
+                        effects = self.special_objects_manager.parse_effects(cond['then'])
+                        
+                        if any('damage_reduction' in e for e in cond['then']):
+                            embed = discord.Embed(
+                                title=f"🌟 {obj_name} - MASTERY BONUS!",
+                                description=f"**{message.author.mention}** achieved **12+ impossible** spins!\n\n"
+                                           f"🔥 **Mastery Effect Active!**",
+                                color=discord.Color.gold()
+                            )
+                            
+                            # List conditional effects
+                            for effect in cond['then']:
+                                if 'damage_reduction.easy' in effect:
+                                    embed.add_field(name="Easy QTE", value="🚫 100% damage negated!", inline=True)
+                                elif 'damage_reduction.medium' in effect:
+                                    embed.add_field(name="Medium QTE", value=f"+50% reduction", inline=True)
+                                elif 'damage_reduction.hard' in effect:
+                                    embed.add_field(name="Hard QTE", value=f"+10% reduction", inline=True)
+                            
+                            await self.safe_send(channel, embed=embed)
+            
+            # Calculate current damage reduction for reporting (inventory-based)
+            results['damage_reduction'] = self.special_objects_manager.get_damage_reduction(user_id, [], difficulty)
+            
+            # Console log - show tracking_display (total vs difficulty)
+            console.print(f"[magenta]🔮 ADAPT - {message.author.name}: {obj_name} {tracking_display} = {new_spins} spins[/magenta]")
+        
+        # Save tracking data
+        self.special_objects_manager.save_tracking()
+        
+        return results
+
+    async def heal_player_percent(self, user_id: int, percent: int) -> int:
+        """Heal player by a percentage of their max HP, returns amount healed"""
+        if user_id not in self.player_hp:
+            return 0
+        
+        hp_data = self.player_hp[user_id]
+        max_hp = hp_data['max']
+        current_hp = hp_data['current']
+        
+        heal_amount = int(max_hp * (percent / 100))
+        new_hp = min(max_hp, current_hp + heal_amount)
+        actual_heal = new_hp - current_hp
+        
+        self.player_hp[user_id]['current'] = new_hp
+        
+        return actual_heal
 
     async def find_tupper_message(self, channel, user_id, original_message, timeout=1.0):
         """Find the Tupper webhook message that replaces the user's original message.
@@ -3327,19 +6085,14 @@ class AdvancedQTEBot:
 
             if user_id in responses:
                 return False
+            
+            # Get active Mirror Shard effects
+            mirror_effects = self.special_objects_manager.get_active_effects(user_id, difficulty)
 
             if user_id == target.id:
                 if '*evade*' in content:
-                    # Check for spam attempts after QTE completion
                     current_time = time.time()
-                    if user_id in self.last_qte_completion:
-                        time_since_last = current_time - self.last_qte_completion[user_id]
-                        if time_since_last < 1.0 and qte_id not in self.active_qtes:
-                            # Spam attempt within 1 second after QTE completion
-                            await self.webhook_send(content=f"❌ {message.author.mention} **missed HARD QTE attempt!** (spam detected)")
-                            await self.damage_player(user_id, 'hard')
-                            console.print(f"[red]✗ SPAM EVADE BLOCKED - {message.author.name}[/red]")
-                            return False
+                    # Note: Spam protection is handled by the responses set - no need to penalize here
                     
                     if response_time <= evade_window:
                         responses.add(user_id)
@@ -3349,10 +6102,27 @@ class AdvancedQTEBot:
                         # Add success reaction to Tupper message (or original if not using Tupper)
                         asyncio.create_task(self.add_reaction_to_response(channel, user_id, message, "✅"))
                         
-                        # Enable counter window if evaded fast enough
-                        if response_time < self.counter_window:
-                            await self.send_success_with_counter(channel, message.author.mention, response_time, user_id, qte_id)
-                            console.print(f"[yellow]⚡ COUNTER ENABLED for {message.author.name}[/yellow]")
+                        # MIRROR SHARD: Heal on hard evade (15+ spins)
+                        if difficulty == 'hard' and mirror_effects.get('on_hard_evade_heal', 0) > 0:
+                            heal_amount = mirror_effects['on_hard_evade_heal']
+                            if user_id in self.player_hp:
+                                old_hp = self.player_hp[user_id]['current']
+                                self.player_hp[user_id]['current'] = min(
+                                    self.player_hp[user_id]['max'],
+                                    self.player_hp[user_id]['current'] + heal_amount
+                                )
+                                new_hp = self.player_hp[user_id]['current']
+                                await self.webhook_send(content=f"🪞✨ **Mirror Shard** healed {message.author.mention}! ({old_hp} → {new_hp} HP)")
+                                console.print(f"[green]🪞 Mirror Shard heal: {old_hp} → {new_hp} (+{heal_amount})[/green]")
+                        
+                        # Enable counter window if evaded fast enough OR has guaranteed_counter
+                        has_guaranteed_counter = mirror_effects.get('guaranteed_counter', False)
+                        if response_time < self.counter_window or has_guaranteed_counter:
+                            await self.send_success_with_counter(channel, message.author.mention, response_time, user_id, qte_id, difficulty)
+                            if has_guaranteed_counter:
+                                console.print(f"[yellow]⚡🪞 COUNTER ENABLED (Mirror Shard guaranteed) for {message.author.name}[/yellow]")
+                            else:
+                                console.print(f"[yellow]⚡ COUNTER ENABLED for {message.author.name}[/yellow]")
                         # No separate success message - reaction emoji is enough
                         
                         self.last_qte_completion[user_id] = current_time
@@ -3404,9 +6174,32 @@ class AdvancedQTEBot:
                             # EPIC BLACK FLASH MESSAGE - Start of chain!
                             base_damage = self.bf_chain_damage.get(1, 25)
                             
-                            # Apply first BF damage to boss
-                            if self.active_boss:
-                                await self.damage_boss(self.active_boss['name'], base_damage)
+                            # MIRROR SHARD BLACK FLASH: If user has 20+ spins, guaranteed 40% boss damage
+                            mirror_shard_bf = False
+                            mirror_effects = self.special_objects_manager.get_active_effects(user_id, difficulty)
+                            if mirror_effects.get('total_spins', 0) >= 20 and self.active_boss:
+                                mirror_shard_bf = True
+                                # 40% of boss MAX HP as damage
+                                boss_max_hp = self.active_boss.get('max_hp', 1000)
+                                mirror_damage = int(boss_max_hp * 0.40)
+                                
+                                # Reset Mirror Shard to 5 spins
+                                self.special_objects_manager.set_tracking(user_id, 'mirror_shard', 'total', 5)
+                                self.special_objects_manager.save_tracking()
+                                
+                                # Apply mirror damage (no stun required!)
+                                await self.damage_boss(self.active_boss['name'], mirror_damage)
+                                
+                                # Clear max adaptation warning so they get notified again
+                                if user_id in self.max_adaptation_warned:
+                                    if 'mirror_shard' in self.max_adaptation_warned[user_id]:
+                                        del self.max_adaptation_warned[user_id]['mirror_shard']
+                                
+                                console.print(f"[bold magenta]🪞⚡ MIRROR SHARD BLACK FLASH! {mirror_damage} damage (40% boss HP), reset to 5 spins[/bold magenta]")
+                            else:
+                                # Normal BF damage
+                                if self.active_boss:
+                                    await self.damage_boss(self.active_boss['name'], base_damage)
                             
                             # Stun enemy for 1 second (guaranteed on BF)
                             self.enemy_stunned = True
@@ -3415,17 +6208,31 @@ class AdvancedQTEBot:
                             # Add charge
                             self.add_charge_from_damage_dealt(user_id, base_damage)
                             
-                            embed = discord.Embed(
-                                title="⚡💥 BLACK FLASH! 💥⚡",
-                                description=f"**{message.author.mention}** landed a **PERFECT BLACK FLASH!**\n\n"
-                                           f"💢 **{base_damage} DAMAGE!**\n"
-                                           f"🌀 Enemy stunned for 1s!\n"
-                                           f"🔥 **CHAIN OPPORTUNITY INCOMING!**",
-                                color=discord.Color.from_rgb(138, 43, 226)  # Purple
-                            )
+                            # Build embed based on Mirror Shard or normal BF
+                            if mirror_shard_bf:
+                                embed = discord.Embed(
+                                    title="🪞⚡ MIRROR SHARD BLACK FLASH! ⚡🪞",
+                                    description=f"**{message.author.mention}** channeled the Mirror Shard's power!\n\n"
+                                               f"💀 **{mirror_damage} DAMAGE!** (40% Boss HP)\n"
+                                               f"🪞 Mirror Shard reset to 5 spins!\n"
+                                               f"🌀 Enemy stunned for 1s!\n"
+                                               f"🔥 **CHAIN OPPORTUNITY INCOMING!**",
+                                    color=discord.Color.from_rgb(180, 0, 255)  # Bright Purple
+                                )
+                                embed.set_footer(text=f"Mirror Shard 20→5 Spins | No Stun Required!")
+                            else:
+                                embed = discord.Embed(
+                                    title="⚡💥 BLACK FLASH! 💥⚡",
+                                    description=f"**{message.author.mention}** landed a **PERFECT BLACK FLASH!**\n\n"
+                                               f"💢 **{base_damage} DAMAGE!**\n"
+                                               f"🌀 Enemy stunned for 1s!\n"
+                                               f"🔥 **CHAIN OPPORTUNITY INCOMING!**",
+                                    color=discord.Color.from_rgb(138, 43, 226)  # Purple
+                                )
+                                bf_chance = self.player_stats[user_id]['black_flash_chance'] * 100
+                                embed.set_footer(text=f"Black Flash Chance: {bf_chance:.1f}% | Response Time: {response_time:.2f}s")
+                            
                             embed.set_image(url=self.black_flash_gif)
-                            bf_chance = self.player_stats[user_id]['black_flash_chance'] * 100
-                            embed.set_footer(text=f"Black Flash Chance: {bf_chance:.1f}% | Response Time: {response_time:.2f}s")
                             await self.safe_send(channel, embed=embed)
                             
                             # Add exclamation reaction
@@ -3449,14 +6256,25 @@ class AdvancedQTEBot:
                             
                             # Trigger BF Chain QTE (level 2 since this was level 1)
                             await asyncio.sleep(0.5)
-                            await self.trigger_bf_chain_qte(user_id, channel, target, difficulty, 2)
+                            await self.trigger_bf_chain_qte(user_id, channel, target, difficulty, 2, origin_message=message)
                             
                             # Process next batch QTE if applicable (after chain ends naturally)
                             # Don't process here - let chain complete first
                             return True
                         else:
-                            # No separate success message - reaction emoji is enough
-                            console.print(f"[cyan]⚔ PARRY SUCCESS - {message.author.name} in {response_time:.2f}s[/cyan]")
+                            # PARRY SUCCESS (no Black Flash) - Show visual with BF timing indicator
+                            parry_indicator = self.get_parry_visual_indicator(response_time, difficulty, user_id)
+                            timing_feedback = self.get_parry_timing_feedback(response_time, difficulty, user_id)
+                            
+                            # Only show message if player has BF chance (to indicate timing)
+                            bf_chance = self.player_stats.get(user_id, {}).get('black_flash_chance', 0)
+                            if bf_chance > 0 and parry_indicator != "✅":
+                                # Show visual indicator for BF window
+                                await self.webhook_send(
+                                    content=f"{parry_indicator} {message.author.mention} **parried!** [{timing_feedback}] ({response_time:.2f}s)"
+                                )
+                            
+                            console.print(f"[cyan]⚔ PARRY SUCCESS - {message.author.name} in {response_time:.2f}s ({timing_feedback})[/cyan]")
 
                         # Add success reaction to Tupper message (or original if not using Tupper)
                         asyncio.create_task(self.add_reaction_to_response(channel, user_id, message, "✅"))
@@ -3495,8 +6313,83 @@ class AdvancedQTEBot:
                             await self.process_next_player_qte(target)
                         return True
 
+                # ========== SPECIAL OBJECTS: *adapt* COMMAND ==========
+                elif '*adapt*' in content:
+                    # Check if user has any adaptation objects IN THEIR INVENTORY
+                    adaptation_objects = [
+                        obj for obj in self.special_objects_manager.get_player_inventory(user_id)
+                        if obj.get('type') == 'adaptation'
+                    ]
+                    
+                    if not adaptation_objects:
+                        return False  # No adaptation objects, ignore
+                    
+                    # Check if within valid window (parry window for adaptation)
+                    # Get adjusted parry window for REVENGE mode  
+                    adj_parry_min, adj_parry_max = self.get_adjusted_parry_window(difficulty, user_id)
+                    
+                    # Adaptation uses parry timing
+                    if not (adj_parry_min <= response_time <= adj_parry_max):
+                        await self.webhook_send(content=f"❌ {message.author.mention} **adapt mistimed!** ({response_time:.2f}s)")
+                        await self.damage_player(user_id, difficulty)
+                        console.print(f"[red]✗ ADAPT FAILED (mistimed) - {message.author.name} at {response_time:.2f}s[/red]")
+                        
+                        asyncio.create_task(self.add_reaction_to_response(channel, user_id, message, "❌"))
+                        
+                        current_time = time.time()
+                        self.last_qte_completion[user_id] = current_time
+                        
+                        is_batch = qte_data.get('batch_mode', False)
+                        self.active_qtes.pop(qte_id, None)
+                        self.save_all_data()
+                        
+                        if is_batch:
+                            await self.process_next_player_qte(target)
+                        return True
+                    
+                    # ADAPT SUCCESS - Process all adaptation objects
+                    responses.add(user_id)
+                    results = await self.process_adaptation(user_id, difficulty, adaptation_objects, message)
+                    
+                    # Track adaptation as successful response
+                    await self.update_player_stats(user_id, 'adapt', True, response_time)
+                    
+                    # Mark success
+                    asyncio.create_task(self.add_reaction_to_response(channel, user_id, message, "🔮"))
+                    
+                    # Send success message with spin count (if no threshold was unlocked)
+                    if not results.get('new_thresholds'):
+                        # Show current spin progress
+                        spin_info = []
+                        for obj in adaptation_objects:
+                            obj_id = obj['id']
+                            spins = self.special_objects_manager.get_tracking(user_id, obj_id, difficulty)
+                            spin_info.append(f"**{obj['name']}**: {spins} {difficulty} spins")
+                        
+                        await self.webhook_send(
+                            content=f"🔮 {message.author.mention} **adapted!** ({response_time:.2f}s)\n" + "\n".join(spin_info)
+                        )
+                    
+                    console.print(f"[magenta]🔮 ADAPT SUCCESS - {message.author.name}[/magenta]")
+                    
+                    current_time = time.time()
+                    self.last_qte_completion[user_id] = current_time
+                    
+                    is_batch = qte_data.get('batch_mode', False)
+                    self.active_qtes.pop(qte_id, None)
+                    self.save_all_data()
+                    
+                    if is_batch:
+                        await self.process_next_player_qte(target)
+                    return True
+
             else:
                 if '*save*' in content and target:
+                    # Check save rate limit (2 per minute)
+                    if not self.can_save_qte(user_id):
+                        await self.webhook_send(content=f"⏱️ {message.author.mention} **Save limit exceeded!** Max 2 saves per minute")
+                        return False
+                    
                     if response_time <= evade_window:
                         responses.add(user_id)
                         await self.webhook_send(content=f"🛡️ {message.author.mention} **saved {target.mention}!** ({response_time:.2f}s)")
@@ -3544,6 +6437,9 @@ class AdvancedQTEBot:
             participant['responded'] = True
             success = False
             action = None
+            
+            # Get active Mirror Shard effects
+            mirror_effects = self.special_objects_manager.get_active_effects(user_id, difficulty)
 
             if '*evade*' in content:
                 action = 'evade'
@@ -3554,10 +6450,27 @@ class AdvancedQTEBot:
                     participant['success'] = True
                     console.print(f"[green]✓ {message.author.name} - EVADE - {response_time:.2f}s[/green]")
                     
-                    # Enable counter window if evaded fast enough - MERGED with success message
-                    if response_time < self.counter_window:
-                        await self.send_success_with_counter(channel, message.author.mention, response_time, user_id, qte_id)
-                        console.print(f"[yellow]⚡ COUNTER ENABLED for {message.author.name}[/yellow]")
+                    # MIRROR SHARD: Heal on hard evade (15+ spins)
+                    if difficulty == 'hard' and mirror_effects.get('on_hard_evade_heal', 0) > 0:
+                        heal_amount = mirror_effects['on_hard_evade_heal']
+                        if user_id in self.player_hp:
+                            old_hp = self.player_hp[user_id]['current']
+                            self.player_hp[user_id]['current'] = min(
+                                self.player_hp[user_id]['max'],
+                                self.player_hp[user_id]['current'] + heal_amount
+                            )
+                            new_hp = self.player_hp[user_id]['current']
+                            await self.webhook_send(content=f"🪞✨ **Mirror Shard** healed {message.author.mention}! ({old_hp} → {new_hp} HP)")
+                            console.print(f"[green]🪞 Mirror Shard heal: {old_hp} → {new_hp} (+{heal_amount})[/green]")
+                    
+                    # Enable counter window if evaded fast enough OR has guaranteed_counter
+                    has_guaranteed_counter = mirror_effects.get('guaranteed_counter', False)
+                    if response_time < self.counter_window or has_guaranteed_counter:
+                        await self.send_success_with_counter(channel, message.author.mention, response_time, user_id, qte_id, difficulty)
+                        if has_guaranteed_counter:
+                            console.print(f"[yellow]⚡🪞 COUNTER ENABLED (Mirror Shard guaranteed) for {message.author.name}[/yellow]")
+                        else:
+                            console.print(f"[yellow]⚡ COUNTER ENABLED for {message.author.name}[/yellow]")
                     else:
                         await self.webhook_send(content=f"✅ {message.author.mention} evaded! ({response_time:.2f}s)")
                     
@@ -3569,6 +6482,10 @@ class AdvancedQTEBot:
                     self.last_qte_completion[user_id] = current_time
 
             elif '*parry*' in content:
+                # Block parry in GROUP QTEs
+                await self.webhook_send(content=f"❌ {message.author.mention} **Cannot parry in group QTEs!** Use *evade* instead")
+                return False
+                
                 action = 'parry'
                 current_time = time.time()
                 
@@ -3617,7 +6534,7 @@ class AdvancedQTEBot:
                         
                         # Start BF chain for this player
                         member = message.author
-                        asyncio.create_task(self.trigger_bf_chain_qte(user_id, channel, member, difficulty, 2))
+                        asyncio.create_task(self.trigger_bf_chain_qte(user_id, channel, member, difficulty, 2, origin_message=message))
                     else:
                         await self.webhook_send(content=f"⚔️ {message.author.mention} parried! ({response_time:.2f}s)")
                         console.print(f"[cyan]⚔ {message.author.name} - PARRY - {response_time:.2f}s[/cyan]")
@@ -3653,7 +6570,7 @@ class AdvancedQTEBot:
             successful = sum(1 for p in participants.values() if p['success'])
             total = len(participants)
 
-            await channel.send(f"📊 **Group QTE Complete!** {successful}/{total} succeeded")
+            await self.safe_send(channel, content=f"📊 **Group QTE Complete!** {successful}/{total} succeeded")
 
             console.print(Panel.fit(
                 f"[cyan]📊 GROUP QTE FINISHED (ID: {qte_id})[/cyan]\n"
@@ -3742,17 +6659,29 @@ class AdvancedQTEBot:
                 return
             # ======================================================
             
-            # Check cooldown
+            # ========== CHECK IF FIGHT IS ACTIVE ==========
+            if not self.fight_active:
+                await channel.send(
+                    f"{message.author.mention} ⚔️ **No active fight!** "
+                    f"Ultimate can only be used during boss fights."
+                )
+                return
+            # ==============================================
+            
+            # Check cooldown (fight-based)
             current_time = time.time()
             if user_id not in self.power_cooldowns:
                 self.power_cooldowns[user_id] = {}
             
-            if power_key in self.power_cooldowns[user_id]:
-                cooldown_end = self.power_cooldowns[user_id][power_key]
-                if current_time < cooldown_end:
-                    remaining = int(cooldown_end - current_time)
-                    await channel.send(f"{message.author.mention} ⏱️ Power on cooldown! **{remaining}s** remaining.")
-                    return
+            cooldown_remaining = self.get_ultimate_cooldown_remaining(user_id, power_key)
+            if cooldown_remaining > 0:
+                minutes = int(cooldown_remaining // 60)
+                seconds = int(cooldown_remaining % 60)
+                await channel.send(
+                    f"{message.author.mention} ⏱️ Power on cooldown! **{minutes}m {seconds}s** remaining.\n"
+                    f"💡 Cooldowns only tick during active fights!"
+                )
+                return
             
             # Get power data
             power = self.character_powers[character_name][power_key]
@@ -3761,23 +6690,19 @@ class AdvancedQTEBot:
             self.consume_ultimate_charge(user_id, power_slot)
             # ============================================
             
-            # Set cooldown
-            self.power_cooldowns[user_id][power_key] = current_time + power["cooldown"]
-            
-            # Apply power effect
-            await self.apply_power_effect(message.author, power, channel)
+            # Apply power effect (will set cooldown internally based on damage)
+            await self.apply_power_effect(message.author, power, channel, power_key)
             
             console.print(f"[purple]⚡ {message.author.name} used {power['name']}[/purple]")
             
         except Exception as e:
             log.error(f"Error handling power activation: {e}")
 
-    async def apply_power_effect(self, user, power, channel):
+    async def apply_power_effect(self, user, power, channel, power_key=None):
         """Apply power effects based on effect string"""
         try:
             effect = power["effect"]
             power_name = power["name"]
-            base_cooldown = power["cooldown"]
             
             # Create activation embed
             embed = discord.Embed(
@@ -3788,21 +6713,39 @@ class AdvancedQTEBot:
             
             # Parse effect string
             if effect.startswith("damage:"):
-                damage = int(effect.split(":")[1])
+                raw_damage = int(effect.split(":")[1])
                 
-                # Calculate dynamic cooldown based on damage
-                extra_cooldown = int(damage * self.ultimate_cooldown_per_damage)
-                total_cooldown = base_cooldown + extra_cooldown
+                # ========== CAP DAMAGE AT 500 ==========
+                damage = min(raw_damage, self.ultimate_max_damage)
+                was_capped = raw_damage > self.ultimate_max_damage
+                # ======================================
                 
-                embed.add_field(name="Effect", value=f"💥 {damage} damage to enemy!", inline=False)
-                embed.add_field(name="Dynamic Cooldown", value=f"⏱️ {total_cooldown}s (base {base_cooldown}s + {extra_cooldown}s)", inline=False)
+                # Use 10-minute base cooldown for ultimates (fight-time only!)
+                total_cooldown = self.ultimate_base_cooldown  # 600 seconds = 10 minutes
                 
-                # Update the actual cooldown for this use
-                if user.id in self.power_cooldowns:
-                    for key in self.power_cooldowns[user.id]:
-                        # Find which power is currently on cooldown and update it
-                        if self.power_cooldowns[user.id][key] > time.time():
-                            self.power_cooldowns[user.id][key] = time.time() + total_cooldown
+                if was_capped:
+                    embed.add_field(
+                        name="Effect", 
+                        value=f"💥 **{damage} damage** to enemy! (capped from {raw_damage})", 
+                        inline=False
+                    )
+                else:
+                    embed.add_field(name="Effect", value=f"💥 **{damage} damage** to enemy!", inline=False)
+                
+                # Show cooldown in minutes
+                cooldown_minutes = total_cooldown // 60
+                embed.add_field(
+                    name="Cooldown", 
+                    value=f"⏱️ **{cooldown_minutes} minutes** (fight-time only!)", 
+                    inline=False
+                )
+                
+                # Set the cooldown for this power
+                if power_key and user.id:
+                    if user.id not in self.power_cooldowns:
+                        self.power_cooldowns[user.id] = {}
+                    self.power_cooldowns[user.id][power_key] = time.time() + total_cooldown
+                    console.print(f"[yellow]⏱️ Set {power_key} cooldown: {cooldown_minutes}m (fight-time)[/yellow]")
                 
                 # ===== PHASE 5: ADD CHARGE FROM POWER DAMAGE (only if self-recharge enabled) =====
                 if self.ultimate_self_recharge:
@@ -3842,7 +6785,7 @@ class AdvancedQTEBot:
             # Add power image (custom if set, otherwise default ultimate GIF)
             power_image = power.get("image_url") or self.ultimate_gif
             embed.set_image(url=power_image)
-            embed.set_footer(text=f"Cooldown: {power['cooldown']}s | Type: {power['type'].capitalize()}")
+            embed.set_footer(text=f"Type: {power['type'].capitalize()} | 💡 Cooldowns tick during fights only!")
             await channel.send(embed=embed)
             
         except Exception as e:
@@ -3888,6 +6831,26 @@ class AdvancedQTEBot:
             streak_multiplier = min(2.0, 1.0 + (parry_streak * 0.1))
             counter_damage = int(base_damage * streak_multiplier)
             
+            # CRITICAL COUNTER CHECK - Uses luck modifier (formerly BF chance)
+            is_critical = False
+            crit_chance = self.player_stats.get(user_id, {}).get('black_flash_chance', self.black_flash_base_chance)
+            # Add REVENGE bonus
+            if user_id in self.player_hp and self.player_hp[user_id].get("revenge_mode", False):
+                crit_chance += self.revenge_bf_bonus
+            # Add buff bonus
+            crit_chance += self.get_bf_boost(user_id)
+            
+            if random.random() < crit_chance:
+                is_critical = True
+                counter_damage = int(counter_damage * 2.0)  # Double damage on crit!
+                # Increase luck for next time (capped)
+                stats = self.player_stats.get(user_id, {})
+                if stats.get('black_flash_chance', 0) < self.black_flash_cap:
+                    stats['black_flash_chance'] = min(
+                        stats.get('black_flash_chance', self.black_flash_base_chance) + self.black_flash_increment,
+                        self.black_flash_cap
+                    )
+            
             # Add charge from counter
             self.add_charge_from_damage_dealt(user_id, counter_damage)
             self.add_charge_from_counter(user_id)
@@ -3911,31 +6874,69 @@ class AdvancedQTEBot:
             
             # Send dramatic counter message with user's custom GIF or default
             user_gifs = self.user_counter_gifs.get(user_id)
+            counter_file = None
+            
+            # Debug logging for counter GIF lookup
+            console.print(f"[dim]Counter GIF lookup for user_id={user_id}: found={user_gifs is not None}[/dim]")
+            
             if user_gifs:
                 # Support both single URL (string) and multiple URLs (list)
                 if isinstance(user_gifs, list) and user_gifs:
                     counter_gif_url = random.choice(user_gifs)
+                    console.print(f"[dim]Using random GIF from list ({len(user_gifs)} total)[/dim]")
                 else:
                     counter_gif_url = user_gifs
+                    console.print(f"[dim]Using single GIF URL[/dim]")
             else:
-                counter_gif_url = self.counter_gif
+                # Use random local counter GIF
+                counter_file = self.get_random_counter_gif()
+                counter_gif_url = f"attachment://{counter_file.filename}" if counter_file else None
             
             # Get ultimate charge for display
             p1_charge = self.get_charge_percentage(user_id, 1)
             p2_charge = self.get_charge_percentage(user_id, 2)
             charge_text = f"⚡ Ult: P1 {p1_charge:.0f}% | P2 {p2_charge:.0f}%"
             
+            # Check if this was from a Black Flash chain (add star visual)
+            is_bf_chain = user_id in self.bf_chain_active
+            
+            # Build title based on critical or normal counter
+            crit_text = ""
+            if is_bf_chain:
+                title = "⭐⚡💥 BLACK FLASH COUNTER! 💥⚡⭐"
+                title_color = discord.Color.from_rgb(138, 43, 226)
+            elif is_critical:
+                title = "🎯💥 CRITICAL COUNTER! 💥🎯"
+                title_color = discord.Color.from_rgb(255, 215, 0)  # Gold for crit
+                crit_text = "\n🍀 **CRITICAL HIT!** (2x Damage)"
+            else:
+                title = "⚡💥 FEROCIOUS COUNTER! 💥⚡"
+                title_color = discord.Color.from_rgb(255, 69, 0)
+            
+            # Show crit chance in footer
+            crit_display = crit_chance * 100
+            
             embed = discord.Embed(
-                title="⚡💥 FEROCIOUS COUNTER! 💥⚡",
+                title=title,
                 description=f"**{message.author.mention}** unleashes a devastating counterattack!\n\n"
-                           f"💢 **{counter_damage} DAMAGE!**\n"
+                           f"💢 **{counter_damage} DAMAGE!**{crit_text}\n"
                            f"🌀 Enemy stunned for {stun_text}\n"
                            f"🔥 Counter Streak: **{counter_streak}**\n"
                            f"{charge_text}",
-                color=discord.Color.from_rgb(255, 69, 0)  # Orange-Red
+                color=title_color
             )
-            embed.set_image(url=counter_gif_url)
-            await channel.send(embed=embed)
+            
+            # Add footer with luck/crit info
+            embed.set_footer(text=f"🍀 Luck: {crit_display:.1f}% | {'CRIT!' if is_critical else 'No crit'}")
+            
+            if counter_gif_url:
+                embed.set_image(url=counter_gif_url)
+            
+            # Send with file attachment if using local image (use safe_send for embeds)
+            if counter_file:
+                await channel.send(file=counter_file, embed=embed)  # Files need direct send
+            else:
+                await self.safe_send(channel, embed=embed)
             
             # Add reaction to Tupper message (or original if not using Tupper)
             asyncio.create_task(self.add_reaction_to_response(channel, user_id, message, "✅"))
@@ -3943,16 +6944,17 @@ class AdvancedQTEBot:
             # Delete the counter window message if exists
             if hasattr(self, 'counter_messages') and user_id in self.counter_messages:
                 try:
-                    await self.counter_messages[user_id].delete()
+                    await self.safe_delete_message(self.counter_messages[user_id])
                     del self.counter_messages[user_id]
                 except:
                     pass
             
             # Console output
+            crit_status = "[bold gold1]CRITICAL![/bold gold1] " if is_critical else ""
             console.print(Panel.fit(
-                f"[bold gold1]⚡💥 COUNTER ATTACK! 💥⚡[/bold gold1]\n"
+                f"[bold gold1]⚡💥 {crit_status}COUNTER ATTACK! 💥⚡[/bold gold1]\n"
                 f"[cyan]{message.author.display_name}[/cyan] landed a counter!\n"
-                f"[yellow]Damage: {counter_damage} | Enemy stunned for {stun_duration:.1f}s[/yellow]",
+                f"[yellow]Damage: {counter_damage} | Stun: {stun_duration:.1f}s | Luck: {crit_display:.1f}%[/yellow]",
                 border_style="gold1"
             ))
             
@@ -3962,6 +6964,181 @@ class AdvancedQTEBot:
             console.print(f"[red]✗ Error in counter attack handler: {e}[/red]")
             log.error(f"Counter attack error: {e}")
 
+    async def handle_adapt_command(self, message):
+        """Handle *adapt* command - works during active QTE or counter window"""
+        try:
+            if message.channel.id != self.qte_channel_id:
+                return
+            
+            user_id = self.resolve_user_id(message)
+            channel = message.channel
+            
+            # Check if user has any adaptation objects IN THEIR INVENTORY
+            adaptation_objects = [
+                obj for obj in self.special_objects_manager.get_player_inventory(user_id)
+                if obj.get('type') == 'adaptation'
+            ]
+            
+            if not adaptation_objects:
+                return  # No adaptation objects, ignore
+            
+            # TWO POSSIBLE SCENARIOS:
+            # 1. During active QTE - use QTE timing window
+            # 2. During counter window - no timing requirement, just execute
+            
+            user_has_active_qte = any(
+                qte_data.get('target', {}).id == user_id or 
+                user_id in [p for qte_data in self.active_qtes.values() for p in qte_data.get('participants', {})]
+                for qte_data in self.active_qtes.values()
+            )
+            
+            user_in_counter = user_id in self.counter_enabled_players
+            
+            # If neither active QTE nor counter, ignore
+            if not user_has_active_qte and not user_in_counter:
+                return
+            
+            # SCENARIO 1: Adapt during active QTE - must use QTE timing
+            if user_has_active_qte:
+                # Find the active QTE for this user
+                for qte_id in list(self.active_qtes.keys()):
+                    qte_data = self.active_qtes.get(qte_id)
+                    if not qte_data:
+                        continue
+                    
+                    target = qte_data.get('target')
+                    if not target or target.id != user_id:
+                        continue
+                    
+                    # Calculate response time
+                    now = datetime.now(timezone.utc)
+                    response_time = (now - qte_data['start']).total_seconds() - self.latency_offset
+                    difficulty = qte_data['difficulty']
+                    
+                    # Check if within valid window (parry window for adaptation)
+                    adj_parry_min, adj_parry_max = self.get_adjusted_parry_window(difficulty, user_id)
+                    
+                    # Adaptation uses parry timing
+                    if not (adj_parry_min <= response_time <= adj_parry_max):
+                        await self.webhook_send(content=f"❌ {message.author.mention} **adapt mistimed!** ({response_time:.2f}s)")
+                        await self.damage_player(user_id, difficulty)
+                        console.print(f"[red]✗ ADAPT FAILED (mistimed) - {message.author.name} at {response_time:.2f}s[/red]")
+                        
+                        asyncio.create_task(self.add_reaction_to_response(channel, user_id, message, "❌"))
+                        
+                        current_time = time.time()
+                        self.last_qte_completion[user_id] = current_time
+                        
+                        is_batch = qte_data.get('batch_mode', False)
+                        self.active_qtes.pop(qte_id, None)
+                        self.save_all_data()
+                        
+                        if is_batch:
+                            await self.process_next_player_qte(target)
+                        return
+                    
+                    # ADAPT SUCCESS - Process all adaptation objects
+                    results = await self.process_adaptation(user_id, difficulty, adaptation_objects, message)
+                    
+                    # Track adaptation as successful response
+                    await self.update_player_stats(user_id, 'adapt', True, response_time)
+                    
+                    # Mark success
+                    asyncio.create_task(self.add_reaction_to_response(channel, user_id, message, "🔮"))
+                    
+                    # Send success message with spin count (if no threshold was unlocked)
+                    if not results.get('new_thresholds'):
+                        # Show current spin progress
+                        spin_info = []
+                        for obj in adaptation_objects:
+                            obj_id = obj['id']
+                            tracking_config = obj.get('tracking', {})
+                            tracking_type = tracking_config.get('type', 'per_difficulty')
+                            
+                            if tracking_type == 'total':
+                                spins = self.special_objects_manager.get_tracking(user_id, obj_id, 'total')
+                                spin_info.append(f"**{obj['name']}**: {spins} total spins")
+                            else:
+                                spins = self.special_objects_manager.get_tracking(user_id, obj_id, difficulty)
+                                spin_info.append(f"**{obj['name']}**: {spins} {difficulty} spins")
+                        
+                        await self.webhook_send(
+                            content=f"🔮 {message.author.mention} **adapted!** ({response_time:.2f}s)\n" + "\n".join(spin_info)
+                        )
+                    
+                    console.print(f"[magenta]🔮 ADAPT SUCCESS (during QTE) - {message.author.name}[/magenta]")
+                    
+                    current_time = time.time()
+                    self.last_qte_completion[user_id] = current_time
+                    
+                    is_batch = qte_data.get('batch_mode', False)
+                    self.active_qtes.pop(qte_id, None)
+                    self.save_all_data()
+                    
+                    if is_batch:
+                        await self.process_next_player_qte(target)
+                    return
+            
+            # SCENARIO 2: Adapt during counter window - instant success, no timing check needed
+            elif user_in_counter:
+                # Get the counter QTE ID to find difficulty
+                counter_qte_id = self.counter_enabled_players[user_id]
+                # Prefer stored counter context difficulty
+                ctx = self.counter_context.get(user_id, {})
+                difficulty = ctx.get('difficulty') or 'medium'
+                
+                # ADAPT SUCCESS - instant, no timing requirement during counter
+                results = await self.process_adaptation(user_id, difficulty, adaptation_objects, message)
+                
+                # Track adaptation as successful response
+                await self.update_player_stats(user_id, 'adapt', True, 0.0)
+                
+                # Mark success
+                asyncio.create_task(self.add_reaction_to_response(channel, user_id, message, "🔮"))
+                
+                # Send success message
+                if not results.get('new_thresholds'):
+                    spin_info = []
+                    for obj in adaptation_objects:
+                        obj_id = obj['id']
+                        tracking_config = obj.get('tracking', {})
+                        tracking_type = tracking_config.get('type', 'per_difficulty')
+                        
+                        if tracking_type == 'total':
+                            spins = self.special_objects_manager.get_tracking(user_id, obj_id, 'total')
+                            spin_info.append(f"**{obj['name']}**: {spins} total spins")
+                        else:
+                            spins = self.special_objects_manager.get_tracking(user_id, obj_id, difficulty)
+                            spin_info.append(f"**{obj['name']}**: {spins} {difficulty} spins")
+                    
+                    await self.webhook_send(
+                        content=f"🔮 {message.author.mention} **adapted during counter!**\n" + "\n".join(spin_info)
+                    )
+                
+                console.print(f"[magenta]🔮 ADAPT SUCCESS (during counter) - {message.author.name}[/magenta]")
+                
+                # Remove counter window
+                del self.counter_enabled_players[user_id]
+                # Clear stored counter context
+                if user_id in self.counter_context:
+                    del self.counter_context[user_id]
+                
+                # Delete counter window message if exists
+                if hasattr(self, 'counter_messages') and user_id in self.counter_messages:
+                    try:
+                        await self.safe_delete_message(self.counter_messages[user_id])
+                        del self.counter_messages[user_id]
+                    except:
+                        pass
+                
+                self.save_all_data()
+                return
+                
+        except Exception as e:
+            import traceback
+            console.print(f"[red]✗ Error in adapt handler: {e}[/red]")
+            console.print(f"[red]{traceback.format_exc()}[/red]")
+            log.error(f"Adapt command error: {e}\n{traceback.format_exc()}")
 
     async def update_player_stats(self, user_id, action, success, response_time):
         """Update player statistics"""
@@ -3974,6 +7151,7 @@ class AdvancedQTEBot:
                     'evades': 0,
                     'parries': 0,
                     'saves': 0,
+                    'adapts': 0,
                     'best_time': float('inf'),
                     'avg_time': 0,
                     'times': [],
@@ -4009,6 +7187,8 @@ class AdvancedQTEBot:
                     stats['parry_streak'] = 0
             elif action == 'save':
                 stats['saves'] += 1
+            elif action == 'adapt':
+                stats['adapts'] = stats.get('adapts', 0) + 1
 
             stats['times'].append(response_time)
             stats['best_time'] = min(stats['best_time'], response_time)

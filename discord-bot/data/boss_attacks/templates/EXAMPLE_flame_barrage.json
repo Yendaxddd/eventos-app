@@ -1,0 +1,77 @@
+{
+  "attack_id": "flame_barrage",
+  "name": "Flame Barrage",
+  "description": "Unleashes a 7-hit combo of flaming strikes with burn effect",
+  "type": "ultimate",
+  "category": "mixed",
+  
+  "damage": {
+    "base": 90,
+    "hits": 7,
+    "scaling": "combo_based",
+    "variance": 0.1
+  },
+  
+  "requirements": {
+    "charge_required": 100,
+    "cooldown_seconds": 150,
+    "min_boss_hp": 20
+  },
+  
+  "effects": [
+    {
+      "type": "multi_hit_damage",
+      "hits": 7,
+      "damage_per_hit": 90,
+      "target": "selected_player",
+      "can_be_mitigated": true
+    },
+    {
+      "type": "damage_over_time",
+      "target": "selected_player",
+      "damage_per_tick": 12,
+      "ticks": 5,
+      "tick_interval": 2,
+      "debuff_name": "Burning"
+    },
+    {
+      "type": "apply_debuff",
+      "target": "selected_player",
+      "debuff": "scorched",
+      "duration": 30,
+      "effect": "defense_reduction:-25"
+    }
+  ],
+  
+  "visuals": {
+    "color": "#e67e22",
+    "icon": "🔥"
+  },
+  
+  "animation_sequence": [
+    {
+      "delay": 0,
+      "message": "🔥 **FLAME BARRAGE!** 🔥"
+    },
+    {
+      "delay": 0.5,
+      "message": "Seven devastating flame strikes ignite!"
+    },
+    {
+      "delay": 1,
+      "apply_effects": [0]
+    },
+    {
+      "delay": 4,
+      "message": "The flames continue to burn...",
+      "apply_effects": [1, 2]
+    }
+  ],
+  
+  "metadata": {
+    "author": "Example",
+    "created_at": "2026-01-24",
+    "approved_by": "GM",
+    "version": "1.0"
+  }
+}

@@ -1,0 +1,40 @@
+{
+  "id": "your_unique_id",
+  "name": "Your Passive Object",
+  "description": "Describe what this passive effect does",
+  "version": "1.0",
+  "author": "YourName",
+  "type": "passive",
+  
+  "assignment": {
+    "type": "character",
+    "characters": ["ExactCharacterName"],
+    "transferable": false
+  },
+  
+  "trigger": {
+    "command": null,
+    "window": "passive",
+    "replaces_action": false,
+    "cooldown": 0
+  },
+  
+  "tracking": {
+    "type": "global",
+    "values": [],
+    "persist": true
+  },
+  
+  "thresholds": {},
+  
+  "conditionals": [
+    {
+      "if": "hp.percent <= 20",
+      "then": ["damage_boost:50", "bf_chance:+10"]
+    }
+  ],
+  
+  "passive_effects": [
+    "damage_reduction:10"
+  ]
+}
