@@ -204,6 +204,7 @@ class AdvancedQTEBot:
         self.qte_channel_id = int(os.getenv("QTE_CHANNEL_ID", "0"))
         self.qte_player_role_id = int(os.getenv("QTE_PLAYER_ROLE_ID", "0"))
         self.admin_role_id = int(os.getenv("ADMIN_ROLE_ID", "0"))  # For restricted commands
+        self.hp_bar_thread_id = int(os.getenv("HP_BAR_THREAD_ID", "0"))  # Initialize before loading config
 
         # Validate configuration
         if not self.bot_token:
@@ -279,7 +280,6 @@ class AdvancedQTEBot:
         self.active_boss = None  # {name, hp_current, hp_max, gif_url, participants}
 
         # ========== HP BAR SYSTEM ==========
-        self.hp_bar_thread_id = int(os.getenv("HP_BAR_THREAD_ID", 0))
         self.player_hp = {}  # {user_id: {"current": 100, "max": 100, "alive": True, "revenge_mode": False}}
         self.max_hp = 100
         self.hp_bar_messages = {}  # Cache: {user_id_or_boss_name: message_id} - prevents slow history searches
@@ -5837,9 +5837,10 @@ Your response (1-2 sentences max):"""
             role: discord.Role = None
         ):
             # Check admin permissions
-            if not self.is_admin(interaction.user):
-                await interaction.response.send_message("❌ Admin only!", ephemeral=True)
-                return
+            if self.admin_role_id and self.admin_role_id not in [role.id for role in interaction.user.roles]:
+                if not interaction.user.guild_permissions.administrator:
+                    await interaction.response.send_message("❌ Admin only!", ephemeral=True)
+                    return
             
             await interaction.response.defer(ephemeral=True)
             
@@ -5991,9 +5992,10 @@ Your response (1-2 sentences max):"""
         )
         async def cleancommands_command(interaction: discord.Interaction):
             # Check admin role
-            if not any(role.id == self.admin_role_id for role in interaction.user.roles):
-                await interaction.response.send_message("❌ Admin only!", ephemeral=True)
-                return
+            if self.admin_role_id and self.admin_role_id not in [role.id for role in interaction.user.roles]:
+                if not interaction.user.guild_permissions.administrator:
+                    await interaction.response.send_message("❌ Admin only!", ephemeral=True)
+                    return
             
             await interaction.response.defer(ephemeral=True)
             
@@ -6016,9 +6018,10 @@ Your response (1-2 sentences max):"""
         @app_commands.describe(player="Player to check (leave empty for self)")
         async def debuginventory_command(interaction: discord.Interaction, player: discord.Member = None):
             # Check admin role
-            if self.admin_role_id and not any(role.id == self.admin_role_id for role in interaction.user.roles):
-                await interaction.response.send_message("❌ Admin only!", ephemeral=True)
-                return
+            if self.admin_role_id and self.admin_role_id not in [role.id for role in interaction.user.roles]:
+                if not interaction.user.guild_permissions.administrator:
+                    await interaction.response.send_message("❌ Admin only!", ephemeral=True)
+                    return
             
             target = player or interaction.user
             user_id = target.id
@@ -12708,7 +12711,7 @@ Responde SOLAMENTE con un numero del 1 al 10."""
             # 2. During counter window - no timing requirement, just execute
             
             user_has_active_qte = any(
-                qte_data.get('target', {}).id == user_id or 
+                (qte_data.get('target') and qte_data['target'].id == user_id) or 
                 user_id in [p for qte_data in self.active_qtes.values() for p in qte_data.get('participants', {})]
                 for qte_data in self.active_qtes.values()
             )

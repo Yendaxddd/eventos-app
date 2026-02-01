@@ -9,40 +9,37 @@
     },
     "titles": [
       "Nimble",
+      "∞ Infinity",
       "⛩️ The Untouched"
     ],
     "domains": [
+      "infinite_void",
       "malevolent_shrine"
     ],
     "active_title": "Nimble",
+    "infinity": {
+      "unlocked": true,
+      "date": "2026-01-31 18:06:26",
+      "timestamp": 1769904386.9629142
+    },
+    "active_domain": "infinite_void",
     "shrine": {
       "unlocked": true,
-      "date": "2026-01-30 21:59:06",
-      "timestamp": 1769831946.873428
-    },
-    "active_domain": "malevolent_shrine"
+      "date": "2026-01-31 18:18:10",
+      "timestamp": 1769905090.3240445
+    }
   },
   "984522852898320424": {
     "titles": [
-      "🎲 High Roller",
-      "∞ Infinity"
+      "Nimble"
     ],
-    "domains": [
-      "idle_death_gamble",
-      "infinite_void"
-    ],
-    "restless_gambler": {
+    "domains": [],
+    "first_evade": {
       "unlocked": true,
-      "date": "2026-01-30 20:01:20",
-      "timestamp": 1769824880.038848
+      "date": "2026-01-31 17:43:41",
+      "timestamp": 1769903021.3977146
     },
-    "active_title": "🎲 High Roller",
-    "active_domain": "infinite_void",
-    "infinity": {
-      "unlocked": true,
-      "date": "2026-01-30 20:32:43",
-      "timestamp": 1769826763.823718
-    }
+    "active_title": "Nimble"
   },
   "954834739607535709": {
     "titles": [
@@ -65,22 +62,19 @@
       "date": "2026-01-30 20:33:02",
       "timestamp": 1769826782.4819853
     },
-    "active_domain": "self_embodiment_perfection",
+    "active_domain": "infinite_void",
     "infinity": {
       "unlocked": true,
-      "date": "2026-01-30 22:02:23",
-      "timestamp": 1769832143.953078
+      "date": "2026-01-31 18:01:32",
+      "timestamp": 1769904092.5084813
     }
   },
   "1102073491316023347": {
     "titles": [
       "Nimble",
-      "The Untouchable",
-      "🎲 High Roller"
+      "The Untouchable"
     ],
-    "domains": [
-      "idle_death_gamble"
-    ],
+    "domains": [],
     "first_evade": {
       "unlocked": true,
       "date": "2026-01-30 21:29:50",
@@ -91,17 +85,28 @@
       "date": "2026-01-30 21:29:51",
       "timestamp": 1769830191.0491302
     },
-    "active_title": "Nimble",
-    "restless_gambler": {
-      "unlocked": true,
-      "date": "2026-01-30 21:32:35",
-      "timestamp": 1769830355.618639
-    },
-    "active_domain": "idle_death_gamble"
+    "active_title": "Nimble"
   },
   "654071438030143488": {
-    "titles": [],
-    "domains": []
+    "titles": [
+      "Nimble",
+      "∞ Infinity"
+    ],
+    "domains": [
+      "infinite_void"
+    ],
+    "first_evade": {
+      "unlocked": true,
+      "date": "2026-01-31 17:42:31",
+      "timestamp": 1769902951.2652168
+    },
+    "active_title": "Nimble",
+    "infinity": {
+      "unlocked": true,
+      "date": "2026-01-31 18:06:25",
+      "timestamp": 1769904385.8211515
+    },
+    "active_domain": "infinite_void"
   },
   "1389975939252883489": {
     "titles": [
@@ -124,5 +129,26 @@
       "date": "2026-01-30 22:15:04",
       "timestamp": 1769832904.057516
     }
+  },
+  "1378873798937411604": {
+    "first_evade": {
+      "unlocked": true,
+      "date": "2026-01-31 17:42:04",
+      "timestamp": 1769902924.5639846
+    },
+    "titles": [
+      "Nimble",
+      "∞ Infinity"
+    ],
+    "active_title": "Nimble",
+    "infinity": {
+      "unlocked": true,
+      "date": "2026-01-31 18:10:00",
+      "timestamp": 1769904600.0518513
+    },
+    "domains": [
+      "infinite_void"
+    ],
+    "active_domain": "infinite_void"
   }
 }

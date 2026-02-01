@@ -68,6 +68,15 @@
       "effect": "damage:800",
       "image_url": "https://cdn.discordapp.com/ephemeral-attachments/1427369080230248564/1466990880379637853/the-last-black-flash-of-jujutsu-kaisen-yuji-itadori-colored-v0-a5ktns3pxtkd1.jpg?ex=697ec139&is=697d6fb9&hm=779336e2cb0780b29f414bf1182b6e7cb504c1e64f9b1ea2b56b2889b8a3edea&",
       "trigger_phrase": null
+    },
+    "power2": {
+      "name": "Combo blackflash",
+      "description": "Un combo de blackflash",
+      "type": "destructive",
+      "cooldown": 60,
+      "effect": "Damage:1200",
+      "image_url": "https://cdn.discordapp.com/ephemeral-attachments/1427369080230248564/1467312295662325861/nanami-kento.mp4?ex=697fec90&is=697e9b10&hm=6e9ee4997c0db7bc0430127d59a53aaab002ee505c4fe8437fb919b7731b1813&",
+      "trigger_phrase": null
     }
   },
   "pablo": {
