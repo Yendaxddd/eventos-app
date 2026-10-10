@@ -105,9 +105,30 @@ jobs:
     permissions:
       contents: write
     steps:
+      - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
         with:
           merge-multiple: true
+      - name: Compose the release notes (what's new for this version + how to install)
+        run: |
+          notes="discord-bot/release-notes/${{ needs.build.outputs.version }}.md"
+          { if [ -f "$notes" ]; then cat "$notes"; echo; fi; cat <<'EOF'
+          ## Eventos App para Windows
+
+          Panel de escritorio para manejar el bot de eventos QTE, sin terminal.
+
+          ### Descarga
+          - **`EventosApp-Setup-<versión>.exe`** (recomendado): instalador con acceso directo en el escritorio y en el menú Inicio. No pide administrador.
+          - **`EventosApp-windows.zip`**: versión portátil. Descomprime en cualquier carpeta y abre `EventosApp.exe`.
+
+          ### Primer uso
+          *Configuración* → pega el token del bot → *Guardar cambios* → *Panel* → *Iniciar bot* → elige servidor, canal y roles en *Configuración → Evento*.
+
+          ### Notas
+          - Windows SmartScreen puede avisar la primera vez porque el instalador no está firmado: *Más información* → *Ejecutar de todas formas*.
+          - Para actualizar, ejecuta el instalador nuevo encima: se conservan tu token, los datos de jugadores y los GIFs.
+          EOF
+          } > release-notes.md
       - uses: softprops/action-gh-release@v2
         with:
           tag_name: v${{ needs.build.outputs.version }}
@@ -115,19 +136,5 @@ jobs:
           files: |
             EventosApp-Setup-*.exe
             EventosApp-windows.zip
-          body: |
-            ## Eventos App para Windows
-
-            Panel de escritorio para manejar el bot de eventos QTE, sin terminal.
-
-            ### Descarga
-            - **`EventosApp-Setup-<versión>.exe`** (recomendado): instalador con acceso directo en el escritorio y en el menú Inicio. No pide administrador.
-            - **`EventosApp-windows.zip`**: versión portátil. Descomprime en cualquier carpeta y abre `EventosApp.exe`.
-
-            ### Primer uso
-            *Configuración* → pega el token del bot → *Guardar cambios* → *Panel* → *Iniciar bot*.
-
-            ### Notas
-            - Windows SmartScreen puede avisar la primera vez porque el instalador no está firmado: *Más información* → *Ejecutar de todas formas*.
-            - Para actualizar, ejecuta el instalador nuevo encima: se conservan tu token, los datos de jugadores y los GIFs.
+          body_path: release-notes.md
           generate_release_notes: true
