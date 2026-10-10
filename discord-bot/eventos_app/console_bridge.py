@@ -12,9 +12,11 @@ windowed .exe never touches stdout (which is None in that mode).
 from __future__ import annotations
 
 import io
+import re
 import sys
 from typing import Callable, NamedTuple
 
+from rich.cells import cell_len
 from rich.console import Console
 from rich.style import Style
 from rich.text import Text
@@ -68,11 +70,27 @@ def _text_to_segments(text: Text) -> list[Segment]:
     return segments
 
 
+# Inside tables and panels, emoji break the right-hand border: rich counts them as 1 or 2 columns, a
+# monospace font draws them however it likes. Swap them for plain symbols of the width rich expects.
+_EMOJI = re.compile("[\U0001F000-\U0001FAFF\u2600-\u27BF\u2B00-\u2BFF\uFE0F\u200D]+")
+_SYMBOLS = {"✅": "OK", "❌": "NO", "⚠": "!", "✓": "+", "✗": "x", "⭐": "*", "🔴": "o", "🟢": "o", "🟡": "o"}
+
+
+def _flatten_emoji(text: str) -> str:
+    def replace(match: re.Match) -> str:
+        chunk = match.group(0)
+        width = cell_len(chunk)
+        symbol = "".join(_SYMBOLS.get(ch, "") for ch in chunk)
+        return symbol[:width].ljust(width)
+
+    return _EMOJI.sub(replace, text)
+
+
 def _render_block(renderable, width: int = 96) -> str:
     """Panels, tables etc. become plain monospace text."""
     buffer = io.StringIO()
     Console(file=buffer, width=width, force_terminal=False, color_system=None, legacy_windows=False).print(renderable)
-    return buffer.getvalue().rstrip("\n")
+    return _flatten_emoji(buffer.getvalue().rstrip("\n"))
 
 
 def to_segments(objects: tuple, sep: str = " ") -> list[Segment]:

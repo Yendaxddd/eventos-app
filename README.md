@@ -14,6 +14,19 @@ y una pantalla de configuración donde pegas el token.
 2. Ábrelo y sigue el asistente. Instala solo para tu usuario (no pide administrador) y crea acceso directo
    en el escritorio y en el menú Inicio.
 3. Abre *Eventos App* → *Configuración* → pega el token → *Guardar cambios* → *Panel* → *Iniciar bot*.
+4. Con el bot conectado, en *Configuración* → **Evento** elige el **servidor, el canal y los roles** de los
+   desplegables (con búsqueda) y pulsa *Aplicar al evento*. Equivale a `/setchannel` y crea el hilo «📊 HP Bars».
+
+**Bots auxiliares (evitar el rate limit).** Discord limita cuántos mensajes manda cada bot por canal (~5 cada 5 s).
+Con varios bots, el principal reparte los mensajes (QTE, respuestas, imágenes) entre todos y las ráfagas salen sin esperas:
+1. En el Developer Portal crea otra aplicación por cada auxiliar (*Bot* → *Reset Token*). No necesitan intents especiales.
+2. *Configuración* → **Bots auxiliares** → pega el token → *Agregar bot auxiliar*.
+3. Pulsa *Invitar* (copia el enlace), ábrelo en el navegador y añádelo a tu servidor.
+4. Inicia el bot. *Probar* envía y borra un mensaje de prueba para confirmar que puede escribir en el canal.
+
+Los mensajes con botones siempre salen por el bot principal. Si un auxiliar no puede escribir en el canal, el mensaje
+sale por otro bot y ese auxiliar se aparta de ese canal. En una prueba contra un Discord simulado (5 mensajes/5 s por bot),
+una ráfaga de 12 mensajes tarda ~10 s con 1 bot, ~5 s con 2 y menos de 0.5 s con 3 o más.
 
 Para **actualizar**, ejecuta el instalador nuevo encima: se conservan tu `settings.json`, los datos de jugadores
 (`data\`) y los GIFs (`assets\`). Al **desinstalar** te pregunta si quieres borrar también esos datos; por defecto no.

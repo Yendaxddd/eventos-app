@@ -10,6 +10,7 @@ import asyncio
 import json
 import random
 import os
+import re
 import pathlib
 import logging
 from datetime import datetime, timedelta, timezone
@@ -204,6 +205,8 @@ class AdvancedQTEBot:
         self.qte_player_role_id = int(os.getenv("QTE_PLAYER_ROLE_ID", "0"))
         self.admin_role_id = int(os.getenv("ADMIN_ROLE_ID", "0"))  # For restricted commands
         self.hp_bar_thread_id = int(os.getenv("HP_BAR_THREAD_ID", "0"))  # Initialize before loading config
+        self.event_guild_id = 0  # Server the event runs in (saved in channel_config.json)
+        self._ready_once = False  # on_ready fires again after every reconnect; init work must run once
 
         # Validate configuration
         if not self.bot_token:
@@ -692,6 +695,10 @@ class AdvancedQTEBot:
                     self.hp_bar_thread_id = config["hp_bar_thread_id"]
                 if "qte_player_role_id" in config and config["qte_player_role_id"]:
                     self.qte_player_role_id = config["qte_player_role_id"]
+                if config.get("admin_role_id"):
+                    self.admin_role_id = config["admin_role_id"]
+                if config.get("guild_id"):
+                    self.event_guild_id = config["guild_id"]
                 console.print("[cyan]✓ Loaded saved channel configuration[/cyan]")
         except Exception as e:
             console.print(f"[yellow]⚠ Could not load channel config: {e}[/yellow]")
@@ -699,13 +706,114 @@ class AdvancedQTEBot:
     def _save_channel_config(self):
         """Save channel configuration to file"""
         config = {
+            "guild_id": self.event_guild_id,
             "qte_channel_id": self.qte_channel_id,
             "hp_bar_thread_id": self.hp_bar_thread_id,
-            "qte_player_role_id": self.qte_player_role_id
+            "qte_player_role_id": self.qte_player_role_id,
+            "admin_role_id": self.admin_role_id,
         }
         save_data("channel_config", config)
         console.print("[green]💾 Channel configuration saved[/green]")
     
+    HP_THREAD_NAME = "📊 HP Bars"
+
+    async def configure_event(self, channel, player_role_id=None, admin_role_id=None):
+        """Point the event at `channel`: find/create its HP thread, set roles, save, refresh players.
+
+        Shared by the /setchannel command and the desktop app's server/channel/role pickers.
+        player_role_id / admin_role_id: None keeps the current value, 0 clears it (admin only).
+        Raises discord.Forbidden if the bot may not manage threads in `channel`.
+        Returns {"thread", "thread_status", "created"}.
+        """
+        self.qte_channel_id = channel.id
+        self.event_guild_id = channel.guild.id
+        if player_role_id:
+            self.qte_player_role_id = player_role_id
+        if admin_role_id is not None:
+            self.admin_role_id = admin_role_id
+
+        existing_thread = None
+        for thread in channel.threads:
+            if thread.name == self.HP_THREAD_NAME:
+                existing_thread = thread
+                break
+        if not existing_thread:  # also look in archived threads and bring it back
+            async for thread in channel.archived_threads(limit=50):
+                if thread.name == self.HP_THREAD_NAME:
+                    existing_thread = thread
+                    await thread.edit(archived=False)
+                    break
+
+        created = existing_thread is None
+        if existing_thread:
+            hp_thread, thread_status = existing_thread, "Found existing"
+        else:
+            hp_thread = await channel.create_thread(
+                name=self.HP_THREAD_NAME,
+                type=discord.ChannelType.public_thread,
+                reason="Auto-created HP bar display thread"
+            )
+            thread_status = "Created new"
+            initial_embed = discord.Embed(
+                title="📊 HP Bar Display Thread",
+                description="This thread displays live HP bars for all players and bosses.\n\n"
+                           "**This thread is managed by the bot.**\n"
+                           "HP bars will automatically update during battles.",
+                color=discord.Color.blue()
+            )
+            initial_embed.set_footer(text="HP bars appear here when players register and battles begin")
+            await hp_thread.send(embed=initial_embed)
+
+        self.hp_bar_thread_id = hp_thread.id
+        self._save_channel_config()
+        self.last_cache_update = None  # new channel/role: rebuild the player list on next use
+        return {"thread": hp_thread, "thread_status": thread_status, "created": created}
+
+    def resolve_event_guild(self):
+        """The server the event belongs to: from the channel, the saved guild, a configured role, or the only server."""
+        channel = self.bot.get_channel(self.qte_channel_id) if self.qte_channel_id else None
+        if channel is not None:
+            return channel.guild
+        if self.event_guild_id:
+            guild = self.bot.get_guild(self.event_guild_id)
+            if guild is not None:
+                return guild
+        for role_id in (self.qte_player_role_id, self.admin_role_id):
+            if role_id:
+                for guild in self.bot.guilds:
+                    if guild.get_role(role_id):
+                        return guild
+        if len(self.bot.guilds) == 1:
+            return self.bot.guilds[0]
+        return None
+
+    def print_config_check(self):
+        """Show what the saved configuration resolves to (server, channel, thread, roles)."""
+        guild = self.resolve_event_guild()
+        table = Table(title="📋 Configuration Check", box=box.ROUNDED, border_style="cyan")
+        table.add_column("Setting", style="white")
+        table.add_column("ID", style="dim")
+        table.add_column("Name", style="green")
+        table.add_column("Status", style="bold")
+
+        def row(label, ident, found, name_fmt, required=True):
+            if found is not None:
+                table.add_row(label, str(ident), name_fmt.format(found.name), "✅")
+            elif ident:
+                table.add_row(label, str(ident), "NOT FOUND", "[red]❌[/red]")
+            else:
+                table.add_row(label, "Not set", "-", "[red]❌[/red]" if required else "[yellow]⚠️[/yellow]")
+
+        if guild is not None:
+            table.add_row("Server", str(guild.id), guild.name, "✅")
+        else:
+            table.add_row("Server", str(self.event_guild_id or "Not set"), "-", "[red]❌[/red]")
+        row("QTE Channel", self.qte_channel_id, self.bot.get_channel(self.qte_channel_id) if self.qte_channel_id else None, "#{}")
+        row("HP Bar Thread", self.hp_bar_thread_id, self.bot.get_channel(self.hp_bar_thread_id) if self.hp_bar_thread_id else None, "#{}", required=False)
+        row("QTE Player Role", self.qte_player_role_id, guild.get_role(self.qte_player_role_id) if guild and self.qte_player_role_id else None, "@{}")
+        row("Admin Role", self.admin_role_id, guild.get_role(self.admin_role_id) if guild and self.admin_role_id else None, "@{}", required=False)
+        console.print(table)
+
     def _load_live_config(self):
         """Load saved live configuration from file (set by /config save)"""
         try:
@@ -2340,58 +2448,19 @@ Your response (1-2 sentences max):"""
     def setup_events(self):
         @self.bot.event
         async def on_ready():
+            if self._ready_once:  # reconnect: don't re-sync commands or start a second save loop
+                console.print("[cyan]↻ Reconnected to Discord[/cyan]")
+                return
+            self._ready_once = True
+
             console.print(Panel.fit(
                 "[cyan bold]✓ Bot logged in as " + str(self.bot.user) + "[/cyan bold]\n"
                 "[green]✓ QTE System Ready![/green]",
                 title="[bold]QTE BOT ONLINE[/bold]",
                 border_style="green"
             ))
-            
-            # ========== CONFIGURATION VERIFICATION ==========
-            # Resolve and display actual names for troubleshooting
-            config_table = Table(title="📋 Configuration Check", box=box.ROUNDED, border_style="cyan")
-            config_table.add_column("Setting", style="white")
-            config_table.add_column("ID", style="dim")
-            config_table.add_column("Name", style="green")
-            config_table.add_column("Status", style="bold")
-            
-            # QTE Channel
-            qte_channel = self.bot.get_channel(self.qte_channel_id)
-            if qte_channel:
-                config_table.add_row("QTE Channel", str(self.qte_channel_id), f"#{qte_channel.name}", "✅")
-            else:
-                config_table.add_row("QTE Channel", str(self.qte_channel_id), "NOT FOUND", "[red]❌[/red]")
-            
-            # HP Bar Thread
-            hp_thread = self.bot.get_channel(self.hp_bar_thread_id) if self.hp_bar_thread_id else None
-            if hp_thread:
-                config_table.add_row("HP Bar Thread", str(self.hp_bar_thread_id), f"#{hp_thread.name}", "✅")
-            elif self.hp_bar_thread_id:
-                config_table.add_row("HP Bar Thread", str(self.hp_bar_thread_id), "NOT FOUND", "[red]❌[/red]")
-            else:
-                config_table.add_row("HP Bar Thread", "Not set", "-", "[yellow]⚠️[/yellow]")
-            
-            # QTE Player Role
-            qte_role = None
-            admin_role = None
-            if qte_channel:
-                qte_role = qte_channel.guild.get_role(self.qte_player_role_id)
-                admin_role = qte_channel.guild.get_role(self.admin_role_id) if self.admin_role_id else None
-            
-            if qte_role:
-                config_table.add_row("QTE Player Role", str(self.qte_player_role_id), f"@{qte_role.name}", "✅")
-            else:
-                config_table.add_row("QTE Player Role", str(self.qte_player_role_id), "NOT FOUND", "[red]❌[/red]")
-            
-            # Admin Role
-            if admin_role:
-                config_table.add_row("Admin Role", str(self.admin_role_id), f"@{admin_role.name}", "✅")
-            elif self.admin_role_id:
-                config_table.add_row("Admin Role", str(self.admin_role_id), "NOT FOUND", "[red]❌[/red]")
-            else:
-                config_table.add_row("Admin Role", "Not set", "-", "[yellow]⚠️[/yellow]")
-            
-            console.print(config_table)
+
+            self.print_config_check()
 
             # If reset was requested, clear HP thread messages once
             if self.hp_cleanup_needed:
@@ -2400,26 +2469,34 @@ Your response (1-2 sentences max):"""
             # ================================================
 
             # ========== OLLAMA AI INITIALIZATION ==========
-            try:
-                # Check Ollama connection and load elbot model
-                console.print("[cyan]🤖 Initializing Ollama AI...[/cyan]")
-                models = await self.ollama_list_models()
-                if models:
-                    console.print(f"[green]✓ Ollama connected! Available models: {', '.join(models[:5])}[/green]")
-                    # Check if elbot is available
-                    if any('elbot' in m.lower() for m in models):
-                        self.ai_model = "elbot"  # Use our custom model
-                        self.ai_enabled = True
-                        # Pre-load the model
-                        await self.ollama_load_model("elbot")
-                        console.print("[green]✓ El Bot AI loaded and ready![/green]")
+            # AI_ENABLED=0 skips Ollama entirely; AI_ENABLED=1 uses OLLAMA_MODEL (chosen in the app);
+            # unset (old headless setups) keeps the legacy behaviour of looking for an 'elbot' model.
+            ai_setting = os.getenv("AI_ENABLED")
+            if ai_setting == "0":
+                console.print("[dim]🤖 AI disabled in settings[/dim]")
+            else:
+                try:
+                    console.print("[cyan]🤖 Initializing Ollama AI...[/cyan]")
+                    models = await self.ollama_list_models()
+                    if not models:
+                        console.print("[yellow]⚠️ Ollama is not responding. AI features disabled.[/yellow]")
                     else:
-                        console.print("[yellow]⚠️ 'elbot' model not found. Run: ollama create elbot -f Modelfile[/yellow]")
-                else:
-                    console.print("[yellow]⚠️ Ollama not responding. AI features disabled.[/yellow]")
-            except Exception as e:
-                console.print(f"[yellow]⚠️ Ollama init error: {e}[/yellow]")
-            # ==============================================
+                        console.print(f"[green]✓ Ollama connected! {len(models)} models available[/green]")
+                        wanted = self.ai_model if ai_setting == "1" else "elbot"
+                        match = next((m for m in models if m == wanted), None) or next(
+                            (m for m in models if wanted.lower() in m.lower()), None)
+                        if match:
+                            self.ai_model = match
+                            self.ai_enabled = True
+                            await self.ollama_load_model(match)
+                            console.print(f"[green]✓ AI ready with model {match}[/green]")
+                        elif ai_setting == "1":
+                            console.print(f"[yellow]⚠️ Model '{wanted}' is not installed in Ollama. "
+                                          f"Pick another one in Configuration. Installed: {', '.join(models[:8])}[/yellow]")
+                        else:
+                            console.print("[yellow]⚠️ 'elbot' model not found. Run: ollama create elbot -f Modelfile[/yellow]")
+                except Exception as e:
+                    console.print(f"[yellow]⚠️ Ollama init error: {e}[/yellow]")
 
             try:
                 # Force sync slash commands to all guilds
@@ -5847,58 +5924,9 @@ Your response (1-2 sentences max):"""
             await interaction.response.defer(ephemeral=True)
             
             try:
-                # Set QTE channel
                 old_channel_id = self.qte_channel_id
-                self.qte_channel_id = channel.id
-                
-                # Set player role if provided
-                if role:
-                    self.qte_player_role_id = role.id
-                
-                # Check if HP thread already exists in this channel
-                existing_thread = None
-                for thread in channel.threads:
-                    if thread.name == "📊 HP Bars":
-                        existing_thread = thread
-                        break
-                
-                # Also check archived threads
-                if not existing_thread:
-                    async for thread in channel.archived_threads(limit=50):
-                        if thread.name == "📊 HP Bars":
-                            existing_thread = thread
-                            # Unarchive it
-                            await thread.edit(archived=False)
-                            break
-                
-                if existing_thread:
-                    # Use existing thread
-                    self.hp_bar_thread_id = existing_thread.id
-                    hp_thread = existing_thread
-                    thread_status = "Found existing"
-                else:
-                    # Create new HP bar thread
-                    hp_thread = await channel.create_thread(
-                        name="📊 HP Bars",
-                        type=discord.ChannelType.public_thread,
-                        reason="Auto-created HP bar display thread"
-                    )
-                    self.hp_bar_thread_id = hp_thread.id
-                    thread_status = "Created new"
-                    
-                    # Send initial message to the thread
-                    initial_embed = discord.Embed(
-                        title="📊 HP Bar Display Thread",
-                        description="This thread displays live HP bars for all players and bosses.\n\n"
-                                   "**This thread is managed by the bot.**\n"
-                                   "HP bars will automatically update during battles.",
-                        color=discord.Color.blue()
-                    )
-                    initial_embed.set_footer(text="HP bars appear here when players register and battles begin")
-                    await hp_thread.send(embed=initial_embed)
-                
-                # Save configuration to file
-                self._save_channel_config()
+                result = await self.configure_event(channel, player_role_id=role.id if role else None)
+                hp_thread, thread_status = result["thread"], result["thread_status"]
                 
                 # Build response embed
                 embed = discord.Embed(
@@ -7312,7 +7340,12 @@ Your response (1-2 sentences max):"""
     # ========== END BUFF SYSTEM ==========
 
     async def damage_player(self, user_id, difficulty):
-        """Deal damage to a player based on difficulty"""
+        """Deal damage to a player.
+
+        `difficulty` is a difficulty name ('easy'...'impossible', damage is rolled from its range) or a number
+        (exact damage, used by boss abilities and boss counters).
+        """
+        fixed_damage = isinstance(difficulty, (int, float)) and not isinstance(difficulty, bool)
         # ========== COURT TRIAL IMMUNITY ==========
         # Players in an active court trial cannot be damaged
         if self.is_player_in_court_trial(user_id):
@@ -7329,7 +7362,7 @@ Your response (1-2 sentences max):"""
             return False  # Player is already dead
 
         # Calculate variable damage
-        damage = self.calculate_damage(difficulty)
+        damage = int(difficulty) if fixed_damage else self.calculate_damage(difficulty)
         
         # ========== REFLECT DOMAIN CHECK (Time Cell Moon Palace) ==========
         # Check for domain-wide reflect (affects ALL players, not just caster)
@@ -7402,7 +7435,8 @@ Your response (1-2 sentences max):"""
         
         # ========== SPECIAL OBJECTS: DAMAGE REDUCTION ==========
         # Uses INVENTORY-based system now (no character names needed)
-        damage_reduction = self.special_objects_manager.get_damage_reduction(user_id, [], difficulty)
+        damage_reduction = self.special_objects_manager.get_damage_reduction(
+            user_id, [], "fixed" if fixed_damage else difficulty)
         
         if damage_reduction > 0:
             reduced_damage = int(damage * (1 - damage_reduction / 100))
@@ -12456,6 +12490,7 @@ Responde SOLAMENTE con un numero del 1 al 10."""
             del self.counter_enabled_players[user_id]
             
             channel = message.channel
+            mention = message.author.mention
             
             # Increment counter streak
             if user_id not in self.counter_streaks:

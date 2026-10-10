@@ -10,7 +10,7 @@ from __future__ import annotations
 import json
 import logging
 import os
-from dataclasses import asdict, dataclass, fields
+from dataclasses import asdict, dataclass, field, fields
 from pathlib import Path
 
 from . import paths
@@ -20,7 +20,6 @@ log = logging.getLogger("eventos_app")
 _ID_FIELDS = {
     "qte_player_role_id": "QTE_PLAYER_ROLE_ID",
     "admin_role_id": "ADMIN_ROLE_ID",
-    "gm_role_id": "GM_ROLE_ID",
 }
 
 
@@ -29,9 +28,13 @@ class Settings:
     discord_token: str = ""
     qte_player_role_id: str = ""
     admin_role_id: str = ""
-    gm_role_id: str = ""
+    ai_enabled: bool = False
     ollama_endpoint: str = "http://localhost:11434/api/generate"
-    ollama_model: str = "dolphin-phi:2.7b"
+    ollama_model: str = ""
+    # extra bot accounts that share the sending load: [{"token": ..., "name": ..., "user_id": ...}]
+    helper_bots: list = field(default_factory=list)
+    # names of the last event (ids + server/channel/role names), shown while the bot is off
+    event_summary: dict = field(default_factory=dict)
     reset_on_start: bool = False
     hotkeys_enabled: bool = True
     auto_start: bool = False
@@ -42,7 +45,6 @@ class Settings:
         labels = {
             "qte_player_role_id": "Rol de jugadores",
             "admin_role_id": "Rol de administrador",
-            "gm_role_id": "Rol de GM",
         }
         for name, label in labels.items():
             value = getattr(self, name).strip()
@@ -55,6 +57,7 @@ class Settings:
             "DISCORD_TOKEN": self.discord_token.strip(),
             "OLLAMA_ENDPOINT": self.ollama_endpoint.strip(),
             "OLLAMA_MODEL": self.ollama_model.strip(),
+            "AI_ENABLED": "1" if self.ai_enabled else "0",
             "EVENTOS_RESET_ON_START": "1" if self.reset_on_start else "0",
             "EVENTOS_HOTKEYS": "1" if self.hotkeys_enabled else "0",
         }
@@ -63,6 +66,9 @@ class Settings:
             if value.isdigit():
                 env[var] = value
         return {k: v for k, v in env.items() if v != "" or k.startswith("EVENTOS_")}
+
+    def helper_tokens(self) -> list[str]:
+        return [h["token"].strip() for h in self.helper_bots if isinstance(h, dict) and h.get("token", "").strip()]
 
 
 def load(path: Path | None = None) -> Settings:
@@ -84,12 +90,15 @@ def load(path: Path | None = None) -> Settings:
     known = {f.name: f for f in fields(Settings)}
     values = {}
     for key, value in raw.items():
-        field = known.get(key)
-        if field is None:
+        if key not in known:
             continue
         default = getattr(Settings(), key)
         if isinstance(default, bool):
             values[key] = bool(value)
+        elif isinstance(default, list):
+            values[key] = [h for h in value if isinstance(h, dict)] if isinstance(value, list) else []
+        elif isinstance(default, dict):
+            values[key] = value if isinstance(value, dict) else {}
         else:
             values[key] = "" if value is None else str(value)
     return Settings(**values)

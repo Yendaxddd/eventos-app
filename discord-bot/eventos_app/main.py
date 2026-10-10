@@ -61,6 +61,17 @@ def _smoke_test(out_path: str | None) -> int:
         checks["assets"] = any(paths.assets_dir().glob("*.gif"))
         checks["data"] = any(paths.data_dir().glob("*.json"))
 
+        picker = app.config_page.player_picker  # the searchable dropdown used for servers, channels and roles
+        picker.set_enabled(True)
+        picker.set_items([(1, "@Jugadores", ""), (2, "@Staff", "")])
+        picker.open()
+        app.update()
+        picker._query.set("sta")
+        app.update()
+        checks["picker_popup"] = [row[1] for row in picker._visible] == ["@Staff"]
+        picker.close()
+        app.update()
+
         # Starts the bot with an invalid token: it must get as far as talking to Discord
         # and be refused (or fail to connect), not crash while loading its own code.
         runner = app.runner

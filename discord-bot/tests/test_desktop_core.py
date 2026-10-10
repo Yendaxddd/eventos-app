@@ -3,6 +3,8 @@ import json
 import sys
 from pathlib import Path
 
+import pytest
+
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from eventos_app import paths, settings  # noqa: E402
@@ -51,20 +53,32 @@ def test_proxy_without_stdout_is_silent(monkeypatch):
 # ---- settings --------------------------------------------------------------
 def test_settings_roundtrip_and_env(tmp_path):
     f = tmp_path / "settings.json"
-    s = settings.Settings(discord_token=" tok ", admin_role_id="123", reset_on_start=True, hotkeys_enabled=False)
+    s = settings.Settings(discord_token=" tok ", admin_role_id="123", reset_on_start=True, hotkeys_enabled=False,
+                          ai_enabled=True, ollama_model="qwen2.5:7b",
+                          helper_bots=[{"token": "h1", "name": "Helper#1", "user_id": 5}],
+                          event_summary={"guild_name": "ULTRAVERSE", "channel_id": 7})
     settings.save(s, f)
     loaded = settings.load(f)
     assert loaded == s
     env = loaded.to_env()
     assert env["DISCORD_TOKEN"] == "tok" and env["ADMIN_ROLE_ID"] == "123"
     assert env["EVENTOS_RESET_ON_START"] == "1" and env["EVENTOS_HOTKEYS"] == "0"
-    assert "GM_ROLE_ID" not in env  # empty ids are not exported (the bot does int(env) on them)
+    assert env["AI_ENABLED"] == "1" and env["OLLAMA_MODEL"] == "qwen2.5:7b"
+    assert "QTE_PLAYER_ROLE_ID" not in env  # empty ids are not exported (the bot does int(env) on them)
+    assert loaded.helper_tokens() == ["h1"]
 
 
 def test_settings_validation_rejects_non_numeric_ids():
-    problems = settings.Settings(gm_role_id="not a number").validate()
-    assert len(problems) == 1 and "GM" in problems[0]
-    assert settings.Settings(gm_role_id="123").validate() == []
+    problems = settings.Settings(admin_role_id="not a number").validate()
+    assert len(problems) == 1 and "administrador" in problems[0]
+    assert settings.Settings(admin_role_id="123").validate() == []
+
+
+def test_settings_from_an_older_version_still_load(tmp_path):
+    f = tmp_path / "settings.json"
+    f.write_text(json.dumps({"discord_token": "t", "gm_role_id": "9", "ollama_model": "dolphin-phi:2.7b"}), encoding="utf-8")
+    loaded = settings.load(f)  # gm_role_id no longer exists: ignored, not an error
+    assert loaded.discord_token == "t" and loaded.helper_bots == [] and loaded.event_summary == {}
 
 
 def test_corrupt_settings_are_backed_up_not_fatal(tmp_path):
@@ -119,3 +133,59 @@ def test_bot_prompt_uses_env_preset_instead_of_stdin(monkeypatch, tmp_path):
     monkeypatch.setenv("EVENTOS_RESET_ON_START", "0")
     assert bot.AdvancedQTEBot.prompt_reset_hp_and_charges(fake) == "keep"
     monkeypatch.setattr(paths, "_home_cache", None)
+
+
+def test_tables_stay_aligned_when_cells_contain_emoji():
+    from rich import box
+    from rich.table import Table
+
+    table = Table(box=box.ROUNDED)
+    table.add_column("Setting")
+    table.add_column("Status")
+    table.add_row("QTE Channel", "✅")
+    table.add_row("Admin Role", "[red]❌[/red]")
+    table.add_row("HP Thread", "[yellow]⚠️[/yellow]")
+    text = "".join(s.text for s in to_segments((table,)))
+    widths = {len(line) for line in text.splitlines()}
+    assert widths == {max(widths)}  # every line has the same length, so the border lines up
+    assert "OK" in text and "NO" in text and "!" in text
+    assert "✅" not in text and "❌" not in text
+
+
+# ---- Ollama model list -------------------------------------------------------------------------
+def test_ollama_models_are_listed_from_the_endpoint_base(monkeypatch):
+    import http.server
+    import threading
+
+    from eventos_app import ollama
+
+    class Handler(http.server.BaseHTTPRequestHandler):
+        def do_GET(self):
+            body = json.dumps({"models": [{"name": "qwen2.5:7b"}, {"name": "deepseek-r1:32b"}, {}]}).encode()
+            self.send_response(200 if self.path == "/api/tags" else 404)
+            self.send_header("Content-Type", "application/json")
+            self.end_headers()
+            self.wfile.write(body)
+
+        def log_message(self, *args):
+            pass
+
+    for var in ("HTTP_PROXY", "http_proxy", "HTTPS_PROXY", "https_proxy"):
+        monkeypatch.delenv(var, raising=False)
+    server = http.server.HTTPServer(("127.0.0.1", 0), Handler)
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    try:
+        endpoint = f"http://127.0.0.1:{server.server_port}/api/generate"  # what the bot is configured with
+        assert ollama.base_url(endpoint) == f"http://127.0.0.1:{server.server_port}"
+        assert ollama.list_models(endpoint) == ["deepseek-r1:32b", "qwen2.5:7b"]
+    finally:
+        server.shutdown()
+
+
+def test_ollama_errors_are_readable():
+    from eventos_app import ollama
+
+    with pytest.raises(ConnectionError, match="Ollama"):
+        ollama.list_models("http://127.0.0.1:9/api/generate", timeout=1)  # nothing listens on port 9
+    with pytest.raises(ConnectionError, match="no válida"):
+        ollama.list_models("not a url")

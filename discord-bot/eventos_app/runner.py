@@ -5,19 +5,26 @@ window stays responsive, and lets the UI start / stop / poke it safely.
 from __future__ import annotations
 
 import asyncio
+import concurrent.futures
 import importlib
 import logging
 import os
 import threading
 from enum import Enum
+from typing import Awaitable, Callable
 
-from . import console_bridge
+import discord
+
+from . import console_bridge, multibot
 from .settings import Settings
 
 log = logging.getLogger("eventos_app")
 
 BOT_MODULE = "advanced_qte_hp_system_debug"
 STOP_TIMEOUT_SECONDS = 15
+# actions that need the event channel to be set up
+NEEDS_CHANNEL = {"single_easy", "single_medium", "single_hard", "single_impossible", "group_easy",
+                 "group_medium", "group_hard", "group_impossible", "checkpoint"}
 
 
 class State(str, Enum):
@@ -30,8 +37,6 @@ class State(str, Enum):
 
 def friendly_error(exc: BaseException) -> str:
     """Turn the usual discord.py failures into something a person can act on."""
-    import discord
-
     if isinstance(exc, discord.LoginFailure):
         return "Discord rechazó el token. Revisa que lo copiaste completo en Configuración."
     if isinstance(exc, discord.PrivilegedIntentsRequired):
@@ -46,11 +51,24 @@ def friendly_error(exc: BaseException) -> str:
     return f"{type(exc).__name__}: {exc}"
 
 
+def describe_discord_error(exc: BaseException) -> str:
+    """Short Spanish text for errors while configuring the event."""
+    if isinstance(exc, discord.Forbidden):
+        return ("El bot no tiene permisos en ese canal. Necesita «Enviar mensajes» y «Gestionar hilos» "
+                "(para crear el hilo de barras de HP).")
+    if isinstance(exc, discord.NotFound):
+        return "Ese canal o rol ya no existe."
+    return f"{type(exc).__name__}: {exc}"
+
+
 class BotRunner:
     def __init__(self, sink: console_bridge.Sink | None = None) -> None:
         self._thread: threading.Thread | None = None
         self._loop: asyncio.AbstractEventLoop | None = None
         self._app = None  # AdvancedQTEBot
+        self._pool: multibot.SenderPool | None = None
+        self._helper_errors: dict[str, str] = {}  # helper token -> why it could not be added
+        self._base_interval = 0.15
         self._state = State.STOPPED
         self._error = ""
         self._lock = threading.Lock()
@@ -89,12 +107,36 @@ class BotRunner:
             return ""
         try:
             n = len(app.bot.guilds)
-            return f"{app.bot.user} · {n} servidor{'es' if n != 1 else ''}"
+            text = f"{app.bot.user} · {n} servidor{'es' if n != 1 else ''}"
+            helpers = self.helpers_online()
+            if helpers:
+                text += f" · {helpers} bot{'s' if helpers != 1 else ''} auxiliar{'es' if helpers != 1 else ''}"
+            return text
         except Exception:
             return ""
 
     def is_active(self) -> bool:
         return self.state in (State.STARTING, State.CONNECTED, State.STOPPING)
+
+    def main_bot_id(self) -> int:
+        app = self._app
+        try:
+            return app.bot.user.id if app is not None and app.bot.user else 0
+        except Exception:
+            return 0
+
+    def event_line(self) -> str:
+        """One line about the configured event for the panel ('' when not connected)."""
+        app = self._app
+        if app is None or not self._is_ready():
+            return ""
+        try:
+            channel = app.bot.get_channel(app.qte_channel_id) if app.qte_channel_id else None
+            if channel is not None:
+                return f"Evento: {channel.guild.name} › #{channel.name}"
+            return "⚠ Aún no hay un canal de evento: elígelo en Configuración."
+        except Exception:
+            return ""
 
     # ---- actions ------------------------------------------------------------
     def start(self, settings: Settings) -> None:
@@ -129,6 +171,11 @@ class BotRunner:
         action = getattr(app, "quick_actions", {}).get(name)
         if action is None:
             return False
+        if name in NEEDS_CHANNEL and not app.bot.get_channel(app.qte_channel_id):
+            console_bridge.console.print(
+                "[yellow]⚠ Primero elige el servidor y el canal del evento en Configuración "
+                "(o usa /setchannel en Discord).[/yellow]")
+            return False
         try:
             action()
         except Exception as exc:
@@ -142,6 +189,153 @@ class BotRunner:
         app = self._app
         return getattr(app, "keybinds", {}).get(name, "") if app else ""
 
+    # ---- talking to the bot's event loop ---------------------------------------
+    def submit(self, make_coro: Callable[[], Awaitable]) -> concurrent.futures.Future:
+        """Run a coroutine on the bot's loop; the result is read from the returned Future."""
+        loop = self._loop
+        if loop is None or loop.is_closed() or not self._is_ready():
+            raise RuntimeError("El bot no está conectado.")
+        return asyncio.run_coroutine_threadsafe(make_coro(), loop)
+
+    async def _servers_snapshot(self) -> dict:
+        """Servers, text channels and roles the bot can see, plus the current event configuration."""
+        app = self._app
+        guilds = []
+        for guild in sorted(app.bot.guilds, key=lambda g: g.name.lower()):
+            me = guild.me
+            channels = []
+            for channel in guild.text_channels:
+                perms = channel.permissions_for(me) if me is not None else None
+                if perms is None or (perms.view_channel and perms.send_messages):
+                    channels.append({"id": channel.id, "name": channel.name,
+                                     "group": channel.category.name if channel.category else ""})
+            roles = [{"id": r.id, "name": r.name} for r in sorted(guild.roles, key=lambda r: -r.position)
+                     if not r.is_default() and not r.managed]
+            guilds.append({"id": guild.id, "name": guild.name, "channels": channels, "roles": roles})
+        resolved = app.resolve_event_guild()
+        return {
+            "guilds": guilds,
+            "current": {
+                "guild_id": resolved.id if resolved else 0,
+                "channel_id": app.qte_channel_id,
+                "thread_id": app.hp_bar_thread_id,
+                "player_role_id": app.qte_player_role_id,
+                "admin_role_id": app.admin_role_id,
+            },
+        }
+
+    def load_servers(self) -> concurrent.futures.Future:
+        return self.submit(self._servers_snapshot)
+
+    async def _apply_event(self, channel_id: int, player_role_id: int | None, admin_role_id: int | None) -> dict:
+        app = self._app
+        channel = app.bot.get_channel(channel_id)
+        if channel is None:
+            return {"ok": False, "error": "El bot ya no ve ese canal."}
+        try:
+            result = await app.configure_event(channel, player_role_id=player_role_id, admin_role_id=admin_role_id)
+        except (discord.Forbidden, discord.NotFound, discord.HTTPException) as exc:
+            return {"ok": False, "error": describe_discord_error(exc)}
+        app.print_config_check()
+        console_bridge.console.print(f"[green]✓ Evento configurado en #{channel.name} ({channel.guild.name})[/green]")
+        if self._pool is not None:
+            await self._pool.check_access(channel_id)
+        return {"ok": True, "thread": result["thread"].name, "created": result["created"]}
+
+    def apply_event(self, channel_id: int, player_role_id: int | None = None,
+                    admin_role_id: int | None = None) -> concurrent.futures.Future:
+        """Point the event at a channel (creating the HP thread if needed) and set the roles."""
+        return self.submit(lambda: self._apply_event(channel_id, player_role_id, admin_role_id))
+
+    # ---- helper bots (several accounts sharing the sending load) ----------------
+    def helpers_online(self) -> int:
+        return len(self._pool.helpers) if self._pool else 0
+
+    def helper_info(self, token: str) -> dict:
+        """State of one configured helper: {'state': 'idle'|'ok'|'error', 'error': str, 'sender': dict|None}."""
+        token = token.strip()
+        if token in self._helper_errors:
+            return {"state": "error", "error": self._helper_errors[token], "sender": None}
+        pool = self._pool
+        if pool is not None:
+            for sender in pool.helpers:
+                if sender.client is not None and sender.client.http.token == token:
+                    return {"state": "ok", "error": "", "sender": sender.snapshot()}
+        return {"state": "idle", "error": "", "sender": None}
+
+    async def _add_helper(self, token: str) -> str:
+        """Returns '' on success or an error message."""
+        pool = self._pool
+        if pool is None:
+            return "El bot principal todavía no está listo."
+        self._helper_errors.pop(token, None)
+        try:
+            await pool.add_helper(token)
+        except discord.LoginFailure:
+            message = "Discord rechazó este token."
+        except ValueError as exc:
+            message = str(exc)
+        except Exception as exc:  # noqa: BLE001 - one bad helper must never stop the main bot
+            message = f"No se pudo conectar: {exc}"
+        else:
+            app = self._app
+            if app.qte_channel_id:
+                await pool.check_access(app.qte_channel_id)
+            return ""
+        self._helper_errors[token] = message
+        console_bridge.console.print(f"[yellow]⚠ Bot auxiliar no disponible: {message}[/yellow]")
+        return message
+
+    async def _remove_helper(self, token: str) -> None:
+        self._helper_errors.pop(token, None)
+        pool = self._pool
+        if pool is None:
+            return
+        for sender in list(pool.helpers):
+            if sender.client is not None and sender.client.http.token == token:
+                await pool.remove_helper(sender)
+
+    def add_helper(self, token: str) -> concurrent.futures.Future:
+        return self.submit(lambda: self._add_helper(token.strip()))
+
+    def remove_helper(self, token: str) -> concurrent.futures.Future:
+        return self.submit(lambda: self._remove_helper(token.strip()))
+
+    async def _test_helper(self, token: str) -> str:
+        pool, app = self._pool, self._app
+        if pool is None or not app.qte_channel_id:
+            return "Elige primero el canal del evento."
+        for sender in pool.helpers:
+            if sender.client is not None and sender.client.http.token == token.strip():
+                return await pool.test_send(sender, app.qte_channel_id) or ""
+        return "Ese bot auxiliar no está conectado."
+
+    def test_helper(self, token: str) -> concurrent.futures.Future:
+        return self.submit(lambda: self._test_helper(token))
+
+    def pool_snapshot(self) -> list[dict]:
+        return self._pool.snapshot() if self._pool else []
+
+    async def _start_pool(self, settings: Settings) -> None:
+        """Once the main bot is logged in: route its sends through the pool and log the helpers in."""
+        app = self._app
+        pool = multibot.SenderPool(on_change=self._rebalance_interval)
+        self._pool = pool
+        pool.install(app.bot.http, str(app.bot.user), app.bot.user.id)
+        for token in settings.helper_tokens():
+            await self._add_helper(token)
+        if pool.helpers:
+            online = len(pool.helpers)
+            console_bridge.console.print(
+                f"[green]✓ {online} bot{'s' if online != 1 else ''} auxiliar{'es' if online != 1 else ''} "
+                f"compartiendo el envío de mensajes[/green]")
+
+    def _rebalance_interval(self) -> None:
+        """safe_send() waits a minimum time between messages per channel; with N senders each can go N times faster."""
+        app, pool = self._app, self._pool
+        if app is not None and pool is not None:
+            app._min_message_interval = self._base_interval / max(1, pool.ready_count())
+
     # ---- worker thread ------------------------------------------------------
     def _thread_main(self, settings: Settings) -> None:
         loop = asyncio.new_event_loop()
@@ -152,7 +346,9 @@ class BotRunner:
             os.environ.update(settings.to_env())
             module = importlib.import_module(BOT_MODULE)
             self._app = module.AdvancedQTEBot()
-            loop.run_until_complete(self._serve(settings.discord_token.strip()))
+            self._base_interval = self._app._min_message_interval
+            self._helper_errors.clear()
+            loop.run_until_complete(self._serve(settings))
         except BaseException as exc:  # noqa: BLE001 - everything must reach the UI
             error = friendly_error(exc)
             log.exception("bot stopped with an error")
@@ -161,17 +357,29 @@ class BotRunner:
             self._cleanup(loop)
             self._app = None
             self._loop = None
+            self._pool = None
             if error:
                 self._set(State.ERROR, error)
             else:
                 self._set(State.STOPPED)
 
-    async def _serve(self, token: str) -> None:
+    async def _serve(self, settings: Settings) -> None:
         bot = self._app.bot
+        started = False
+
+        async def on_ready_once():
+            nonlocal started
+            if not started:  # on_ready fires again after reconnects
+                started = True
+                await self._start_pool(settings)
+
+        bot.add_listener(on_ready_once, "on_ready")
         try:
             async with bot:
-                await bot.start(token)
+                await bot.start(settings.discord_token.strip())
         finally:
+            if self._pool is not None:
+                await self._pool.close()
             if not bot.is_closed():
                 await bot.close()
 

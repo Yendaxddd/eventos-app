@@ -4,6 +4,10 @@ EVENTOS APP
 1. Abre Eventos App con su acceso directo (o EventosApp.exe, doble clic). No necesitas instalar nada más.
 2. La primera vez, ve a "Configuración", pega el token de tu bot de Discord y pulsa "Guardar cambios".
 3. Pulsa "Iniciar bot" en el Panel.
+4. Ya conectado, en "Configuración" -> "Evento" elige el servidor, el canal y los roles, y pulsa "Aplicar al evento".
+
+Bots auxiliares: en "Configuración" puedes agregar más bots (otros tokens) para que los mensajes se repartan entre
+todos y Discord no limite las ráfagas de QTE. Cada uno debe estar invitado a tu servidor ("Invitar" copia el enlace).
 
 Todo se guarda en esta misma carpeta:
   data\          datos de jugadores y configuración del juego
