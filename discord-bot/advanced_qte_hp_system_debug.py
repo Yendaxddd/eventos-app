@@ -15,7 +15,6 @@ import logging
 from datetime import datetime, timedelta, timezone
 from typing import List
 from dotenv import load_dotenv
-from rich.console import Console
 from rich.panel import Panel
 from rich.table import Table
 from rich.layout import Layout
@@ -40,21 +39,21 @@ except Exception as e:
     print(f"⚠️ Keyboard library error: {e}")
     KEYBOARD_AVAILABLE = False
 
-# Initialize Rich console
-console = Console()
+# Console output goes through a proxy: a normal rich console when run headless,
+# or the log panel of the desktop app (see eventos_app/console_bridge.py).
+from eventos_app.console_bridge import console
+from eventos_app import paths as app_paths
 
-# Load environment variables
-load_dotenv()
+# Load environment variables (an optional .env next to the app / script)
+load_dotenv(app_paths.app_home() / ".env")
 
 # Setup logging with session rotation - each bot start gets a new log file
 def setup_logging():
     """Setup logging with timestamped log file per session in central logs folder"""
     session_time = datetime.now().strftime("%Y%m%d_%H%M%S")
-    # Centralize logs under eventos-app/logs regardless of cwd
-    project_root = pathlib.Path(__file__).resolve().parents[1]
-    logs_dir = project_root / "logs"
+    # Logs live in <app home>/logs regardless of cwd
     try:
-        logs_dir.mkdir(parents=True, exist_ok=True)
+        logs_dir = app_paths.logs_dir()
     except Exception:
         # Fallback: write next to script if creation fails
         logs_dir = pathlib.Path(__file__).resolve().parent
@@ -141,7 +140,7 @@ profiler = TimingProfiler()
 def resolve_data_dir():
     """Pick a writable data directory with a home fallback."""
     candidates = [
-        pathlib.Path(__file__).parent / "data",
+        app_paths.data_dir(),
         pathlib.Path.home() / ".eventos-bot" / "data",
     ]
 
@@ -165,8 +164,8 @@ def resolve_data_dir():
 
 DATA_DIR = resolve_data_dir()
 
-# Resolve assets directory (same folder as the script)
-ASSETS_DIR = pathlib.Path(__file__).parent / "assets"
+# Resolve assets directory (<app home>/assets)
+ASSETS_DIR = app_paths.assets_dir()
 log.info(f"Using assets directory: {ASSETS_DIR}")
 
 def load_data(name, default):
@@ -652,10 +651,7 @@ class AdvancedQTEBot:
 
         self.setup_events()
         self.setup_slash_commands()
-        if KEYBOARD_AVAILABLE:
-            self.setup_hotkeys()
-        else:
-            console.print("[yellow]⚠️  Keyboard hotkeys disabled (library not available or requires root)[/yellow]")
+        self.setup_hotkeys()
 
     def save_all_data(self, force=False):
         """Save all persistent data to files with throttling to prevent disk spam"""
@@ -1775,7 +1771,13 @@ Your response (1-2 sentences max):"""
             console.print(f"[red]Error announcing domain interrupt: {e}[/red]")
 
     def prompt_reset_hp_and_charges(self):
-        """Ask operator whether to keep HP/charges or reset on startup"""
+        """Ask operator whether to keep HP/charges or reset on startup.
+
+        EVENTOS_RESET_ON_START=1/0 answers it without asking (the desktop app sets it).
+        """
+        preset = os.getenv("EVENTOS_RESET_ON_START")
+        if preset in ("0", "1"):
+            return "reset" if preset == "1" else "keep"
         try:
             choice = input("Keep existing HP/charges? (Y/n): ").strip().lower()
             if choice in ("n", "no"):  # reset
@@ -12936,10 +12938,11 @@ Responde SOLAMENTE con un numero del 1 al 10."""
             console.print(f"[red]✗ Error updating player stats: {e}[/red]")
 
     def setup_hotkeys(self):
-        """Setup keyboard hotkeys from config (requires keyboard library and root on Linux)"""
-        if not KEYBOARD_AVAILABLE:
-            console.print("[yellow]⚠️  Cannot setup hotkeys - keyboard library not available[/yellow]")
-            return
+        """Build the GM quick actions and, if possible, bind them to global hotkeys.
+
+        The actions are always created (the desktop app exposes them as buttons).
+        Global hotkeys need the `keyboard` library (and root on Linux).
+        """
         # Load keybinds from config
         config_path = 'config.json'
         keybinds = {
@@ -13065,12 +13068,34 @@ Responde SOLAMENTE con un numero del 1 al 10."""
             else:
                 trigger_single_impossible()
 
+        self.keybinds = keybinds
+        self.quick_actions = {
+            "single_easy": add_batch_easy,
+            "single_medium": add_batch_medium,
+            "single_hard": add_batch_hard,
+            "single_impossible": add_batch_impossible,
+            "group_easy": trigger_group_easy,
+            "group_medium": trigger_group_medium,
+            "group_hard": trigger_group_hard,
+            "group_impossible": trigger_group_impossible,
+            "checkpoint": trigger_checkpoint,
+            "sync_commands": sync_commands,
+            "batch_toggle": toggle_batch_easy,
+        }
+
+        if not KEYBOARD_AVAILABLE:
+            console.print("[yellow]⚠️  Global hotkeys unavailable (keyboard library missing) - use the buttons[/yellow]")
+            return
+        if os.getenv("EVENTOS_HOTKEYS", "1") == "0":
+            console.print("[yellow]⚠️  Global hotkeys disabled in settings[/yellow]")
+            return
+
         # Register hotkeys using config
         keyboard.add_hotkey(keybinds['single_easy'], add_batch_easy)
         keyboard.add_hotkey(keybinds['single_medium'], add_batch_medium)
         keyboard.add_hotkey(keybinds['single_hard'], add_batch_hard)
         keyboard.add_hotkey(keybinds['single_impossible'], add_batch_impossible)
-        
+    
         # Batch mode toggle (Alt+F9)
         keyboard.add_hotkey('alt+f9', toggle_batch_easy)
 
@@ -13078,7 +13103,7 @@ Responde SOLAMENTE con un numero del 1 al 10."""
         keyboard.add_hotkey(keybinds['group_medium'], trigger_group_medium)
         keyboard.add_hotkey(keybinds['group_hard'], trigger_group_hard)
         keyboard.add_hotkey(keybinds['group_impossible'], trigger_group_impossible)
-        
+    
         keyboard.add_hotkey(keybinds['checkpoint'], trigger_checkpoint)
         keyboard.add_hotkey(keybinds['sync_commands'], sync_commands)
 
@@ -13100,6 +13125,14 @@ Responde SOLAMENTE con un numero del 1 al 10."""
         hotkey_table.add_row("Sync Cmds", f"{keybinds['sync_commands']} (Force sync slash commands)", "", "", "")
 
         console.print(hotkey_table)
+
+    def teardown_hotkeys(self):
+        """Release global hotkeys so a restarted bot doesn't get double triggers"""
+        if KEYBOARD_AVAILABLE:
+            try:
+                keyboard.unhook_all_hotkeys()
+            except Exception as e:
+                log.warning(f"Could not unhook hotkeys: {e}")
 
     async def force_sync_commands(self):
         """Force sync all slash commands"""

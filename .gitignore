@@ -46,6 +46,7 @@ logs/
 build/
 dist/
 *.spec
+!discord-bot/packaging/*.spec
 
 # Secrets - NEVER commit these!
 discord-bot/.env
@@ -69,3 +70,8 @@ discord-bot/config.json
 *.tmp
 *.bak
 *.cache
+
+# Desktop app: per-user settings (contains the bot token!) and generated files
+settings.json
+settings.json.bad
+settings.json.tmp

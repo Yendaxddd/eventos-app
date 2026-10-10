@@ -2,6 +2,36 @@
 
 A feature-rich Discord bot for real-time QTE (Quick Time Events) combat with roleplay integration, domain expansions, and AI-powered interactions.
 
+## 🖥️ App de escritorio (Windows)
+
+Eventos App es una aplicación de Windows con ventana propia (sin terminal): panel con estado del bot,
+botones de acciones rápidas (QTE individuales/grupales, checkpoint, sincronizar comandos), registro en vivo
+y una pantalla de configuración donde pegas el token.
+
+**Usarla**
+1. Descarga `EventosApp-windows.zip`: en la pestaña *Actions* de GitHub, último run de **Build Windows app**
+   → *Artifacts* (o en *Releases* si se publicó un tag `vX.Y.Z`).
+2. Descomprime en cualquier carpeta y abre `EventosApp.exe`.
+3. *Configuración* → pega el token → *Guardar cambios* → *Panel* → *Iniciar bot*.
+
+Todo (datos, assets, logs, `settings.json`) vive en la misma carpeta del `.exe`; para respaldar o mover la
+app basta con copiar esa carpeta. Windows SmartScreen puede avisar la primera vez porque el `.exe` no está firmado.
+
+**Construirla tú mismo** (Windows, Python 3.11+):
+```powershell
+powershell -ExecutionPolicy Bypass -File discord-bot\packaging\build_windows.ps1
+```
+Genera `discord-bot\dist\EventosApp\EventosApp.exe` y `EventosApp-windows.zip`. Para probar el `.exe` construido:
+`EventosApp.exe --smoke-test` (escribe `logs\smoke_test.json`).
+
+**Ejecutarla desde el código** (sin compilar):
+```bash
+pip install -r discord-bot/requirements.txt -r discord-bot/requirements-desktop.txt
+python discord-bot/run_app.py
+```
+
+El modo sin ventana (`python advanced_qte_hp_system_debug.py`, Docker, Railway) sigue funcionando como antes.
+
 ## ✨ Features
 
 ### Core Combat Mechanics

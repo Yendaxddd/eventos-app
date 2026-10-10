@@ -1,0 +1,81 @@
+name: Build Windows app
+
+# Builds EventosApp.exe (a windowed app, no terminal), proves it starts, and uploads a zip.
+# Push a tag like v0.1.0 to also publish it as a GitHub Release.
+on:
+  push:
+    branches: [main, "claude/**"]
+    tags: ["v*"]
+  pull_request:
+    paths: ["discord-bot/**", ".github/workflows/build-windows.yml"]
+  workflow_dispatch:
+
+concurrency:
+  group: build-windows-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: pwsh
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: |
+            discord-bot/requirements.txt
+            discord-bot/requirements-desktop.txt
+
+      - name: Unit tests
+        working-directory: discord-bot
+        run: |
+          python -m pip install -r requirements.txt pytest
+          python -m pytest tests -q
+
+      - name: Build EventosApp.exe
+        run: ./discord-bot/packaging/build_windows.ps1
+
+      - name: Smoke test the built exe
+        run: |
+          $exe = Join-Path $PWD "discord-bot\dist\EventosApp\EventosApp.exe"
+          $out = Join-Path $PWD "smoke.json"
+          $p = Start-Process -FilePath $exe -ArgumentList "--smoke-test", "--smoke-out", $out -PassThru -Wait
+          if (Test-Path $out) { Get-Content $out } else { Write-Host "No smoke report was written" }
+          if ($p.ExitCode -ne 0) { throw "Smoke test failed (exit code $($p.ExitCode))" }
+
+      - name: Show app logs if the smoke test failed
+        if: failure()
+        run: |
+          Get-ChildItem -Recurse discord-bot\dist\EventosApp\logs -ErrorAction SilentlyContinue |
+            Where-Object { -not $_.PSIsContainer } |
+            ForEach-Object { Write-Host "=== $($_.FullName)"; Get-Content $_.FullName -Tail 60 }
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: EventosApp-windows
+          path: discord-bot/dist/EventosApp-windows.zip
+          if-no-files-found: error
+          retention-days: 30
+
+  release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: EventosApp-windows
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: EventosApp-windows.zip
+          generate_release_notes: true

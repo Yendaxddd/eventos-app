@@ -1,0 +1,17 @@
+EVENTOS APP
+===========
+
+1. Abre EventosApp.exe (doble clic). No necesitas instalar nada más.
+2. La primera vez, ve a "Configuración", pega el token de tu bot de Discord y pulsa "Guardar cambios".
+3. Pulsa "Iniciar bot" en el Panel.
+
+Todo se guarda en esta misma carpeta:
+  data\          datos de jugadores y configuración del juego
+  assets\        GIFs e imágenes
+  logs\          registros (útiles si algo falla)
+  settings.json  tu configuración (incluye el token: no lo compartas)
+
+Si Windows SmartScreen avisa en el primer arranque ("Windows protegió su PC"),
+pulsa "Más información" -> "Ejecutar de todas formas". Pasa porque la app no está firmada.
+
+Para actualizar: descomprime la versión nueva sobre esta carpeta (conserva settings.json y data\).
