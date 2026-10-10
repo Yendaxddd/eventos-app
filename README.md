@@ -8,20 +8,30 @@ Eventos App es una aplicación de Windows con ventana propia (sin terminal): pan
 botones de acciones rápidas (QTE individuales/grupales, checkpoint, sincronizar comandos), registro en vivo
 y una pantalla de configuración donde pegas el token.
 
-**Usarla**
-1. Descarga `EventosApp-windows.zip`: en la pestaña *Actions* de GitHub, último run de **Build Windows app**
-   → *Artifacts* (o en *Releases* si se publicó un tag `vX.Y.Z`).
-2. Descomprime en cualquier carpeta y abre `EventosApp.exe`.
-3. *Configuración* → pega el token → *Guardar cambios* → *Panel* → *Iniciar bot*.
+**Instalarla (recomendado)**
+1. Descarga `EventosApp-Setup-X.Y.Z.exe`: en la pestaña *Actions* de GitHub, último run de **Build Windows app**
+   → *Artifacts* → `EventosApp-Installer` (o en *Releases* si se publicó un tag `vX.Y.Z`).
+2. Ábrelo y sigue el asistente. Instala solo para tu usuario (no pide administrador) y crea acceso directo
+   en el escritorio y en el menú Inicio.
+3. Abre *Eventos App* → *Configuración* → pega el token → *Guardar cambios* → *Panel* → *Iniciar bot*.
 
-Todo (datos, assets, logs, `settings.json`) vive en la misma carpeta del `.exe`; para respaldar o mover la
-app basta con copiar esa carpeta. Windows SmartScreen puede avisar la primera vez porque el `.exe` no está firmado.
+Para **actualizar**, ejecuta el instalador nuevo encima: se conservan tu `settings.json`, los datos de jugadores
+(`data\`) y los GIFs (`assets\`). Al **desinstalar** te pregunta si quieres borrar también esos datos; por defecto no.
+
+**Versión portátil (zip):** `EventosApp-windows.zip` (artifact del mismo run). Descomprime en cualquier carpeta
+y abre `EventosApp.exe`, sin instalar nada.
+
+Todo (datos, assets, logs, `settings.json`) vive en la carpeta de la app; para respaldarla basta con copiarla
+(con el instalador: `%LOCALAPPDATA%\Programs\EventosApp`, o el botón *Carpeta de datos* de la app).
+Windows SmartScreen puede avisar la primera vez porque el instalador y el `.exe` no están firmados.
 
 **Construirla tú mismo** (Windows, Python 3.11+):
 ```powershell
 powershell -ExecutionPolicy Bypass -File discord-bot\packaging\build_windows.ps1
 ```
-Genera `discord-bot\dist\EventosApp\EventosApp.exe` y `EventosApp-windows.zip`. Para probar el `.exe` construido:
+Genera `discord-bot\dist\EventosApp\EventosApp.exe`, `EventosApp-windows.zip` y el instalador
+`EventosApp-Setup-X.Y.Z.exe` (este último necesita [Inno Setup 6](https://jrsoftware.org/isdl.php) o `choco install innosetup`;
+sin él se omite). Para probar el `.exe` construido:
 `EventosApp.exe --smoke-test` (escribe `logs\smoke_test.json`).
 
 **Ejecutarla desde el código** (sin compilar):

@@ -1,7 +1,8 @@
 name: Build Windows app
 
-# Builds EventosApp.exe (a windowed app, no terminal), proves it starts, and uploads a zip.
-# Push a tag like v0.1.0 to also publish it as a GitHub Release.
+# Builds EventosApp.exe (a windowed app, no terminal) plus a zip and a Windows installer, proves they
+# work (smoke test; install -> shortcuts -> run -> update keeps data -> uninstall), and uploads them.
+# Push a tag like v0.1.0 to also publish them as a GitHub Release.
 on:
   push:
     branches: [main, "claude/**"]
@@ -40,8 +41,11 @@ jobs:
           python -m pip install -r requirements.txt pytest
           python -m pytest tests -q
 
-      - name: Build EventosApp.exe
-        run: ./discord-bot/packaging/build_windows.ps1
+      - name: Install Inno Setup
+        run: choco install innosetup --no-progress -y
+
+      - name: Build EventosApp.exe, zip and installer
+        run: ./discord-bot/packaging/build_windows.ps1 -RequireInstaller
 
       - name: Smoke test the built exe
         run: |
@@ -51,12 +55,22 @@ jobs:
           if (Test-Path $out) { Get-Content $out } else { Write-Host "No smoke report was written" }
           if ($p.ExitCode -ne 0) { throw "Smoke test failed (exit code $($p.ExitCode))" }
 
+      - name: Test the installer (install, shortcuts, run, update keeps data, uninstall)
+        run: ./discord-bot/packaging/test_installer.ps1
+
       - name: Show app logs if the smoke test failed
         if: failure()
         run: |
           Get-ChildItem -Recurse discord-bot\dist\EventosApp\logs -ErrorAction SilentlyContinue |
             Where-Object { -not $_.PSIsContainer } |
             ForEach-Object { Write-Host "=== $($_.FullName)"; Get-Content $_.FullName -Tail 60 }
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: EventosApp-Installer
+          path: discord-bot/dist/EventosApp-Setup-*.exe
+          if-no-files-found: error
+          retention-days: 30
 
       - uses: actions/upload-artifact@v4
         with:
@@ -74,8 +88,10 @@ jobs:
     steps:
       - uses: actions/download-artifact@v4
         with:
-          name: EventosApp-windows
+          merge-multiple: true
       - uses: softprops/action-gh-release@v2
         with:
-          files: EventosApp-windows.zip
+          files: |
+            EventosApp-Setup-*.exe
+            EventosApp-windows.zip
           generate_release_notes: true
