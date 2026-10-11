@@ -24,6 +24,9 @@ Con varios bots, el principal reparte los mensajes (QTE, respuestas, imágenes) 
 3. Pulsa *Invitar* (copia el enlace), ábrelo en el navegador y añádelo a tu servidor.
 4. Inicia el bot. *Probar* envía y borra un mensaje de prueba para confirmar que puede escribir en el canal.
 
+Las reacciones también se reparten entre los bots. Más detalle (latencias, límites, cuántos jugadores aguanta y la
+prueba de rendimiento de la app) en [docs/RENDIMIENTO.md](docs/RENDIMIENTO.md).
+
 Los mensajes con botones siempre salen por el bot principal. Si un auxiliar no puede escribir en el canal, el mensaje
 sale por otro bot y ese auxiliar se aparta de ese canal. En una prueba contra un Discord simulado (5 mensajes/5 s por bot),
 una ráfaga de 12 mensajes tarda ~10 s con 1 bot, ~5 s con 2 y menos de 0.5 s con 3 o más.

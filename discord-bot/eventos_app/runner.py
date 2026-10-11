@@ -7,15 +7,17 @@ from __future__ import annotations
 import asyncio
 import concurrent.futures
 import importlib
+import json
 import logging
 import os
 import threading
+import time
 from enum import Enum
 from typing import Awaitable, Callable
 
 import discord
 
-from . import console_bridge, multibot
+from . import benchmark, console_bridge, multibot, paths
 from .settings import Settings
 
 log = logging.getLogger("eventos_app")
@@ -67,6 +69,7 @@ class BotRunner:
         self._loop: asyncio.AbstractEventLoop | None = None
         self._app = None  # AdvancedQTEBot
         self._pool: multibot.SenderPool | None = None
+        self._bench_stop: asyncio.Event | None = None
         self._helper_errors: dict[str, str] = {}  # helper token -> why it could not be added
         self._base_interval = 0.15
         self._state = State.STOPPED
@@ -239,6 +242,7 @@ class BotRunner:
         app.print_config_check()
         console_bridge.console.print(f"[green]✓ Evento configurado en #{channel.name} ({channel.guild.name})[/green]")
         if self._pool is not None:
+            self._pool.sticky_channels = {app.hp_bar_thread_id} if app.hp_bar_thread_id else set()
             await self._pool.check_access(channel_id)
         return {"ok": True, "thread": result["thread"].name, "created": result["created"]}
 
@@ -313,6 +317,35 @@ class BotRunner:
     def test_helper(self, token: str) -> concurrent.futures.Future:
         return self.submit(lambda: self._test_helper(token))
 
+    async def _run_benchmark(self, profile: str) -> dict:
+        pool, app = self._pool, self._app
+        if pool is None or not app.qte_channel_id:
+            return {"ok": False, "error": "Elige primero el canal del evento (Configuración → Evento)."}
+        out = console_bridge.console
+        self._bench_stop = asyncio.Event()
+        out.print("[bold cyan]▶ Prueba de rendimiento: manda mensajes de prueba al canal del evento y los borra[/bold cyan]")
+        report = await benchmark.run(pool, app.qte_channel_id, profile=profile, stop=self._bench_stop,
+                                     say=lambda text: out.print(f"[cyan]{text}[/cyan]"))
+        lines = benchmark.format_report(report)
+        for line in lines:
+            out.print(f"[bold white]{line}[/bold white]")
+        stamp = time.strftime("%Y%m%d_%H%M%S")
+        path = paths.logs_dir() / f"rendimiento_{stamp}.txt"
+        path.write_text("\n".join(lines) + "\n\n" + json.dumps(report, indent=2, ensure_ascii=False), encoding="utf-8")
+        out.print(f"[green]Informe guardado en {path}[/green]")
+        self._bench_stop = None
+        return {"ok": not report.get("aborted"), "error": report.get("aborted", ""), "report": report,
+                "lines": lines, "path": str(path)}
+
+    def run_benchmark(self, profile: str = "rapida") -> concurrent.futures.Future:
+        """Performance test with the real bots (see benchmark.py). Posts test messages and deletes them."""
+        return self.submit(lambda: self._run_benchmark(profile))
+
+    def cancel_benchmark(self) -> None:
+        stop, loop = self._bench_stop, self._loop
+        if stop is not None and loop is not None and not loop.is_closed():
+            loop.call_soon_threadsafe(stop.set)
+
     def pool_snapshot(self) -> list[dict]:
         return self._pool.snapshot() if self._pool else []
 
@@ -321,7 +354,11 @@ class BotRunner:
         app = self._app
         pool = multibot.SenderPool(on_change=self._rebalance_interval)
         self._pool = pool
+        # who wrote the HP bar messages must survive restarts, or the first edit of each goes to the wrong bot
+        pool.owners_file = paths.data_dir() / "sender_owners.json"
+        pool.sticky_channels = {app.hp_bar_thread_id} if app.hp_bar_thread_id else set()
         pool.install(app.bot.http, str(app.bot.user), app.bot.user.id)
+        pool.start_background()  # keeps HTTPS connections warm for the next burst
         for token in settings.helper_tokens():
             await self._add_helper(token)
         if pool.helpers:
@@ -331,10 +368,11 @@ class BotRunner:
                 f"compartiendo el envío de mensajes[/green]")
 
     def _rebalance_interval(self) -> None:
-        """safe_send() waits a minimum time between messages per channel; with N senders each can go N times faster."""
+        """safe_send() used to wait a minimum time between messages per channel. The sender pool paces every
+        bot now (and waits for a free slot when all are busy), so that extra wait is only added latency."""
         app, pool = self._app, self._pool
         if app is not None and pool is not None:
-            app._min_message_interval = self._base_interval / max(1, pool.ready_count())
+            app._min_message_interval = 0.0
 
     # ---- worker thread ------------------------------------------------------
     def _thread_main(self, settings: Settings) -> None:
@@ -386,7 +424,8 @@ class BotRunner:
     def _cleanup(self, loop: asyncio.AbstractEventLoop) -> None:
         app = self._app
         if app is not None:
-            for step in (app.teardown_hotkeys, lambda: app.save_all_data(force=True)):
+            module = importlib.import_module(BOT_MODULE)
+            for step in (app.teardown_hotkeys, lambda: app.save_all_data(force=True), module.flush_saves):
                 try:
                     step()
                 except Exception:

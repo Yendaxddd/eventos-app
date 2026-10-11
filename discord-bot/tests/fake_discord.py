@@ -25,8 +25,15 @@ def _json(data, status: int = 200, headers: dict | None = None) -> web.Response:
 
 
 class FakeDiscord:
-    def __init__(self, *, limit: int = 5, window: float = 1.0, latency: float = 0.02) -> None:
+    def __init__(self, *, limit: int = 5, window: float = 1.0, latency: float = 0.02,
+                 reaction_window: float = 0.25) -> None:
         self.limit, self.window, self.latency = limit, window, latency
+        self.reaction_window = reaction_window
+        self.reactions: list[dict] = []        # every reaction attempt, including 429s
+        self.gateway_hits: dict[str, int] = {}  # keep-alive pings per token
+        self.connections: set[int] = set()      # client ports seen (= distinct TCP connections)
+        self.edit_attempts: list[tuple[str, int]] = []  # (token, status)
+        self._reaction_buckets: dict[tuple[str, int], float] = {}
         self.in_flight: dict[tuple[str, int], int] = {}
         self.max_in_flight: dict[tuple[str, int], int] = {}
         self.bots: dict[str, int] = {}        # token -> user id
@@ -42,6 +49,13 @@ class FakeDiscord:
     def add_bot(self, token: str, user_id: int) -> None:
         self.bots[token] = user_id
 
+    def add_message(self, channel_id: int, author_token: str, content: str = "") -> int:
+        """A message that already exists (e.g. what a player typed)."""
+        mid = next(self._ids)
+        self.messages[mid] = {"id": mid, "channel": channel_id, "author_token": author_token, "content": content,
+                              "files": [], "components": None}
+        return mid
+
     def deny(self, token: str, channel_id: int) -> None:
         self.denied.add((token, channel_id))
 
@@ -50,6 +64,8 @@ class FakeDiscord:
         app = web.Application()
         app.router.add_get("/api/v10/users/@me", self._me)
         app.router.add_get("/api/v10/oauth2/applications/@me", self._application)
+        app.router.add_get("/api/v10/gateway", self._gateway)
+        app.router.add_put("/api/v10/channels/{cid}/messages/{mid}/reactions/{emoji}/@me", self._react)
         app.router.add_get("/api/v10/channels/{cid}", self._channel)
         app.router.add_post("/api/v10/channels/{cid}/messages", self._send)
         app.router.add_patch("/api/v10/channels/{cid}/messages/{mid}", self._edit)
@@ -99,6 +115,49 @@ class FakeDiscord:
                       "flags": 0, "bot_public": True, "bot_require_code_grant": False,
                       "owner": {"id": "1", "username": "owner", "discriminator": "0", "avatar": None}})
 
+    def _note_connection(self, request: web.Request) -> None:
+        peer = request.transport.get_extra_info("peername") if request.transport else None
+        if peer:
+            self.connections.add(peer[1])
+
+    async def _gateway(self, request: web.Request) -> web.Response:
+        self._note_connection(request)
+        token = self._token(request) or "?"
+        self.gateway_hits[token] = self.gateway_hits.get(token, 0) + 1
+        await asyncio.sleep(self.latency)
+        return _json({"url": "wss://gateway.fake"})
+
+    async def _react(self, request: web.Request) -> web.Response:
+        """Reactions: 1 per `reaction_window` per (bot, channel), like Discord's ~250 ms bucket."""
+        self._note_connection(request)
+        token = self._token(request)
+        if token is None:
+            return self._error(401, 0, "401: Unauthorized")
+        channel, mid = int(request.match_info["cid"]), int(request.match_info["mid"])
+        await asyncio.sleep(self.latency)
+        now = time.monotonic()
+        entry = {"t": now, "token": token, "message": mid, "emoji": request.match_info["emoji"], "status": 204}
+        self.reactions.append(entry)
+        if (token, channel) in self.denied:
+            entry["status"] = 403
+            return self._error(403, 50001, "Missing Access")
+        if mid not in self.messages:
+            entry["status"] = 404
+            return self._error(404, 10008, "Unknown Message")
+        last = self._reaction_buckets.get((token, channel))
+        headers = {"X-RateLimit-Limit": "1", "X-RateLimit-Bucket": f"react-{channel}-{token}"}
+        if last is not None and now - last < self.reaction_window:
+            retry = self.reaction_window - (now - last)
+            entry["status"] = 429
+            headers.update({"Retry-After": f"{retry:.3f}", "X-RateLimit-Remaining": "0", "Via": "1.1 fake-edge",
+                            "X-RateLimit-Reset-After": f"{retry:.3f}", "X-RateLimit-Scope": "user"})
+            return _json({"message": "You are being rate limited.", "retry_after": retry, "global": False},
+                         status=429, headers=headers)
+        self._reaction_buckets[(token, channel)] = now
+        headers.update({"X-RateLimit-Remaining": "0", "X-RateLimit-Reset-After": f"{self.reaction_window:.3f}"})
+        self.messages[mid].setdefault("reactions", []).append((token, entry["emoji"]))
+        return web.Response(status=204, headers=headers)
+
     async def _channel(self, request: web.Request) -> web.Response:
         token = self._token(request)
         channel = int(request.match_info["cid"])
@@ -113,6 +172,7 @@ class FakeDiscord:
         if token is None:
             return self._error(401, 0, "401: Unauthorized")
         channel = int(request.match_info["cid"])
+        self._note_connection(request)
         key = (token, channel)
         self.in_flight[key] = self.in_flight.get(key, 0) + 1
         self.max_in_flight[key] = max(self.max_in_flight.get(key, 0), self.in_flight[key])
@@ -123,6 +183,20 @@ class FakeDiscord:
             self.in_flight[key] -= 1
 
     async def _handle_send(self, request: web.Request, token: str, channel: int) -> web.Response:
+        # read the whole body first, like a real server, so the connection stays reusable on error answers
+        content, files, payload = "", [], {}
+        if request.content_type.startswith("multipart/"):
+            reader = await request.multipart()
+            async for part in reader:
+                data = await part.read()
+                if part.name == "payload_json":
+                    payload = json.loads(data)
+                    content = payload.get("content", "")
+                else:
+                    files.append({"name": part.filename, "size": len(data)})
+        else:
+            payload = await request.json()
+            content = payload.get("content", "")
         now = time.monotonic()
         entry = {"t": now, "token": token, "channel": channel, "status": 200}
         self.requests.append(entry)
@@ -137,7 +211,7 @@ class FakeDiscord:
         if bucket[1] >= self.limit:
             retry = max(0.01, self.window - (now - bucket[0]))
             entry["status"] = 429
-            headers.update({"Retry-After": f"{retry:.3f}", "X-RateLimit-Remaining": "0",
+            headers.update({"Retry-After": f"{retry:.3f}", "X-RateLimit-Remaining": "0", "Via": "1.1 fake-edge",
                             "X-RateLimit-Reset-After": f"{retry:.3f}", "X-RateLimit-Scope": "user"})
             return _json({"message": "You are being rate limited.", "retry_after": retry, "global": False},
                          status=429, headers=headers)
@@ -146,20 +220,6 @@ class FakeDiscord:
         reset_after = self.window - (now - bucket[0])
         headers.update({"X-RateLimit-Remaining": str(remaining), "X-RateLimit-Reset-After": f"{reset_after:.3f}",
                         "X-RateLimit-Reset": f"{time.time() + reset_after:.3f}"})
-
-        content, files, payload = "", [], {}
-        if request.content_type.startswith("multipart/"):
-            reader = await request.multipart()
-            async for part in reader:
-                data = await part.read()
-                if part.name == "payload_json":
-                    payload = json.loads(data)
-                    content = payload.get("content", "")
-                else:
-                    files.append({"name": part.filename, "size": len(data)})
-        else:
-            payload = await request.json()
-            content = payload.get("content", "")
 
         mid = next(self._ids)
         self.messages[mid] = {"id": mid, "channel": channel, "author_token": token, "content": content,
@@ -187,7 +247,9 @@ class FakeDiscord:
         if msg is None:
             return self._error(404, 10008, "Unknown Message")
         if msg["author_token"] != token:
+            self.edit_attempts.append((token, 403))
             return self._error(403, 50005, "Cannot edit a message authored by another user")
+        self.edit_attempts.append((token, 200))
         payload = await request.json()
         msg["content"] = payload.get("content", msg["content"])
         msg["edited_by"] = token

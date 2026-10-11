@@ -8,6 +8,7 @@ EVENTOS APP
 
 Bots auxiliares: en "Configuración" puedes agregar más bots (otros tokens) para que los mensajes se repartan entre
 todos y Discord no limite las ráfagas de QTE. Cada uno debe estar invitado a tu servidor ("Invitar" copia el enlace).
+En "Configuración" -> "Rendimiento" hay una prueba que mide la latencia y cuántos jugadores aguanta el canal.
 
 Todo se guarda en esta misma carpeta:
   data\          datos de jugadores y configuración del juego

@@ -6,6 +6,7 @@ import asyncio
 import logging
 import tkinter as tk
 import webbrowser
+from tkinter import messagebox
 
 import aiohttp
 import customtkinter as ctk
@@ -56,8 +57,9 @@ class ConfigPage(ctk.CTkFrame):
         self._build_token(0)
         self._build_event(1)
         self._build_helpers(2)
-        self._build_startup(3)
-        self._build_ai(4)
+        self._build_performance(3)
+        self._build_startup(4)
+        self._build_ai(5)
 
         bar = ctk.CTkFrame(self, fg_color="transparent")
         bar.grid(row=1, column=0, sticky="ew", padx=20, pady=14)
@@ -292,14 +294,14 @@ class ConfigPage(ctk.CTkFrame):
             row.grid(row=i, column=0, sticky="ew", padx=4, pady=3)
             row.grid_columnconfigure(1, weight=1)
             ctk.CTkLabel(row, text=helper.get("name") or f"Bot {_short(token)}", text_color=TEXT, anchor="w",
-                         font=ctk.CTkFont(weight="bold")).grid(row=0, column=0, padx=(12, 8), pady=8, sticky="w")
-            status = ctk.CTkLabel(row, text="", text_color=MUTED, anchor="w")
-            status.grid(row=0, column=1, padx=4, sticky="w")
+                         font=ctk.CTkFont(weight="bold")).grid(row=0, column=0, columnspan=2, padx=(12, 8), pady=(8, 0), sticky="w")
+            status = ctk.CTkLabel(row, text="", text_color=MUTED, anchor="w", justify="left", wraplength=430)
+            status.grid(row=1, column=0, columnspan=2, padx=(12, 8), pady=(0, 8), sticky="w")
             for col, (text, command) in enumerate((("Probar", lambda t=token: self._test_helper(t)),
                                                    ("Invitar", lambda h=helper: self._copy_invite(h)),
                                                    ("Quitar", lambda t=token: self._remove_helper(t))), start=2):
                 ctk.CTkButton(row, text=text, width=70, height=28, fg_color=BUTTON_NEUTRAL if text != "Quitar" else "#5a2f37",
-                              hover_color=CARD_BORDER, command=command).grid(row=0, column=col, padx=(0, 6 if col < 4 else 10), pady=6)
+                              hover_color=CARD_BORDER, command=command).grid(row=0, column=col, rowspan=2, padx=(0, 6 if col < 4 else 10), pady=6)
             self._helper_rows.append({"token": token, "status": status})
         if not self.app.settings.helper_bots:
             ctk.CTkLabel(self.helper_list, text="Todavía no hay bots auxiliares. Funciona igual solo con el principal.",
@@ -317,7 +319,8 @@ class ConfigPage(ctk.CTkFrame):
             if info["state"] == "ok":
                 sender = info["sender"]
                 access = {"ok": "ve el canal", "no": "NO ve el canal del evento", "?": ""}.get(sender["access"], "")
-                text = f"● Conectado · {sender['sent']} mensajes enviados" + (f" · {access}" if access else "")
+                speed = f" · {sender['p50_ms']} ms" if sender["p50_ms"] else ""
+                text = f"● Conectado · {sender['sent']} mensajes{speed}" + (f" · {access}" if access else "")
                 row["status"].configure(text=text, text_color=RED if sender["access"] == "no" else GREEN)
             elif info["state"] == "error":
                 row["status"].configure(text=f"✗ {info['error']}", text_color=RED)
@@ -402,6 +405,66 @@ class ConfigPage(ctk.CTkFrame):
         self.app.watch(future, lambda result: finish("✓ Escribió y borró un mensaje de prueba en el canal." if not result
                                                      else f"✗ {result}", not result),
                        lambda exc: finish(f"✗ {exc}", False))
+
+    # ---- performance test ------------------------------------------------------------------
+    def _build_performance(self, row: int) -> None:
+        box = self._section("Rendimiento (límites de Discord)", row)
+        self._note(box, 1, "Mide con tus bots reales cuánto tarda cada mensaje y reacción, cuántos mensajes por minuto aguanta el "
+                           "canal del evento y cuántos jugadores pueden responder a la vez sin esperas. Manda mensajes de prueba al "
+                           "canal del evento (se borran solos). Hazla con el evento parado.")
+        actions = ctk.CTkFrame(box, fg_color="transparent")
+        actions.grid(row=2, column=0, columnspan=4, padx=18, pady=(0, 4), sticky="w")
+        self.bench_quick = ctk.CTkButton(actions, text="Prueba rápida (~30 s)", width=170, height=34, fg_color=ACCENT,
+                                         command=lambda: self._run_benchmark("rapida"))
+        self.bench_quick.pack(side="left")
+        self.bench_full = ctk.CTkButton(actions, text="Prueba completa (~1 min)", width=180, height=34, fg_color=BUTTON_NEUTRAL,
+                                        command=lambda: self._run_benchmark("completa"))
+        self.bench_full.pack(side="left", padx=10)
+        self.bench_stop = ctk.CTkButton(actions, text="Cancelar", width=90, height=34, fg_color="#5a2f37", state="disabled",
+                                        command=self.app.runner.cancel_benchmark)
+        self.bench_stop.pack(side="left")
+        self.bench_msg = ctk.CTkLabel(box, text="", text_color=MUTED, anchor="w", justify="left", wraplength=640)
+        self.bench_msg.grid(row=3, column=0, columnspan=4, padx=18, pady=(2, 12), sticky="w")
+
+    def _run_benchmark(self, profile: str) -> None:
+        if self.app.runner.state is not State.CONNECTED:
+            self.bench_msg.configure(text="Inicia el bot primero.", text_color=AMBER)
+            return
+        if not messagebox.askyesno(
+                "Prueba de rendimiento",
+                "Se enviarán decenas de mensajes de prueba (y reacciones) al canal del evento y se borrarán al terminar.\n\n"
+                "Hazla cuando no haya un evento en marcha.\n\n¿Empezar?"):
+            return
+        try:
+            future = self.app.runner.run_benchmark(profile)
+        except RuntimeError as exc:
+            self.bench_msg.configure(text=str(exc), text_color=RED)
+            return
+        for button in (self.bench_quick, self.bench_full):
+            button.configure(state="disabled")
+        self.bench_stop.configure(state="normal")
+        self.bench_msg.configure(text="Midiendo… el avance sale en el registro del Panel.", text_color=MUTED)
+
+        def finish() -> None:
+            for button in (self.bench_quick, self.bench_full):
+                button.configure(state="normal")
+            self.bench_stop.configure(state="disabled")
+
+        def done(result: dict) -> None:
+            finish()
+            if not result["ok"]:
+                self.bench_msg.configure(text=f"⚠ {result['error']}", text_color=AMBER)
+                return
+            c = result["report"]["capacity"]["3"]
+            self.bench_msg.configure(
+                text=f"✓ Listo. ≈ {c['players']} jugadores a la vez (límite: {c['limiting']}) · ≈ {round(c['messages_per_minute'])} "
+                     f"mensajes/min. Informe completo en el registro y en {result['path']}", text_color=GREEN)
+
+        def failed(exc: BaseException) -> None:
+            finish()
+            self.bench_msg.configure(text=f"✗ {exc}", text_color=RED)
+
+        self.app.watch(future, done, failed)
 
     # ---- startup ---------------------------------------------------------------------
     def _build_startup(self, row: int) -> None:

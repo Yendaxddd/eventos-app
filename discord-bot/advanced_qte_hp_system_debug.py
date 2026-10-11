@@ -9,7 +9,9 @@ import threading
 import asyncio
 import json
 import random
+import collections
 import os
+import queue
 import re
 import pathlib
 import logging
@@ -169,8 +171,43 @@ DATA_DIR = resolve_data_dir()
 ASSETS_DIR = app_paths.assets_dir()
 log.info(f"Using assets directory: {ASSETS_DIR}")
 
+# Saving used to write ~10 JSON files on the event loop thread; on Windows (antivirus scanning every
+# write) that froze every handler for tens to hundreds of ms. Now the loop only serialises (fast) and a
+# writer thread does the file work, atomically (temp file + replace), so a crash can't leave half a file.
+_write_queue: "queue.Queue" = queue.Queue()
+_writer_lock = threading.Lock()
+_writer_thread = None
+
+
+def _writer_loop():
+    while True:
+        path, text = _write_queue.get()
+        try:
+            tmp = path.with_suffix(path.suffix + ".tmp")
+            for attempt in range(5):  # Windows: the file can be held for a moment by an antivirus scan
+                try:
+                    tmp.parent.mkdir(parents=True, exist_ok=True)
+                    tmp.write_text(text, encoding="utf-8")
+                    os.replace(tmp, path)
+                    break
+                except OSError:
+                    if attempt == 4:
+                        raise
+                    time.sleep(0.05 * (attempt + 1))
+        except Exception as e:
+            log.error(f"Error saving {path.name}: {e}")
+        finally:
+            _write_queue.task_done()
+
+
+def flush_saves():
+    """Wait until every queued save has reached the disk (shutdown, tests, right before a load)."""
+    _write_queue.join()
+
+
 def load_data(name, default):
     """Load JSON data from file"""
+    flush_saves()
     try:
         filepath = DATA_DIR / f"{name}.json"
         with open(filepath, "r", encoding="utf-8") as f:
@@ -188,12 +225,15 @@ def load_data(name, default):
         return default
 
 def save_data(name, data):
-    """Save JSON data to file"""
+    """Save JSON data (serialised now, written by the writer thread)"""
+    global _writer_thread
     try:
-        filepath = DATA_DIR / f"{name}.json"
-        with open(filepath, "w", encoding="utf-8") as f:
-            json.dump(data, f, indent=2, ensure_ascii=False)
-        log.debug(f"Saved {name}.json successfully")
+        text = json.dumps(data, indent=2, ensure_ascii=False)
+        with _writer_lock:
+            if _writer_thread is None or not _writer_thread.is_alive():
+                _writer_thread = threading.Thread(target=_writer_loop, name="data-writer", daemon=True)
+                _writer_thread.start()
+        _write_queue.put((DATA_DIR / f"{name}.json", text))
     except Exception as e:
         log.error(f"Error saving {name}.json: {e}")
 
@@ -387,7 +427,9 @@ class AdvancedQTEBot:
         # we batch updates and flush them periodically to reduce rate limits
         self._pending_hp_updates = {}  # {cache_key: embed} - pending updates
         self._hp_update_task = None  # Background task for flushing
-        self._hp_update_interval = 2.0  # Flush every 2 seconds (reduced from 0.5s for rate limits)
+        self._hp_update_interval = 0.4  # HP bar edits are coalesced for this long (the sender pool does the pacing)
+        self._tupper_seen = {}     # owner user id -> recent Tupperbox webhook messages
+        self._tupper_waiters = {}  # owner user id -> futures waiting for the next one
         # ===============================================
         
         # ========== GLOBAL MESSAGE QUEUE SYSTEM ==========
@@ -1340,7 +1382,7 @@ Your response (1-2 sentences max):"""
             
             emoji = self.difficulty_emoji.get(difficulty, '⚡')
             
-            await self.webhook_send(
+            await self.webhook_send(qte_id=qte_id, 
                 content=f"# 🔥 **COMBO QTE!** 🔥\n"
                        f"**{difficulty.upper()}** {emoji} | {target_member.mention}\n"
                        f"⚡ Complete **{combo_length} QTEs** in sequence!\n"
@@ -1416,7 +1458,7 @@ Your response (1-2 sentences max):"""
             
             emoji = self.difficulty_emoji.get(difficulty, '⚡')
             
-            await self.webhook_send(
+            await self.webhook_send(qte_id=qte_id, 
                 content=f"# 🎯 **DIRECTION QTE!** 🎯\n"
                        f"**{difficulty.upper()}** {emoji} | {target_member.mention}\n"
                        f"# {shown_arrow}\n"
@@ -1477,7 +1519,7 @@ Your response (1-2 sentences max):"""
             
             # IMPORTANT: No mention/ping! Just a general QTE message
             # The target is tracked internally but not pinged
-            await self.webhook_send(
+            await self.webhook_send(qte_id=qte_id, 
                 content=f"⚡ **{difficulty.upper()} QTE** {emoji}"
             )
             
@@ -1934,8 +1976,11 @@ Your response (1-2 sentences max):"""
         # For now, just return the filepath - in production, you'd host these or embed them
         return filepath
     
-    async def webhook_send(self, content=None, embed=None, file=None):
-        """Send message to QTE channel with rate limit protection"""
+    async def webhook_send(self, content=None, embed=None, file=None, qte_id=None):
+        """Send message to QTE channel with rate limit protection.
+
+        qte_id: remember the sent message on that QTE, so reaction times can use Discord's timestamps.
+        """
         profiler.start('webhook_send')
         try:
             channel = self.bot.get_channel(self.qte_channel_id)
@@ -1947,6 +1992,8 @@ Your response (1-2 sentences max):"""
                 else:
                     result = await self.safe_send(channel, content=content, embed=embed)
                 profiler.stop('webhook_send')
+                if qte_id is not None and result is not None and qte_id in self.active_qtes:
+                    self.active_qtes[qte_id]['message'] = result
                 return result
             profiler.stop('webhook_send')
             return None
@@ -2544,6 +2591,8 @@ Your response (1-2 sentences max):"""
 
         @self.bot.event
         async def on_message(message):
+            if message.webhook_id:
+                self._note_webhook_message(message)
             if message.author.bot:
                 return
             
@@ -7725,39 +7774,39 @@ Your response (1-2 sentences max):"""
             self._hp_update_task = asyncio.create_task(self._flush_hp_updates())
     
     async def _flush_hp_updates(self):
-        """Flush all pending HP updates after a short delay - batches rapid updates"""
+        """Flush all pending HP updates after a short delay - batches rapid updates.
+
+        Edits run concurrently, straight on the message id (no fetch first, no sleeps in between): the
+        sender pool routes each edit to the bot that wrote that message and paces every bot.
+        """
         await asyncio.sleep(self._hp_update_interval)
-        
+
         # Copy and clear pending updates
         updates = dict(self._pending_hp_updates)
         self._pending_hp_updates.clear()
-        
-        # Process updates with small delays between each to avoid rate limits
-        update_delay = 0.3  # 300ms between HP bar edits
-        
-        for cache_key, (thread, embed) in updates.items():
+
+        async def update_one(cache_key, thread, embed):
             try:
-                # Try to use cached message ID
-                if cache_key in self.hp_bar_messages:
+                message_id = self.hp_bar_messages.get(cache_key)
+                if message_id:
                     try:
-                        message = await thread.fetch_message(self.hp_bar_messages[cache_key])
-                        await self.safe_edit_message(message, embed=embed)
-                        await asyncio.sleep(update_delay)  # Throttle between edits
-                        continue
+                        await discord.PartialMessage(channel=thread, id=message_id).edit(embed=embed)
+                        return
                     except discord.NotFound:
-                        # Message was deleted, remove from cache
-                        del self.hp_bar_messages[cache_key]
-                    except Exception:
-                        pass
-                
+                        # Message was deleted, remove from cache and send a new one
+                        self.hp_bar_messages.pop(cache_key, None)
+                    except discord.HTTPException as e:
+                        log.warning(f"HP bar edit failed ({e.status}); keeping the message for next time")
+                        return
+
                 # No cached message, send new one and cache the ID
                 new_message = await self.safe_send(thread, embed=embed)
                 if new_message:
                     self.hp_bar_messages[cache_key] = new_message.id
-                await asyncio.sleep(update_delay)  # Throttle between sends
-                
             except Exception as e:
                 log.error(f"Error in HP bar flush: {e}")
+
+        await asyncio.gather(*(update_one(key, thread, embed) for key, (thread, embed) in updates.items()))
 
     async def trigger_death(self, user_id):
         """Handle player death or FAITH resurrection - single embed for rate limiting"""
@@ -8656,7 +8705,7 @@ Your response (1-2 sentences max):"""
             remaining = len(self.player_qte_queues.get(user_id, []))
             remaining_text = f" ({remaining} remaining)" if remaining > 0 else ""
             
-            await self.webhook_send(content=f"⚡ **{difficulty.upper()} QTE** {emoji} | {player.mention}{remaining_text}")
+            await self.webhook_send(content=f"⚡ **{difficulty.upper()} QTE** {emoji} | {player.mention}{remaining_text}", qte_id=qte_id)
             
             # Send parry warning
             parry_min = self.qte_times[difficulty]['parry_window'][0]
@@ -8763,7 +8812,7 @@ Your response (1-2 sentences max):"""
             role = channel.guild.get_role(self.qte_player_role_id)
             emoji = self.difficulty_emoji.get(difficulty, '⚡')
 
-            await channel.send(f"🚨 **GROUP {difficulty.upper()} QTE** {emoji} | {role.mention}")
+            self.active_qtes[qte_id]['message'] = await channel.send(f"🚨 **GROUP {difficulty.upper()} QTE** {emoji} | {role.mention}")
 
             # Rich console output
             table = Table(show_header=False, box=box.ROUNDED, border_style="red")
@@ -8833,7 +8882,7 @@ Your response (1-2 sentences max):"""
                 if not qte_data:
                     continue
                     
-                response_time = (now - qte_data['start']).total_seconds() - self.latency_offset
+                response_time = self.qte_response_time(message, qte_data, now)
 
                 timing = self.qte_times[qte_data['difficulty']]
                 evade_window = timing['evade_window']
@@ -8888,6 +8937,19 @@ Your response (1-2 sentences max):"""
             console.print(f"[red]✗ Error handling QTE response: {e}[/red]")
         finally:
             profiler.stop('handle_qte_response')
+
+    def qte_response_time(self, message, qte_data, now):
+        """Seconds between the QTE message appearing and the player's reply appearing.
+
+        Both timestamps come from Discord, so our own send latency, rate-limit waits, gateway delay and
+        event-loop queueing don't count against the player. When the QTE message isn't known (some QTE
+        variants) it falls back to the bot's own clock, as before.
+        """
+        shown = getattr(qte_data.get('message'), 'created_at', None)
+        replied = getattr(message, 'created_at', None)
+        if shown is not None and replied is not None:
+            return max(0.0, (replied - shown).total_seconds())
+        return (now - qte_data['start']).total_seconds() - self.latency_offset
 
     def resolve_user_id(self, message):
         """Resolve user ID, handling Tupperbox characters"""
@@ -9108,34 +9170,40 @@ Your response (1-2 sentences max):"""
         
         return actual_heal
 
-    async def find_tupper_message(self, channel, user_id, original_message, timeout=1.0):
-        """Find the Tupper webhook message that replaces the user's original message.
-        
-        Tupper deletes the original message and sends a webhook message.
-        This function waits briefly and looks for a recent webhook message
-        from a registered character owned by this user.
-        
-        OPTIMIZED for heavy load: Reduced wait time and limit checks.
+    def _note_webhook_message(self, message):
+        """Tupperbox answers a player with a webhook message; remember it and wake whoever waits for it."""
+        owner = self.character_registry.get(message.author.display_name)
+        if not owner:
+            return
+        self._tupper_seen.setdefault(owner, collections.deque(maxlen=5)).append(message)
+        for waiter in self._tupper_waiters.pop(owner, []):
+            if not waiter.done():
+                waiter.set_result(message)
+
+    async def find_tupper_message(self, channel, user_id, original_message, timeout=0.5):
+        """The message that should receive the reaction: the Tupper webhook message that replaced the
+        player's own, or the original.
+
+        Players without registered characters get the original immediately. For the others the bot
+        already sees Tupper's webhook message arrive (on_message), so it waits for that event instead of
+        sleeping and then asking Discord for the channel history (an extra request per reply).
         """
+        if not self.get_user_characters(user_id):
+            return original_message
+        limit = original_message.created_at
+        for seen in reversed(self._tupper_seen.get(user_id, ())):
+            if 0 <= (seen.created_at - limit).total_seconds() < 10:
+                return seen
+        waiter = asyncio.get_running_loop().create_future()
+        self._tupper_waiters.setdefault(user_id, []).append(waiter)
         try:
-            await asyncio.sleep(0.15)  # Reduced from 0.3s for faster response under load
-            
-            # Look through recent messages for a webhook from a registered character
-            # Reduced limit from 5 to 3 for performance
-            async for msg in channel.history(limit=3, after=original_message):
-                # Webhook messages have webhook_id attribute
-                if msg.webhook_id:
-                    char_name = msg.author.display_name
-                    # Check if this character is registered to this user
-                    if char_name in self.character_registry:
-                        if self.character_registry[char_name] == user_id:
-                            return msg
-            
-            # Fallback: return original message if no Tupper message found
+            return await asyncio.wait_for(waiter, timeout)
+        except asyncio.TimeoutError:
             return original_message
-        except Exception as e:
-            log.debug(f"Error finding Tupper message: {e}")
-            return original_message
+        finally:
+            waiters = self._tupper_waiters.get(user_id)
+            if waiters and waiter in waiters:
+                waiters.remove(waiter)
 
     async def add_reaction_to_response(self, channel, user_id, original_message, emoji):
         """Add reaction to the correct message (Tupper webhook or original)."""
@@ -12773,7 +12841,7 @@ Responde SOLAMENTE con un numero del 1 al 10."""
                     
                     # Calculate response time
                     now = datetime.now(timezone.utc)
-                    response_time = (now - qte_data['start']).total_seconds() - self.latency_offset
+                    response_time = self.qte_response_time(message, qte_data, now)
                     difficulty = qte_data['difficulty']
                     
                     # Check if within valid window (parry window for adaptation)
@@ -13202,6 +13270,7 @@ Responde SOLAMENTE con un numero del 1 al 10."""
             console.print(f"[red]✗ Fatal error running bot: {e}[/red]")
         finally:
             self.save_all_data()
+            flush_saves()
             console.print("[yellow]Bot shutdown complete[/yellow]")
 
 if __name__ == "__main__":
