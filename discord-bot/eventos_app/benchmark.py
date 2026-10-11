@@ -16,6 +16,7 @@ from typing import Callable
 import discord
 
 from . import capacity as capacity_model
+from .diagnostics import explain_429, KIND_NAMES
 from .multibot import SenderPool, _plain_params
 
 log = logging.getLogger(__name__)
@@ -93,6 +94,14 @@ async def run(pool: SenderPool, channel_id: int, *, profile: str = "rapida", say
     report: dict = {"profile": profile, "channel_id": channel_id, "bots": bots, "senders": [], "bursts": [],
                     "reactions": None, "sustained": None, "aborted": "", "errors": [], "cleanup": None}
     usable: list[dict] = []
+    tracer = pool.tracer
+    seq0 = tracer.seq
+    pool.monitor.start()
+    pool.monitor.take_max()
+
+    def phase(name: str) -> None:
+        tracer.phase = name
+        pool.monitor.take_max()
 
     def should_stop() -> bool:
         if stop is not None and stop.is_set():
@@ -105,6 +114,7 @@ async def run(pool: SenderPool, channel_id: int, *, profile: str = "rapida", say
 
     async def measure() -> None:
         # 1. each bot on its own: how long does one message / one reaction take when nothing else is going on?
+        phase("latencia")
         say(f"1/4 Latencia de cada bot ({bots})…")
         for sender in senders:
             entry = {"name": sender.name, "rtt_ms": 0, "reaction_ms": 0, "error": ""}
@@ -144,6 +154,7 @@ async def run(pool: SenderPool, channel_id: int, *, profile: str = "rapida", say
         burst_ids: list[int] = []
         for number, size in enumerate(sizes, start=1):
             await _settle(pool, senders, channel_id, say)
+            phase(f"ráfaga {number}")
             fits = "caben en un turno" if size <= len(usable) * limit else "más de los que caben en un turno"
             say(f"2/4 Ráfaga {number}: {size} mensajes a la vez ({fits})…")
             started = time.perf_counter()
@@ -164,7 +175,7 @@ async def run(pool: SenderPool, channel_id: int, *, profile: str = "rapida", say
             await asyncio.gather(*(one(i) for i in range(size)))
             waited = list(pool.waits)[-(pool.admitted - waits_before):] if pool.admitted > waits_before else []
             spread = {"size": size, "failed": len(failures), "max_wait_ms": _ms(max(waited, default=0.0)),
-                      **_spread(done)}
+                      "loop_lag_ms": _ms(pool.monitor.take_max()), **_spread(done)}
             report["bursts"].append(spread)
             report["errors"].extend(failures[:3])
             say(f"   primero {spread['first_ms']} ms · mediana {spread['median_ms']} ms · último {spread['last_ms']} ms"
@@ -177,6 +188,7 @@ async def run(pool: SenderPool, channel_id: int, *, profile: str = "rapida", say
 
         # 3. reactions (✅/❌ under every reply)
         await _settle(pool, senders, channel_id, say, "react")
+        phase("reacciones")
         count = min(60, len(usable) * cfg["reactions_per_bot"], len(burst_ids) * len(EMOJIS))
         say(f"3/4 {count} reacciones a la vez…")
         started = time.perf_counter()
@@ -192,7 +204,8 @@ async def run(pool: SenderPool, channel_id: int, *, profile: str = "rapida", say
             done.append(time.perf_counter() - started)
 
         await asyncio.gather(*(react(i) for i in range(count)))
-        report["reactions"] = {"count": count, "failed": len(failures), **_spread(done)}
+        report["reactions"] = {"count": count, "failed": len(failures), "loop_lag_ms": _ms(pool.monitor.take_max()),
+                               **_spread(done)}
         report["errors"].extend(failures[:3])
         say(f"   mediana {report['reactions']['median_ms']} ms · última {report['reactions']['last_ms']} ms"
             + (f" · {len(failures)} fallaron" if failures else ""))
@@ -203,6 +216,7 @@ async def run(pool: SenderPool, channel_id: int, *, profile: str = "rapida", say
         seconds = cfg["sustained_seconds"]
         if seconds:
             await _settle(pool, senders, channel_id, say)
+            phase("sostenido")
             say(f"4/4 Ritmo sostenido durante {seconds:g} s…")
             end = time.perf_counter() + seconds
             stamps: list[float] = []
@@ -236,16 +250,22 @@ async def run(pool: SenderPool, channel_id: int, *, profile: str = "rapida", say
         report["aborted"] = report["aborted"] or f"falló: {_failure(exc)}"
     finally:
         logging.getLogger("discord.http").removeHandler(counter)
+        tracer.phase = ""
 
     # the report first: cleanup can take a while and must never hide the results
     report["rate_limits"] = counter.count
     report["reaction_retries"] = counter.reactions
     report["held_back"] = sum(s["held_back"] for s in pool.snapshot())
+    base_spacing = pool.limits["react"][1]
+    spacing = statistics.mean(max(base_spacing, s.react_spacing) for s in senders) if senders else base_spacing
+    report["planned"] = {"send_limit": limit, "send_window_ms": _ms(window), "react_spacing_ms": _ms(spacing)}
+    report["trace"] = tracer.summary(seq0)
+    report["loop_lag_ms"] = _ms(pool.monitor.worst)
     if usable:
         rtt = statistics.median([e["rtt_ms"] for e in usable]) / 1000 or 0.12
         report["capacity"] = {
             f"{d:g}": capacity_model.capacity(len(usable), deadline=d, rtt=rtt, limit=limit, window=window,
-                                              spacing=pool.limits["react"][1]).as_dict() for d in (2.0, 3.0, 5.0)}
+                                              spacing=spacing).as_dict() for d in (2.0, 3.0, 5.0)}
     if on_report is not None:
         try:
             on_report(report)
@@ -264,6 +284,35 @@ async def run(pool: SenderPool, channel_id: int, *, profile: str = "rapida", say
             + (" (en bloque)" if c["bulk"] == c["deleted"] and c["bulk"] else "")
             + (f" · {c['failed']} no se pudieron borrar: bórralos a mano" if c["failed"] else ""))
     return report
+
+
+def _diagnosis_lines(report: dict) -> list[str]:
+    """What Discord answered: real limits, slow kinds of request, every 429 with its cause."""
+    trace, planned = report.get("trace"), report.get("planned") or {}
+    if not trace or not trace.get("requests"):
+        return []
+    lines = [f"  DIAGNÓSTICO · {trace['requests']} peticiones a Discord (detalle de cada una en logs\\requests.jsonl)"]
+    for kind, row in trace["kinds"].items():
+        statuses = ", ".join(f"{count}× {status}" for status, count in sorted(row["status"].items()))
+        lines.append(f"    {KIND_NAMES.get(kind, kind)}: {row['n']} ({statuses}) · respuesta mediana {row['p50_ms']} ms, "
+                     f"p95 {row['p95_ms']} ms, máx {row['max_ms']} ms")
+    for kind, row in trace["observed"].items():
+        plan = (f"la app planea {planned.get('send_limit')} cada {planned.get('send_window_ms')} ms" if kind == "send"
+                else f"la app espacia {planned.get('react_spacing_ms')} ms" if kind == "react" else "")
+        low, high = row["reset_after_ms"]
+        lines.append(f"    Discord dice ({KIND_NAMES.get(kind, kind)}): límite {'/'.join(map(str, row['limit'])) or '?'}, "
+                     f"reinicio {low}–{high} ms" + (f" · {plan}" if plan else ""))
+    if trace["limited_total"]:
+        lines.append(f"    {trace['limited_total']} respuestas 429 (ninguna petición se pierde: se reintenta). Las primeras:")
+        for item in trace["limited"][:8]:
+            lines.append(f"      +{item['at_ms']} ms [{item['phase'] or '-'}] " + explain_429(item, limit=planned.get("send_limit", 5)))
+    elif trace["requests"]:
+        lines.append("    Ningún 429: Discord no limitó nada.")
+    if report.get("loop_lag_ms") is not None:
+        lag = report["loop_lag_ms"]
+        lines.append(f"    Carga del bot: el peor retraso al atender fue {lag} ms"
+                     + (" (alto: el propio bot iba justo de CPU/red)" if lag > 250 else " (bien)"))
+    return lines
 
 
 def format_report(report: dict) -> list[str]:
@@ -289,6 +338,7 @@ def format_report(report: dict) -> list[str]:
         s = report["sustained"]
         lines.append(f"  Ritmo sostenido: ≈ {s['per_minute']} mensajes por minuto en total "
                      f"(≈ {s['per_bot_per_minute']} por bot)")
+    lines.extend(_diagnosis_lines(report))
     for error in dict.fromkeys(report.get("errors") or []):
         lines.append(f"  ✗ {error}")
     if "rate_limits" in report:

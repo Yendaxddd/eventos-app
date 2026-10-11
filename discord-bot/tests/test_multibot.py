@@ -31,8 +31,8 @@ class World:
     """A fake server, a primary bot (HTTP only) and `helpers` helper tokens."""
 
     def __init__(self, helpers: int, latency: float = 0.02, **server_options) -> None:
-        self.server = FakeDiscord(limit=LIMIT, window=WINDOW, latency=latency, reaction_window=REACTION_WINDOW,
-                                  **server_options)
+        options = {"reaction_window": REACTION_WINDOW, **server_options}
+        self.server = FakeDiscord(limit=LIMIT, window=WINDOW, latency=latency, **options)
         self.server.add_bot("tok-primary", 100)
         self.helper_tokens = []
         for i in range(helpers):

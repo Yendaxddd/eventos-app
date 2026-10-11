@@ -18,7 +18,8 @@ internas, pausas artificiales y pasos en serie. Eso es lo que se hizo.
 | Editar mensajes (barras de HP) | 5 cada 5 s, compartido por todos los mensajes del canal | 5 por ventana | 25 por ventana |
 
 Cada bot tiene su propio cupo, así que cada bot auxiliar suma la misma capacidad.
-(La app planea con 5.3 s y 270 ms para dejar margen a la red.)
+(La app planea con 5.3 s para mensajes. Para reacciones empieza con 350 ms y aprende el espaciado real de cada bot: ver
+"Diagnóstico de límites".)
 
 ## De dónde venía la latencia y qué se hizo
 
@@ -47,7 +48,7 @@ Tiempo hasta que sale el último:
 
 Con el código real del bot (`webhook_send` + `safe_add_reaction`), 20 jugadores respondiendo a la vez (1 mensaje y 1 reacción
 cada uno) quedan atendidos en **~1 s con 5 bots**, sin ningún 429 (100 ms de latencia simulada). Con 3 bots son ~1.8 s y con
-2 bots ~2.6 s. A partir de 5 bots lo que manda es el ritmo de las reacciones (4 por bot, una cada 270 ms).
+2 bots ~2.6 s. A partir de 5 bots lo que manda es el ritmo de las reacciones (4 por bot, una cada 270 ms en esa simulación).
 (Esa prueba usa una ventana de 1 s en vez de 5 s para no tardar; el caso de 5 bots cabe en la primera ventana, así que no cambia.)
 
 > Esto es contra un Discord **simulado**. Los números reales dependen de tu conexión: por eso la app trae la prueba
@@ -109,6 +110,30 @@ fase, el informe sale igual con lo medido y los errores marcados con ✗.
 
 Cómo leerla: si el "último" de una ráfaga es mucho mayor que la latencia de un bot, es que esa ráfaga superó el cupo y
 una parte esperó su turno → agrega bots auxiliares o reduce lo que el bot manda por respuesta.
+
+## Lo que midió una prueba real (0.3.1, 5 bots)
+
+- Ráfaga de 25 mensajes (5 por bot): primero 240 ms, mediana 456 ms, último 1252 ms, sin esperar turno.
+- Ritmo sostenido: 274 mensajes por minuto frente a 283 teóricos, así que el modelo de mensajes coincide con Discord real.
+- Ráfaga de 40 mensajes: 15 no caben en la primera ventana y esperan 5.3 s (último a 6.1 s). Es el coste de pasar el cupo.
+- **Reacciones: 59 de 60 recibieron un 429 y 4 se perdieron** (discord.py abandona tras 5 intentos). Discord limita las
+  reacciones más de lo que dice su documentación (mediana 2.2 s, última 5 s con 12 reacciones por bot, ≈ 0.4 s por
+  reacción y bot). Desde la 0.3.2 se espacian a 350 ms por defecto, cada bot aprende su espaciado de los 429 y de las
+  cabeceras de Discord, y una reacción rendida por discord.py se reintenta en vez de perderse.
+
+## Diagnóstico de límites
+
+Para saber cuándo y por qué Discord limita (0.3.2):
+
+- **`logs\requests.jsonl`**: una línea por petición (mensaje, reacción, edición, borrado) con el bot, la fase, lo que
+  tardó y las cabeceras reales de Discord (límite, restantes, reinicio, a cuánto esperar, ámbito). Rota sola a 3 MB × 3.
+- **Cada 429 se explica en el panel** (máximo una línea por bot y tipo cada 3 s): qué bot, cuánto pidió esperar Discord y
+  cuántas reservas llevaba ese bot en la ventana, para distinguir "nos pasamos" de "no fue por nosotros" (otro programa
+  usando el mismo bot, o desfase de reloj).
+- **La prueba de rendimiento incluye un DIAGNÓSTICO**: peticiones por tipo con su tiempo de respuesta, el límite que
+  Discord dice de verdad frente al que la app asume, los primeros 429 con su fase, y la **carga del bot**.
+- **Carga del bot**: mide cuánto tarda en despertar el bucle del bot. Si es alto (> 250 ms) el cuello de botella es el
+  propio bot (demasiado trabajo a la vez), no Discord. Con eso el panel avisa por sí solo.
 
 ## Cómo conseguir más capacidad
 

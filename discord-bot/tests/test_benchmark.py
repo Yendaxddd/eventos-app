@@ -32,7 +32,7 @@ def test_a_longer_deadline_lets_in_more_players_only_once_a_new_window_opens():
 
 
 def test_replies_that_need_less_traffic_fit_more_players():
-    assert capacity.capacity(4, messages_per_player=0.5, edits_per_player=0.5).players == 2 * capacity.capacity(4).players
+    assert capacity.capacity(4, messages_per_player=0.5, edits_per_player=0.5, reactions_per_player=0.5).players == 2 * capacity.capacity(4).players
 
 
 def test_the_table_has_a_row_per_bot():

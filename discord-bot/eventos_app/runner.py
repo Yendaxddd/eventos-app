@@ -17,7 +17,7 @@ from typing import Awaitable, Callable
 
 import discord
 
-from . import benchmark, console_bridge, multibot, paths
+from . import benchmark, console_bridge, diagnostics, multibot, paths
 from .settings import Settings
 
 log = logging.getLogger("eventos_app")
@@ -70,6 +70,7 @@ class BotRunner:
         self._app = None  # AdvancedQTEBot
         self._pool: multibot.SenderPool | None = None
         self._bench_stop: asyncio.Event | None = None
+        self._last_429: dict[tuple[str, str], float] = {}
         self._helper_errors: dict[str, str] = {}  # helper token -> why it could not be added
         self._base_interval = 0.15
         self._state = State.STOPPED
@@ -365,6 +366,9 @@ class BotRunner:
         self._pool = pool
         # who wrote the HP bar messages must survive restarts, or the first edit of each goes to the wrong bot
         pool.owners_file = paths.data_dir() / "sender_owners.json"
+        pool.trace_file = paths.logs_dir() / "requests.jsonl"   # every request + Discord's rate-limit headers
+        pool.tracer.listeners.append(self._on_trace)
+        pool.on_lag = self._on_lag
         pool.sticky_channels = {app.hp_bar_thread_id} if app.hp_bar_thread_id else set()
         pool.install(app.bot.http, str(app.bot.user), app.bot.user.id)
         pool.start_background()  # keeps HTTPS connections warm for the next burst
@@ -375,6 +379,23 @@ class BotRunner:
             console_bridge.console.print(
                 f"[green]✓ {online} bot{'s' if online != 1 else ''} auxiliar{'es' if online != 1 else ''} "
                 f"compartiendo el envío de mensajes[/green]")
+
+    def _on_trace(self, event: dict) -> None:
+        """Explain each 429 in the log (at most one line per bot and kind every 3 s; the file has them all)."""
+        if event["status"] != 429 or self._bench_stop is not None:   # the performance test prints its own diagnosis
+            return
+        now = time.monotonic()
+        key = (event["bot"], event["kind"])
+        if now - self._last_429.get(key, 0.0) < 3.0:
+            return
+        self._last_429[key] = now
+        pool = self._pool
+        console_bridge.console.print(
+            f"[yellow]⚠ 429 · {diagnostics.explain_429(event, limit=pool.limits['send'][0] if pool else 5)}[/yellow]")
+
+    def _on_lag(self, lag: float) -> None:
+        console_bridge.console.print(
+            f"[yellow]⚠ El bot tardó {round(lag * 1000)} ms en atender: va muy cargado (no es un límite de Discord).[/yellow]")
 
     def _rebalance_interval(self) -> None:
         """safe_send() used to wait a minimum time between messages per channel. The sender pool paces every

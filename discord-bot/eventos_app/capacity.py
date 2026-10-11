@@ -3,7 +3,8 @@
 Discord limits each bot separately, so every extra bot adds the same capacity. For one bot in one channel:
 
 * messages: 5 per ~5 s window (we plan with a 5.3 s window for network jitter) -> ~57 per minute;
-* reactions: 1 per 250 ms (we plan 270 ms) -> ~3.7 per second;
+* reactions: Discord says 1 per 250 ms, but real runs got 429s at 270 ms; the app plans 350 ms and learns the
+  spacing each bot really needs (the performance test feeds the learned value in) -> ~3 per second;
 * edits of messages: the same 5 per window, shared by every message edited in that channel.
 
 A *burst* (a group QTE where everybody answers within a couple of seconds) is limited by how many of those

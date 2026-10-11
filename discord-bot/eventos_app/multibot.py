@@ -46,18 +46,22 @@ from typing import Any, Callable, NamedTuple
 import aiohttp
 import discord
 
+from .diagnostics import LoopMonitor, RequestTracer
+
 log = logging.getLogger("eventos_app.multibot")
 
 CHANNEL_LIMIT = 5          # messages per window per channel per bot (Discord: 5 / 5 s)
 WINDOW_SECONDS = 5.3       # a little more than 5 s: network jitter can squeeze requests together
-REACTION_SPACING = 0.27    # Discord: 1 reaction per 250 ms per channel per bot
+REACTION_SPACING = 0.35    # Discord says 1 reaction per 250 ms, but real runs got 429s at 270 ms: start wider, then learn
+MAX_REACTION_SPACING = 1.5 # the most a bot is slowed down after repeated 429s on reactions
+REACT_RETRIES = 4          # extra tries (on top of discord.py's own 5) before a reaction is given up
 SLOW_SEND_SECONDS = 1.5    # a send slower than this was probably held back by a rate limit
 PENALTY_SECONDS = 4.0      # how long a sender that was just held back is deprioritised
 BLOCK_SECONDS = 600.0      # skip a helper in a channel it can't write to for this long
 OWNER_MEMORY = 20000       # message -> author sender, for edits/deletes
 STICKY_MEMORY = 500        # authors remembered across restarts (HP bar messages)
 WARM_INTERVAL = 8.0        # seconds between keep-alive rounds (aiohttp closes idle connections at 15 s)
-WARM_CONNECTIONS = 3       # connections kept ready per sender for a burst
+WARM_CONNECTIONS = CHANNEL_LIMIT  # connections kept ready per sender: a burst opens one per message
 BULK_DELETE_MAX = 100      # Discord: bulk delete takes 2 to 100 messages younger than two weeks
 DELETE_PARALLEL = 4        # deletes in flight per sender when they have to go one by one
 WAIT_MEMORY = 2000         # admission waits kept for the performance test
@@ -164,6 +168,8 @@ class Sender:
         self.error = ""
         self.stats = SenderStats()
         self.penalty_until = 0.0
+        self.react_spacing = 0.0     # learned from Discord's 429s / headers; 0 = use the pool's default
+        self.react_clean = 0         # successful reactions since the last 429
         self.last_used = 0.0
         self.latencies: deque[float] = deque(maxlen=200)   # seconds per successful send
         self._slots: dict[tuple[str, int], deque[float]] = {}
@@ -235,7 +241,7 @@ class Sender:
             "user_id": self.user_id, "sent": self.stats.sent, "reactions": self.stats.reactions,
             "edited": self.stats.edited, "held_back": self.stats.held_back, "failed": self.stats.failed,
             "pings": self.stats.pings, "blocked_channels": len({c for (_, c) in self._blocked}),
-            "access": self.access,
+            "access": self.access, "react_spacing_ms": round(self.react_spacing * 1000),
             "p50_ms": round(self.percentile(0.5) * 1000), "p95_ms": round(self.percentile(0.95) * 1000),
         }
 
@@ -284,6 +290,12 @@ class SenderPool:
         self.admitted = 0                                  # how many sends/reactions went through `_admit`
         self.waits: deque[float] = deque(maxlen=WAIT_MEMORY)   # seconds each one waited for its turn
         self._no_bulk: set[int] = set()                    # users that may not bulk delete in this server
+        self.trace_file: Path | None = None                # where every request is logged (set before `install`)
+        self.tracer = RequestTracer()
+        self.tracer.context = self._context
+        self.tracer.listeners.append(self._learn)
+        self.monitor = LoopMonitor(on_warning=lambda lag: self.on_lag(lag) if self.on_lag else None)
+        self.on_lag: Callable[[float], None] | None = None
 
     # ---- setup -----------------------------------------------------------------
     def install(self, primary_http, primary_name: str = "Principal", primary_user_id: int = 0) -> None:
@@ -297,6 +309,10 @@ class SenderPool:
         else:
             log.warning("discord.py has no get_ratelimit(): sending one message at a time per bot and channel")
         self.primary = Sender(primary_name, endpoints_of(primary_http), primary=True, user_id=primary_user_id)
+        if not self.tracer.attach(primary_http, lambda: self.primary.name if self.primary else primary_name):
+            log.warning("could not watch the main bot's requests; the rate-limit diagnostics will only cover helpers")
+        if self.trace_file is not None:
+            self.tracer.log_to(self.trace_file)
         primary_http.send_message = self._route_send
         primary_http.edit_message = self._route_edit
         primary_http.delete_message = self._route_delete
@@ -315,6 +331,7 @@ class SenderPool:
         """Keep connections warm and persist author memory. Needs a running loop."""
         if self._task is None:
             self._task = asyncio.get_running_loop().create_task(self._background())
+            self.monitor.start()
 
     async def _background(self) -> None:
         while True:
@@ -327,10 +344,12 @@ class SenderPool:
 
     async def add_helper(self, token: str) -> Sender:
         """Log a helper bot in (HTTP only) and add it to the pool."""
-        client = discord.Client(intents=discord.Intents.none())
+        label = {"name": "auxiliar"}
+        client = discord.Client(intents=discord.Intents.none(), http_trace=self.tracer.config(lambda: label["name"]))
         try:
             await client.login(token.strip())
             user = client.user
+            label["name"] = str(user)
             known = {self.primary.user_id} if self.primary and self.primary.user_id else set()
             known |= {h.user_id for h in self.helpers}
             if user.id in known:
@@ -377,6 +396,8 @@ class SenderPool:
         self._changed()
 
     async def close(self) -> None:
+        self.monitor.stop()
+        self.tracer.stop_logging()
         if self._task is not None:
             self._task.cancel()
             self._task = None
@@ -389,12 +410,18 @@ class SenderPool:
     def _all(self) -> list[Sender]:
         return ([self.primary] if self.primary else []) + self.helpers
 
-    def _pick(self, kind: str, channel_id: int, now: float, exclude: set[Sender]) -> Sender | None:
+    def _limits_for(self, sender: Sender, kind: str) -> tuple[int, float]:
         limit, window = self.limits[kind]
+        if kind == "react":   # a bot that got 429s on reactions is spaced out more (see `_learn`)
+            window = max(window, sender.react_spacing)
+        return limit, window
+
+    def _pick(self, kind: str, channel_id: int, now: float, exclude: set[Sender]) -> Sender | None:
         best, best_key = None, None
         for sender in self._all():
             if sender in exclude or not sender.ready or sender.blocked(kind, channel_id, now):
                 continue
+            limit, window = self._limits_for(sender, kind)
             wait = round(sender.wait_for(kind, channel_id, now, limit, window), 3)
             key = (wait, sender.load(now, self.limits["send"][1]), sender.last_used, sender.primary)
             if best_key is None or key < best_key:
@@ -403,7 +430,7 @@ class SenderPool:
 
     async def _admit(self, sender: Sender, kind: str, channel_id: int) -> None:
         """Reserve the sender's next slot and, if it isn't free yet, wait for it."""
-        limit, window = self.limits[kind]
+        limit, window = self._limits_for(sender, kind)
         now = time.monotonic()
         wait = sender.wait_for(kind, channel_id, now, limit, window)
         sender.reserve(kind, channel_id, now + wait)
@@ -411,6 +438,38 @@ class SenderPool:
         self.waits.append(wait)
         if wait > 0:
             await asyncio.sleep(wait)
+
+    def _context(self, bot: str, kind: str, channel_id: int) -> dict:
+        """What this program had planned for a bot when Discord answered 429 (for the diagnostics)."""
+        sender = next((s for s in self._all() if s.name == bot), None)
+        if sender is None or kind not in ("send", "react"):
+            return {}
+        window = self.limits["send"][1] if kind == "send" else 1.0
+        now = time.monotonic()
+        slots = sender._slots.get((kind, channel_id), ())
+        return {"reservas": sum(1 for t in slots if now - window < t <= now), "ventana_s": window}
+
+    def _learn(self, event: dict) -> None:
+        """Adapt to what Discord really does with reactions: widen the spacing after a 429, narrow it slowly."""
+        if event["kind"] != "react":
+            return
+        sender = next((s for s in self._all() if s.name == event["bot"]), None)
+        if sender is None:
+            return
+        base = self.limits["react"][1]
+        current = max(base, sender.react_spacing)
+        if event["status"] == 429:
+            hint = event.get("reset_after") or 0.0   # exact seconds; Retry-After is rounded up to whole seconds
+            sender.react_spacing = min(MAX_REACTION_SPACING, max(current * 1.25, hint + 0.03))
+            sender.react_clean = 0
+        elif 200 <= event["status"] < 300:
+            sender.react_clean += 1
+            reset = event.get("reset_after")
+            if reset and reset + 0.03 > current:
+                sender.react_spacing = min(MAX_REACTION_SPACING, reset + 0.03)   # Discord said so itself
+            elif sender.react_clean >= 20 and sender.react_spacing > base:
+                sender.react_spacing = max(base, sender.react_spacing * 0.92)
+                sender.react_clean = 0
 
     def _remember(self, message_id: int, channel_id: int, sender: Sender) -> None:
         self._owners[message_id] = sender
@@ -489,6 +548,7 @@ class SenderPool:
         channel_id = int(channel_id)
         tried: set[Sender] = set()
         last_error: BaseException | None = None
+        gave_up = 0
         while True:
             sender = self._pick("react", channel_id, time.monotonic(), tried)
             if sender is None:
@@ -508,6 +568,14 @@ class SenderPool:
                 if sender.primary:
                     raise
                 last_error = exc
+            except discord.HTTPException as exc:
+                # discord.py gave up after 5 rate-limited tries. The tracer already widened this bot's spacing:
+                # go through admission again instead of losing the player's reaction.
+                if exc.status != 429 or gave_up >= REACT_RETRIES:
+                    raise
+                gave_up += 1
+                sender.stats.failed += 1
+                continue
             else:
                 sender.stats.reactions += 1
                 sender.last_used = time.monotonic()
