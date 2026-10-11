@@ -30,8 +30,9 @@ def make_pool(**kwargs):
 class World:
     """A fake server, a primary bot (HTTP only) and `helpers` helper tokens."""
 
-    def __init__(self, helpers: int, latency: float = 0.02) -> None:
-        self.server = FakeDiscord(limit=LIMIT, window=WINDOW, latency=latency, reaction_window=REACTION_WINDOW)
+    def __init__(self, helpers: int, latency: float = 0.02, **server_options) -> None:
+        self.server = FakeDiscord(limit=LIMIT, window=WINDOW, latency=latency, reaction_window=REACTION_WINDOW,
+                                  **server_options)
         self.server.add_bot("tok-primary", 100)
         self.helper_tokens = []
         for i in range(helpers):
@@ -218,7 +219,7 @@ def test_an_unreachable_helper_does_not_lose_the_message():
             async def down(*args, **kwargs):
                 raise aiohttp.ClientConnectionError("network down")
 
-            helper.endpoints = multibot.Endpoints(down, down, down, down, down)
+            helper.endpoints = multibot.Endpoints(down, down, down, down, down, down)
             w.pool.primary.penalty_until = time.monotonic() + 0.3
             await w.channel.send("still delivered")
             return w.count_by("tok-primary")

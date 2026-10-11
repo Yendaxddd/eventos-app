@@ -26,9 +26,14 @@ def _json(data, status: int = 200, headers: dict | None = None) -> web.Response:
 
 class FakeDiscord:
     def __init__(self, *, limit: int = 5, window: float = 1.0, latency: float = 0.02,
-                 reaction_window: float = 0.25) -> None:
+                 reaction_window: float = 0.25, delete_limit: int = 0, delete_window: float = 1.0) -> None:
         self.limit, self.window, self.latency = limit, window, latency
         self.reaction_window = reaction_window
+        self.delete_limit, self.delete_window = delete_limit, delete_window  # 0 = deletes are not limited
+        self.manage: set[str] = set()          # tokens with Manage Messages (delete others' messages, bulk delete)
+        self.delete_attempts: list[tuple[str, int]] = []   # (token, status)
+        self.bulk_calls: list[tuple[str, int]] = []         # (token, how many ids)
+        self._delete_buckets: dict[tuple[str, int], list] = {}
         self.reactions: list[dict] = []        # every reaction attempt, including 429s
         self.gateway_hits: dict[str, int] = {}  # keep-alive pings per token
         self.connections: set[int] = set()      # client ports seen (= distinct TCP connections)
@@ -70,6 +75,7 @@ class FakeDiscord:
         app.router.add_post("/api/v10/channels/{cid}/messages", self._send)
         app.router.add_patch("/api/v10/channels/{cid}/messages/{mid}", self._edit)
         app.router.add_delete("/api/v10/channels/{cid}/messages/{mid}", self._delete)
+        app.router.add_post("/api/v10/channels/{cid}/messages/bulk-delete", self._bulk_delete)
         self._runner = web.AppRunner(app)
         await self._runner.setup()
         site = web.TCPSite(self._runner, "127.0.0.1", 0)
@@ -255,15 +261,56 @@ class FakeDiscord:
         msg["edited_by"] = token
         return _json(self._message_json(mid))
 
+    def _delete_limited(self, token: str, channel: int) -> web.Response | None:
+        if not self.delete_limit:
+            return None
+        now = time.monotonic()
+        bucket = self._delete_buckets.get((token, channel))
+        if bucket is None or now - bucket[0] >= self.delete_window:
+            bucket = self._delete_buckets[(token, channel)] = [now, 0]
+        if bucket[1] >= self.delete_limit:
+            retry = max(0.01, self.delete_window - (now - bucket[0]))
+            return _json({"message": "You are being rate limited.", "retry_after": retry, "global": False}, status=429,
+                         headers={"Retry-After": f"{retry:.3f}", "Via": "1.1 fake-edge", "X-RateLimit-Remaining": "0",
+                                  "X-RateLimit-Reset-After": f"{retry:.3f}", "X-RateLimit-Limit": str(self.delete_limit),
+                                  "X-RateLimit-Bucket": f"delete-{channel}-{token}"})
+        bucket[1] += 1
+        return None
+
     async def _delete(self, request: web.Request) -> web.Response:
         token = self._token(request)
         mid = int(request.match_info["mid"])
+        channel = int(request.match_info["cid"])
         msg = self.messages.get(mid)
         if token is None:
             return self._error(401, 0, "401: Unauthorized")
+        await asyncio.sleep(self.latency)
+        limited = self._delete_limited(token, channel)
+        if limited is not None:
+            self.delete_attempts.append((token, 429))
+            return limited
         if msg is None:
+            self.delete_attempts.append((token, 404))
             return self._error(404, 10008, "Unknown Message")
-        if msg["author_token"] != token:
+        if msg["author_token"] != token and token not in self.manage:
+            self.delete_attempts.append((token, 403))
             return self._error(403, 50013, "Missing Permissions")
+        self.delete_attempts.append((token, 204))
         del self.messages[mid]
+        return web.Response(status=204)
+
+    async def _bulk_delete(self, request: web.Request) -> web.Response:
+        token = self._token(request)
+        if token is None:
+            return self._error(401, 0, "401: Unauthorized")
+        payload = await request.json()
+        ids = [int(m) for m in payload.get("messages", [])]
+        await asyncio.sleep(self.latency)
+        self.bulk_calls.append((token, len(ids)))
+        if token not in self.manage:
+            return self._error(403, 50013, "Missing Permissions")
+        if not 2 <= len(ids) <= 100:
+            return self._error(400, 50016, "Provide a message count between 2 and 100")
+        for mid in ids:
+            self.messages.pop(mid, None)
         return web.Response(status=204)

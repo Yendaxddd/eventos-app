@@ -99,6 +99,14 @@ mensajes y reacciones de prueba al canal del evento y los borra al terminar.
 Se detiene sola si Discord responde con demasiados límites (429). El informe queda en el registro y en
 `logs/rendimiento_<fecha>.txt` (con el detalle en JSON al final).
 
+Antes de cada fase la prueba espera a que todos los bots recuperen su cupo (si no, la fase anterior le quitaría turnos
+a la siguiente y el "último" de la ráfaga saldría ≈ 5 s peor de lo real). La ráfaga 2 supera el cupo a propósito: junto
+a cada ráfaga se indica cuánto de su "último" fue esperar turno para no pasar el límite.
+
+**El informe sale antes de borrar.** Después se borran los mensajes de prueba: en bloque (una sola petición, hasta 100
+mensajes) si el bot principal tiene *Gestionar mensajes*; si no, cada bot borra los suyos a la vez. Si algo falla en una
+fase, el informe sale igual con lo medido y los errores marcados con ✗.
+
 Cómo leerla: si el "último" de una ráfaga es mucho mayor que la latencia de un bot, es que esa ráfaga superó el cupo y
 una parte esperó su turno → agrega bots auxiliares o reduce lo que el bot manda por respuesta.
 

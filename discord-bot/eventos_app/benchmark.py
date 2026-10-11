@@ -18,6 +18,8 @@ import discord
 from . import capacity as capacity_model
 from .multibot import SenderPool, _plain_params
 
+log = logging.getLogger(__name__)
+
 EMOJIS = ["✅", "❌", "⭐", "❗", "🔥", "⚡", "🎯", "🛡️", "💚", "🔒"]
 
 PROFILES = {
@@ -52,9 +54,30 @@ def _spread(samples: list[float]) -> dict:
             "p95_ms": _ms(ordered[min(len(ordered) - 1, int(0.95 * len(ordered)))]), "last_ms": _ms(ordered[-1])}
 
 
+async def _settle(pool: SenderPool, senders, channel_id: int, say: Callable[[str], None], kind: str = "send") -> None:
+    """Wait until every bot has all its slots back, so a phase isn't slowed by what the previous one used."""
+    window = pool.limits[kind][1]
+    wait = max((s.quiet_in(kind, channel_id, time.monotonic(), window) for s in senders), default=0.0)
+    if wait > 0.4:
+        say(f"   esperando {wait:.1f} s a que Discord libere los turnos de todos los bots…")
+    if wait > 0:
+        await asyncio.sleep(wait + 0.05)
+
+
+def _failure(exc: BaseException) -> str:
+    if isinstance(exc, discord.HTTPException):
+        return f"Discord respondió {exc.status} ({exc.text or type(exc).__name__})"
+    return f"{type(exc).__name__}: {exc}"
+
+
 async def run(pool: SenderPool, channel_id: int, *, profile: str = "rapida", say: Callable[[str], None] = print,
-              stop: asyncio.Event | None = None, max_rate_limits: int = 12, **overrides) -> dict:
-    """Run the test and return a report dict (see `format_report`). `overrides` replace profile values."""
+              stop: asyncio.Event | None = None, max_rate_limits: int = 12,
+              on_report: Callable[[dict], None] | None = None, **overrides) -> dict:
+    """Run the test and return a report dict (see `format_report`). `overrides` replace profile values.
+
+    The report is complete (and handed to `on_report`) before the test messages are deleted, so a slow or
+    failing cleanup never hides the results. Whatever goes wrong in a phase is recorded in `report["errors"]`.
+    """
     cfg = {**PROFILES[profile], **overrides}
     senders = [s for s in pool._all() if s.ready]
     bots = len(senders)
@@ -63,7 +86,8 @@ async def run(pool: SenderPool, channel_id: int, *, profile: str = "rapida", say
     logging.getLogger("discord.http").addHandler(counter)
     created: list[int] = []
     report: dict = {"profile": profile, "channel_id": channel_id, "bots": bots, "senders": [], "bursts": [],
-                    "reactions": None, "sustained": None, "aborted": ""}
+                    "reactions": None, "sustained": None, "aborted": "", "errors": [], "cleanup": None}
+    usable: list[dict] = []
 
     def should_stop() -> bool:
         if stop is not None and stop.is_set():
@@ -74,7 +98,7 @@ async def run(pool: SenderPool, channel_id: int, *, profile: str = "rapida", say
             return True
         return False
 
-    try:
+    async def measure() -> None:
         # 1. each bot on its own: how long does one message / one reaction take when nothing else is going on?
         say(f"1/4 Latencia de cada bot ({bots})…")
         for sender in senders:
@@ -88,6 +112,7 @@ async def run(pool: SenderPool, channel_id: int, *, profile: str = "rapida", say
                     times.append(time.perf_counter() - started)
                     sender.reserve("send", channel_id, time.monotonic())  # direct call: tell the pool the slot is used
                     ids.append(int(data["id"]))
+                    pool._remember(ids[-1], channel_id, sender)           # so it can be deleted by its author
                 started = time.perf_counter()
                 await sender.endpoints.add_reaction(channel_id, ids[0], "⭐")
                 entry["reaction_ms"] = _ms(time.perf_counter() - started)
@@ -102,55 +127,77 @@ async def run(pool: SenderPool, channel_id: int, *, profile: str = "rapida", say
             say(f"   {sender.name}: " + (f"mensaje {entry['rtt_ms']} ms, reacción {entry['reaction_ms']} ms"
                                          if not entry["error"] else entry["error"]))
             if should_stop():
-                return report
-        usable = [e for e in report["senders"] if not e["error"]]
+                return
+        usable.extend(e for e in report["senders"] if not e["error"])
         if not usable:
             report["aborted"] = "ningún bot puede escribir en el canal"
-            return report
+            return
 
-        # 2. bursts: everyone answers at once
+        # 2. bursts: everyone answers at once (each starts with every bot's window completely free)
         sizes = [min(MAX_MESSAGES // 2, len(usable) * limit),
                  min(MAX_MESSAGES // 2, len(usable) * (limit + cfg["overflow_per_bot"]))]
         burst_ids: list[int] = []
         for number, size in enumerate(sizes, start=1):
-            say(f"2/4 Ráfaga {number}: {size} mensajes a la vez…")
+            await _settle(pool, senders, channel_id, say)
+            fits = "caben en un turno" if size <= len(usable) * limit else "más de los que caben en un turno"
+            say(f"2/4 Ráfaga {number}: {size} mensajes a la vez ({fits})…")
             started = time.perf_counter()
+            waits_before = pool.admitted
             done: list[float] = []
+            failures: list[str] = []
 
             async def one(i: int, size=size, started=started) -> None:
-                data = await pool.send_text(channel_id, f"🧪 ráfaga {i + 1}/{size} (se borra sola)")
+                try:
+                    data = await pool.send_text(channel_id, f"🧪 ráfaga {number}.{i + 1}/{size} (se borra sola)")
+                except Exception as exc:  # noqa: BLE001
+                    failures.append(_failure(exc))
+                    return
                 done.append(time.perf_counter() - started)
                 created.append(int(data["id"]))
                 burst_ids.append(int(data["id"]))
 
             await asyncio.gather(*(one(i) for i in range(size)))
-            spread = {"size": size, **_spread(done)}
+            waited = list(pool.waits)[-(pool.admitted - waits_before):] if pool.admitted > waits_before else []
+            spread = {"size": size, "failed": len(failures), "max_wait_ms": _ms(max(waited, default=0.0)),
+                      **_spread(done)}
             report["bursts"].append(spread)
-            say(f"   primero {spread['first_ms']} ms · mediana {spread['median_ms']} ms · último {spread['last_ms']} ms")
+            report["errors"].extend(failures[:3])
+            say(f"   primero {spread['first_ms']} ms · mediana {spread['median_ms']} ms · último {spread['last_ms']} ms"
+                f" (esperando turno hasta {spread['max_wait_ms']} ms)")
             if should_stop():
-                return report
-            if number < len(sizes):
-                await asyncio.sleep(window + 0.3)  # let every bot's window reset before the next burst
+                return
+        if not burst_ids:
+            report["errors"].append("ninguna ráfaga llegó a enviarse")
+            return
 
         # 3. reactions (✅/❌ under every reply)
+        await _settle(pool, senders, channel_id, say, "react")
         count = min(60, len(usable) * cfg["reactions_per_bot"], len(burst_ids) * len(EMOJIS))
         say(f"3/4 {count} reacciones a la vez…")
         started = time.perf_counter()
         done = []
+        failures = []
 
         async def react(i: int) -> None:
-            await pool.add_reaction(channel_id, burst_ids[i % len(burst_ids)], EMOJIS[(i // len(burst_ids)) % len(EMOJIS)])
+            try:
+                await pool.add_reaction(channel_id, burst_ids[i % len(burst_ids)], EMOJIS[(i // len(burst_ids)) % len(EMOJIS)])
+            except Exception as exc:  # noqa: BLE001
+                failures.append(_failure(exc))
+                return
             done.append(time.perf_counter() - started)
 
         await asyncio.gather(*(react(i) for i in range(count)))
-        report["reactions"] = {"count": count, **_spread(done)}
-        say(f"   mediana {report['reactions']['median_ms']} ms · última {report['reactions']['last_ms']} ms")
+        report["reactions"] = {"count": count, "failed": len(failures), **_spread(done)}
+        report["errors"].extend(failures[:3])
+        say(f"   mediana {report['reactions']['median_ms']} ms · última {report['reactions']['last_ms']} ms"
+            + (f" · {len(failures)} fallaron" if failures else ""))
         if should_stop():
-            return report
+            return
 
         # 4. sustained: the most the channel takes minute after minute
         seconds = cfg["sustained_seconds"]
         if seconds:
+            await _settle(pool, senders, channel_id, say)
             say(f"4/4 Ritmo sostenido durante {seconds:g} s…")
             end = time.perf_counter() + seconds
             stamps: list[float] = []
@@ -158,7 +205,11 @@ async def run(pool: SenderPool, channel_id: int, *, profile: str = "rapida", say
 
             async def worker() -> None:
                 while time.perf_counter() < end and not should_stop() and len(created) < MAX_MESSAGES * 2:
-                    data = await pool.send_text(channel_id, "🧪 ritmo sostenido (se borra sola)")
+                    try:
+                        data = await pool.send_text(channel_id, "🧪 ritmo sostenido (se borra sola)")
+                    except Exception as exc:  # noqa: BLE001
+                        report["errors"].append(_failure(exc))
+                        return
                     created.append(int(data["id"]))
                     stamps.append(time.perf_counter() - begin)
 
@@ -169,26 +220,43 @@ async def run(pool: SenderPool, channel_id: int, *, profile: str = "rapida", say
             report["sustained"] = {"seconds": seconds, "messages": len(stamps), "per_minute": round(per_minute),
                                    "per_bot_per_minute": round(per_minute / len(usable))}
             say(f"   {len(stamps)} mensajes · ritmo estable ≈ {round(per_minute)} por minuto")
+
+    try:
+        await measure()
+    except asyncio.CancelledError:
+        raise
+    except Exception as exc:  # noqa: BLE001 - keep what was measured, and say what went wrong
+        log.exception("performance test failed")
+        report["errors"].append(_failure(exc))
+        report["aborted"] = report["aborted"] or f"falló: {_failure(exc)}"
     finally:
         logging.getLogger("discord.http").removeHandler(counter)
-        say("Borrando los mensajes de prueba…")
-        gate = asyncio.Semaphore(6)
 
-        async def remove(mid: int) -> None:
-            async with gate:
-                try:
-                    await pool.delete_message(channel_id, mid)
-                except Exception:  # noqa: BLE001 - already gone or not ours: nothing to clean
-                    pass
-
-        await asyncio.gather(*(remove(m) for m in created))
-
+    # the report first: cleanup can take a while and must never hide the results
     report["rate_limits"] = counter.count
     report["held_back"] = sum(s["held_back"] for s in pool.snapshot())
-    rtt = statistics.median([e["rtt_ms"] for e in usable]) / 1000 or 0.12
-    report["capacity"] = {
-        f"{d:g}": capacity_model.capacity(len(usable), deadline=d, rtt=rtt, limit=limit, window=window,
-                                          spacing=pool.limits["react"][1]).as_dict() for d in (2.0, 3.0, 5.0)}
+    if usable:
+        rtt = statistics.median([e["rtt_ms"] for e in usable]) / 1000 or 0.12
+        report["capacity"] = {
+            f"{d:g}": capacity_model.capacity(len(usable), deadline=d, rtt=rtt, limit=limit, window=window,
+                                              spacing=pool.limits["react"][1]).as_dict() for d in (2.0, 3.0, 5.0)}
+    if on_report is not None:
+        try:
+            on_report(report)
+        except Exception:  # noqa: BLE001
+            log.exception("could not show the report")
+
+    if created:
+        say(f"Borrando {len(created)} mensajes de prueba…")
+        try:
+            report["cleanup"] = await asyncio.shield(pool.delete_many(channel_id, created))
+        except Exception as exc:  # noqa: BLE001
+            report["cleanup"] = {"requested": len(created), "deleted": 0, "bulk": 0, "failed": len(created),
+                                 "seconds": 0.0, "error": _failure(exc)}
+        c = report["cleanup"]
+        say(f"   borrados {c['deleted']} de {c['requested']} en {c['seconds']} s"
+            + (" (en bloque)" if c["bulk"] == c["deleted"] and c["bulk"] else "")
+            + (f" · {c['failed']} no se pudieron borrar: bórralos a mano" if c["failed"] else ""))
     return report
 
 
@@ -203,16 +271,25 @@ def format_report(report: dict) -> list[str]:
                                               if not entry["error"] else f"✗ {entry['error']}"))
     for burst in report["bursts"]:
         lines.append(f"  Ráfaga de {burst['size']} mensajes: primero {burst['first_ms']} ms, mediana "
-                     f"{burst['median_ms']} ms, último {burst['last_ms']} ms")
+                     f"{burst['median_ms']} ms, último {burst['last_ms']} ms"
+                     + (f" (de eso, hasta {burst['max_wait_ms']} ms esperando turno para no pasar el límite)"
+                        if burst.get("max_wait_ms", 0) > 300 else "")
+                     + (f" · {burst['failed']} fallaron" if burst.get("failed") else ""))
     if report.get("reactions"):
         r = report["reactions"]
-        lines.append(f"  {r['count']} reacciones a la vez: mediana {r['median_ms']} ms, última {r['last_ms']} ms")
+        lines.append(f"  {r['count']} reacciones a la vez: mediana {r['median_ms']} ms, última {r['last_ms']} ms"
+                     + (f" · {r['failed']} fallaron" if r.get("failed") else ""))
     if report.get("sustained"):
         s = report["sustained"]
         lines.append(f"  Ritmo sostenido: ≈ {s['per_minute']} mensajes por minuto en total "
                      f"(≈ {s['per_bot_per_minute']} por bot)")
+    for error in dict.fromkeys(report.get("errors") or []):
+        lines.append(f"  ✗ {error}")
     if "rate_limits" in report:
         lines.append(f"  Límites de Discord (429) encontrados: {report['rate_limits']} · envíos frenados: {report['held_back']}")
+    cleanup = report.get("cleanup")
+    if cleanup:
+        lines.append(f"  Mensajes de prueba borrados: {cleanup['deleted']} de {cleanup['requested']} en {cleanup['seconds']} s")
     if report.get("capacity"):
         c3 = report["capacity"]["3"]
         lines.append("  Capacidad estimada (jugadores respondiendo a la vez y viendo todo su resultado a tiempo):")

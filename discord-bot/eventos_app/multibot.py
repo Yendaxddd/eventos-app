@@ -58,6 +58,9 @@ OWNER_MEMORY = 20000       # message -> author sender, for edits/deletes
 STICKY_MEMORY = 500        # authors remembered across restarts (HP bar messages)
 WARM_INTERVAL = 8.0        # seconds between keep-alive rounds (aiohttp closes idle connections at 15 s)
 WARM_CONNECTIONS = 3       # connections kept ready per sender for a burst
+BULK_DELETE_MAX = 100      # Discord: bulk delete takes 2 to 100 messages younger than two weeks
+DELETE_PARALLEL = 4        # deletes in flight per sender when they have to go one by one
+WAIT_MEMORY = 2000         # admission waits kept for the performance test
 
 SEND_ROUTE = "POST /channels/{channel_id}/messages"
 REACT_ROUTE = "PUT /channels/{channel_id}/messages/{message_id}/reactions/{emoji}/@me"
@@ -76,13 +79,15 @@ class Endpoints(NamedTuple):
     delete_message: Callable[..., Any]
     add_reaction: Callable[..., Any]
     ping: Callable[..., Any]
+    bulk_delete: Callable[..., Any] | None = None  # up to 100 messages in one call (needs Manage Messages)
 
 
 def endpoints_of(http) -> Endpoints:
     async def ping():
         return await http.request(discord.http.Route("GET", "/gateway"))
 
-    return Endpoints(http.send_message, http.edit_message, http.delete_message, http.add_reaction, ping)
+    return Endpoints(http.send_message, http.edit_message, http.delete_message, http.add_reaction, ping,
+                     getattr(http, "delete_messages", None))
 
 
 class OpenBucket:
@@ -184,6 +189,12 @@ class Sender:
     def reserve(self, kind: str, channel_id: int, at: float) -> None:
         self._slots.setdefault((kind, channel_id), deque()).append(at)
 
+    def quiet_in(self, kind: str, channel_id: int, now: float, window: float) -> float:
+        """Seconds until every slot used so far has expired (0 = the sender is completely fresh)."""
+        slots = self._slots.get((kind, channel_id))
+        last = slots[-1] + window - now if slots else 0.0
+        return max(last, self.penalty_until - now, 0.0)
+
     def load(self, now: float, window: float) -> int:
         return sum(1 for (kind, _), slots in self._slots.items() if kind == "send" for t in slots if now - t < window)
 
@@ -270,6 +281,9 @@ class SenderPool:
         self._http = None
         self._open = False
         self._task: asyncio.Task | None = None
+        self.admitted = 0                                  # how many sends/reactions went through `_admit`
+        self.waits: deque[float] = deque(maxlen=WAIT_MEMORY)   # seconds each one waited for its turn
+        self._no_bulk: set[int] = set()                    # users that may not bulk delete in this server
 
     # ---- setup -----------------------------------------------------------------
     def install(self, primary_http, primary_name: str = "Principal", primary_user_id: int = 0) -> None:
@@ -393,6 +407,8 @@ class SenderPool:
         now = time.monotonic()
         wait = sender.wait_for(kind, channel_id, now, limit, window)
         sender.reserve(kind, channel_id, now + wait)
+        self.admitted += 1
+        self.waits.append(wait)
         if wait > 0:
             await asyncio.sleep(wait)
 
@@ -538,6 +554,66 @@ class SenderPool:
             self._sticky.pop(int(message_id), None)
             return result
         raise last or RuntimeError("no sender available")
+
+    def _forget(self, message_id: int) -> None:
+        self._owners.pop(message_id, None)
+        self._sticky.pop(message_id, None)
+
+    async def delete_many(self, channel_id: int, message_ids) -> dict:
+        """Delete many messages as fast as Discord allows. Returns {"requested", "deleted", "bulk", "failed", "seconds"}.
+
+        First tries bulk delete (100 per call) with the main bot, which is the one whose owner usually gave it
+        Manage Messages (helpers are invited without it); whatever is left is deleted one by one, every bot
+        taking care of its own messages at the same time.
+        """
+        started = time.monotonic()
+        channel_id = int(channel_id)
+        pending = list(dict.fromkeys(int(m) for m in message_ids))
+        result = {"requested": len(pending), "deleted": 0, "bulk": 0, "failed": 0, "seconds": 0.0}
+
+        for sender in [self.primary] if self.primary else []:
+            if sender.endpoints.bulk_delete is None or sender.user_id in self._no_bulk:
+                continue
+            while len(pending) >= 2:
+                chunk, rest = pending[:BULK_DELETE_MAX], pending[BULK_DELETE_MAX:]
+                try:
+                    await sender.endpoints.bulk_delete(channel_id, chunk)
+                except discord.Forbidden:
+                    self._no_bulk.add(sender.user_id)   # no Manage Messages: don't ask again
+                    break
+                except (discord.HTTPException, *_UNREACHABLE):
+                    break                               # e.g. messages older than two weeks: go one by one
+                for mid in chunk:
+                    self._forget(mid)
+                sender.stats.deleted += len(chunk)
+                result["deleted"] += len(chunk)
+                result["bulk"] += len(chunk)
+                pending = rest
+
+        groups: dict[Sender, list[int]] = {}
+        for mid in pending:
+            owner = self._order_for(mid)[:1]
+            groups.setdefault(owner[0] if owner else self.primary, []).append(mid)
+
+        async def drain(sender: Sender, mids: list[int]) -> None:
+            gate = asyncio.Semaphore(DELETE_PARALLEL)
+
+            async def one(mid: int) -> None:
+                async with gate:
+                    try:
+                        await self._route_delete(channel_id, mid)
+                    except discord.NotFound:
+                        result["deleted"] += 1            # already gone is as good as deleted
+                    except Exception:  # noqa: BLE001
+                        result["failed"] += 1
+                    else:
+                        result["deleted"] += 1
+
+            await asyncio.gather(*(one(m) for m in mids))
+
+        await asyncio.gather(*(drain(s, m) for s, m in groups.items()))
+        result["seconds"] = round(time.monotonic() - started, 2)
+        return result
 
     # ---- persistence of who wrote the sticky messages ----------------------------------
     def load_owners(self) -> None:

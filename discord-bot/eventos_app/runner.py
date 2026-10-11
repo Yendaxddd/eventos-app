@@ -324,16 +324,25 @@ class BotRunner:
         out = console_bridge.console
         self._bench_stop = asyncio.Event()
         out.print("[bold cyan]▶ Prueba de rendimiento: manda mensajes de prueba al canal del evento y los borra[/bold cyan]")
-        report = await benchmark.run(pool, app.qte_channel_id, profile=profile, stop=self._bench_stop,
-                                     say=lambda text: out.print(f"[cyan]{text}[/cyan]"))
-        lines = benchmark.format_report(report)
-        for line in lines:
-            out.print(f"[bold white]{line}[/bold white]")
-        stamp = time.strftime("%Y%m%d_%H%M%S")
-        path = paths.logs_dir() / f"rendimiento_{stamp}.txt"
-        path.write_text("\n".join(lines) + "\n\n" + json.dumps(report, indent=2, ensure_ascii=False), encoding="utf-8")
-        out.print(f"[green]Informe guardado en {path}[/green]")
-        self._bench_stop = None
+        path = paths.logs_dir() / f"rendimiento_{time.strftime('%Y%m%d_%H%M%S')}.txt"
+
+        def save(report: dict) -> list[str]:
+            lines = benchmark.format_report(report)
+            path.write_text("\n".join(lines) + "\n\n" + json.dumps(report, indent=2, ensure_ascii=False),
+                            encoding="utf-8")
+            return lines
+
+        def show(report: dict) -> None:  # right away: the cleanup that follows may take a few seconds
+            for line in save(report):
+                out.print(f"[bold white]{line}[/bold white]")
+            out.print(f"[green]Informe guardado en {path}[/green]")
+
+        try:
+            report = await benchmark.run(pool, app.qte_channel_id, profile=profile, stop=self._bench_stop,
+                                         say=lambda text: out.print(f"[cyan]{text}[/cyan]"), on_report=show)
+        finally:
+            self._bench_stop = None
+        lines = save(report)  # again, now with the cleanup result
         return {"ok": not report.get("aborted"), "error": report.get("aborted", ""), "report": report,
                 "lines": lines, "path": str(path)}
 
