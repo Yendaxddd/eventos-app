@@ -35,11 +35,16 @@ class _RateLimitCounter(logging.Handler):
 
     def __init__(self) -> None:
         super().__init__(logging.WARNING)
-        self.count = 0
+        self.count = 0      # 429 on anything but reactions: the pool should never cause these
+        self.reactions = 0  # 429 on reactions: spacing of 250 ms is tight, jitter makes a few unavoidable (retried at once)
 
     def emit(self, record: logging.LogRecord) -> None:
-        if "rate limited" in record.getMessage().lower():
-            self.count += 1
+        text = record.getMessage()
+        if "rate limited" in text.lower():
+            if "/reactions/" in text:
+                self.reactions += 1
+            else:
+                self.count += 1
 
 
 def _ms(seconds: float) -> int:
@@ -234,6 +239,7 @@ async def run(pool: SenderPool, channel_id: int, *, profile: str = "rapida", say
 
     # the report first: cleanup can take a while and must never hide the results
     report["rate_limits"] = counter.count
+    report["reaction_retries"] = counter.reactions
     report["held_back"] = sum(s["held_back"] for s in pool.snapshot())
     if usable:
         rtt = statistics.median([e["rtt_ms"] for e in usable]) / 1000 or 0.12
@@ -286,7 +292,9 @@ def format_report(report: dict) -> list[str]:
     for error in dict.fromkeys(report.get("errors") or []):
         lines.append(f"  ✗ {error}")
     if "rate_limits" in report:
-        lines.append(f"  Límites de Discord (429) encontrados: {report['rate_limits']} · envíos frenados: {report['held_back']}")
+        lines.append(f"  Límites de Discord (429) encontrados: {report['rate_limits']} · envíos frenados: {report['held_back']}"
+                     + (f" · reacciones reintentadas por milisegundos de diferencia: {report['reaction_retries']}"
+                        if report.get("reaction_retries") else ""))
     cleanup = report.get("cleanup")
     if cleanup:
         lines.append(f"  Mensajes de prueba borrados: {cleanup['deleted']} de {cleanup['requested']} en {cleanup['seconds']} s")

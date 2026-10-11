@@ -53,7 +53,7 @@ def test_it_measures_everything_and_leaves_the_channel_clean():
     assert report["bots"] == 3 and all(not s["error"] and s["rtt_ms"] > 0 for s in report["senders"])
     assert [b["size"] for b in report["bursts"]] == [15, 21]
     assert report["reactions"]["count"] > 0 and report["sustained"]["messages"] > 0
-    assert report["rate_limits"] == 0 and not report["aborted"]
+    assert report["rate_limits"] == 0 and not report["aborted"]  # (a reaction may be retried by a few ms of jitter)
     assert left == 0  # every test message was deleted
     assert set(report["capacity"]) == {"2", "3", "5"} and report["capacity"]["3"]["players"] > 0
     text = "\n".join(benchmark.format_report(report))
