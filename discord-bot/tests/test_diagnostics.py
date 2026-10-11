@@ -149,3 +149,51 @@ def test_the_report_carries_the_diagnosis():
     text = "\n".join(benchmark.format_report(report))
     assert "DIAGNÓSTICO" in text and "Discord dice (mensaje)" in text and "Discord dice (reacción)" in text
     assert "Ningún 429" in text and "Carga del bot" in text
+
+
+# ---- a 429 must not start a chain of 429s --------------------------------------------------------------
+def test_push_back_delays_only_the_slots_that_have_not_come_yet():
+    sender = multibot.Sender("s", multibot.Endpoints(*([None] * 5)))
+    for at in (1.0, 2.0, 3.0, 4.0):
+        sender.reserve("react", 9, at)
+    moved = sender.push_back("react", 9, now=2.5, earliest=3.6)
+    assert round(moved, 3) == 0.6
+    assert list(sender._slots[("react", 9)]) == [1.0, 2.0, 3.6, 4.6]    # slots in the past stay as they were
+    assert sender.push_back("react", 9, now=2.5, earliest=3.0) == 0.0 and sender.shifted("react", 9) == moved
+
+
+def test_a_waiting_request_notices_that_its_turn_was_pushed_back():
+    async def scenario():
+        async with World(helpers=0) as w:
+            pool, sender = w.pool, w.pool.primary
+            t0 = time.monotonic()
+            woke = []
+
+            async def go(name):
+                await pool._admit(sender, "react", CHANNEL)
+                woke.append((name, time.monotonic() - t0))
+
+            tasks = [asyncio.ensure_future(go(n)) for n in "abc"]     # planned at 0, +0.27, +0.54
+            await asyncio.sleep(0.05)
+            pool._learn({"kind": "react", "bot": sender.name, "status": 429, "channel": CHANNEL, "reset_after": 0.25})
+            await asyncio.gather(*tasks)
+            return dict(woke)
+
+    woke = run(scenario())
+    assert woke["a"] < 0.1
+    assert woke["b"] >= 0.5 and woke["c"] >= woke["b"] + 0.25   # b waits out the retry plus a spacing, c keeps its gap
+
+
+def test_pushing_back_cuts_the_chain_of_429s_caused_by_discordpys_own_retries(monkeypatch):
+    async def trial():
+        async with World(helpers=1, latency=0.05, reaction_jitter=0.12) as w:
+            messages = [await w.channel.send(f"m{i}") for i in range(6)]
+            await asyncio.gather(*(w.pool.add_reaction(CHANNEL, messages[i % 6].id, "⭐") for i in range(24)))
+            return (len([r for r in w.server.reactions if r["status"] == 429]),
+                    len([r for r in w.server.reactions if r["status"] == 204]))
+
+    with_push = run(trial())
+    monkeypatch.setattr(multibot.Sender, "push_back", lambda *args, **kwargs: 0.0)
+    without_push = run(trial())
+    assert with_push[1] == 24 == without_push[1]                  # every reaction lands either way
+    assert with_push[0] < without_push[0] * 0.7, (with_push, without_push)

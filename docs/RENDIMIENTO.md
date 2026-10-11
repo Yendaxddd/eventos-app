@@ -121,6 +121,19 @@ una parte esperó su turno → agrega bots auxiliares o reduce lo que el bot man
   reacción y bot). Desde la 0.3.2 se espacian a 350 ms por defecto, cada bot aprende su espaciado de los 429 y de las
   cabeceras de Discord, y una reacción rendida por discord.py se reintenta en vez de perderse.
 
+### Segunda prueba real (0.3.2): qué reveló el diagnóstico
+
+- Reacciones: 0 perdidas (antes 4). Discord confirma por sus cabeceras el límite documentado (1 cada 250 ms), así que los 11
+  429 no eran un límite oculto: eran una **cascada**. Tras un 429, discord.py reenvía esa reacción por su cuenta y el
+  reintento ocupa el cupo de 250 ms; la siguiente reacción ya estaba planificada con un hueco fijo y chocaba con él, y la
+  siguiente con la anterior... (los bots B y D recibieron 5–6 seguidos, cada ~0.45 s). Además el espaciado aprendido se
+  inflaba a 691 ms y la capacidad de reacciones salía pesimista.
+- Desde la 0.3.3, al llegar un 429 se **retrasan las reservas pendientes de ese bot** (`Sender.push_back`) para dejar pasar
+  el reintento, y el espaciado solo sube un paso por episodio de 429 (+50 ms, máx. 800 ms). Con un Discord simulado con
+  jitter de red: 23 → 8 respuestas 429 para 24 reacciones, todas entregadas, misma duración.
+- Carga del bot: 13 ms en el peor caso, así que el bot no va justo. Mensajes: 295 por minuto sostenidos. Discord dice que la
+  ventana es de 5.0 s (la app usa 5.3 s de margen: ≈ 6 % de capacidad que se podría ganar si hiciera falta).
+
 ## Diagnóstico de límites
 
 Para saber cuándo y por qué Discord limita (0.3.2):

@@ -52,8 +52,8 @@ log = logging.getLogger("eventos_app.multibot")
 
 CHANNEL_LIMIT = 5          # messages per window per channel per bot (Discord: 5 / 5 s)
 WINDOW_SECONDS = 5.3       # a little more than 5 s: network jitter can squeeze requests together
-REACTION_SPACING = 0.35    # Discord says 1 reaction per 250 ms, but real runs got 429s at 270 ms: start wider, then learn
-MAX_REACTION_SPACING = 1.5 # the most a bot is slowed down after repeated 429s on reactions
+REACTION_SPACING = 0.30    # Discord: 1 reaction per 250 ms (confirmed by its headers); the rest is margin for network jitter
+MAX_REACTION_SPACING = 0.8 # the most a bot is slowed down after repeated 429s on reactions
 REACT_RETRIES = 4          # extra tries (on top of discord.py's own 5) before a reaction is given up
 SLOW_SEND_SECONDS = 1.5    # a send slower than this was probably held back by a rate limit
 PENALTY_SECONDS = 4.0      # how long a sender that was just held back is deprioritised
@@ -170,9 +170,11 @@ class Sender:
         self.penalty_until = 0.0
         self.react_spacing = 0.0     # learned from Discord's 429s / headers; 0 = use the pool's default
         self.react_clean = 0         # successful reactions since the last 429
+        self.react_429_at = 0.0
         self.last_used = 0.0
         self.latencies: deque[float] = deque(maxlen=200)   # seconds per successful send
         self._slots: dict[tuple[str, int], deque[float]] = {}
+        self._shifted: dict[tuple[str, int], float] = {}   # total seconds pending slots were pushed back (see push_back)
         self._blocked: dict[tuple[str, int], float] = {}
         self._locks: dict[int, asyncio.Lock] = {}
 
@@ -194,6 +196,26 @@ class Sender:
 
     def reserve(self, kind: str, channel_id: int, at: float) -> None:
         self._slots.setdefault((kind, channel_id), deque()).append(at)
+
+    def shifted(self, kind: str, channel_id: int) -> float:
+        return self._shifted.get((kind, channel_id), 0.0)
+
+    def push_back(self, kind: str, channel_id: int, now: float, earliest: float) -> float:
+        """Delay every slot that has not come yet so the first of them is not before `earliest`.
+
+        Used after a 429: discord.py retries that request on its own and the retry takes the next bit of quota;
+        the requests planned behind it would collide with it one after another. Returns the seconds moved.
+        """
+        slots = self._slots.get((kind, channel_id))
+        future = [t for t in slots if t > now] if slots else []
+        if not future:
+            return 0.0
+        delta = earliest - min(future)
+        if delta <= 0:
+            return 0.0
+        self._slots[(kind, channel_id)] = deque(t + delta if t > now else t for t in slots)
+        self._shifted[(kind, channel_id)] = self.shifted(kind, channel_id) + delta
+        return delta
 
     def quiet_in(self, kind: str, channel_id: int, now: float, window: float) -> float:
         """Seconds until every slot used so far has expired (0 = the sender is completely fresh)."""
@@ -433,11 +455,16 @@ class SenderPool:
         limit, window = self._limits_for(sender, kind)
         now = time.monotonic()
         wait = sender.wait_for(kind, channel_id, now, limit, window)
-        sender.reserve(kind, channel_id, now + wait)
+        at = now + wait
+        sender.reserve(kind, channel_id, at)
         self.admitted += 1
         self.waits.append(wait)
-        if wait > 0:
-            await asyncio.sleep(wait)
+        shifted = sender.shifted(kind, channel_id)
+        while True:   # a 429 may push the planned time back while we sleep (Sender.push_back)
+            remaining = at + (sender.shifted(kind, channel_id) - shifted) - time.monotonic()
+            if remaining <= 0:
+                break
+            await asyncio.sleep(remaining)
 
     def _context(self, bot: str, kind: str, channel_id: int) -> dict:
         """What this program had planned for a bot when Discord answered 429 (for the diagnostics)."""
@@ -450,19 +477,28 @@ class SenderPool:
         return {"reservas": sum(1 for t in slots if now - window < t <= now), "ventana_s": window}
 
     def _learn(self, event: dict) -> None:
-        """Adapt to what Discord really does with reactions: widen the spacing after a 429, narrow it slowly."""
-        if event["kind"] != "react":
+        """React to what Discord answers: after a 429 move the pending requests out of the way, and adapt the
+        spacing of reactions (wider after an episode of 429s, narrower after many clean reactions)."""
+        if event["kind"] not in ("react", "send"):
             return
         sender = next((s for s in self._all() if s.name == event["bot"]), None)
         if sender is None:
             return
+        now = time.monotonic()
         base = self.limits["react"][1]
         current = max(base, sender.react_spacing)
         if event["status"] == 429:
-            hint = event.get("reset_after") or 0.0   # exact seconds; Retry-After is rounded up to whole seconds
-            sender.react_spacing = min(MAX_REACTION_SPACING, max(current * 1.25, hint + 0.03))
-            sender.react_clean = 0
-        elif 200 <= event["status"] < 300:
+            wait = event.get("reset_after") or (0.25 if event["kind"] == "react" else 1.0)
+            if event["kind"] == "react":
+                # discord.py resends this one after `wait`; the next planned reaction must come a full spacing later
+                sender.push_back("react", event["channel"], now, now + wait + current)
+                if now - sender.react_429_at > 1.0:     # one step per episode, not per 429 of the same episode
+                    sender.react_spacing = min(MAX_REACTION_SPACING, current + 0.05)
+                sender.react_429_at = now
+                sender.react_clean = 0
+            else:
+                sender.push_back("send", event["channel"], now, now + wait + 0.05)
+        elif event["kind"] == "react" and 200 <= event["status"] < 300:
             sender.react_clean += 1
             reset = event.get("reset_after")
             if reset and reset + 0.03 > current:

@@ -12,6 +12,7 @@ from __future__ import annotations
 import asyncio
 import itertools
 import json
+import random
 import time
 
 import discord.http
@@ -26,9 +27,12 @@ def _json(data, status: int = 200, headers: dict | None = None) -> web.Response:
 
 class FakeDiscord:
     def __init__(self, *, limit: int = 5, window: float = 1.0, latency: float = 0.02,
-                 reaction_window: float = 0.25, delete_limit: int = 0, delete_window: float = 1.0) -> None:
+                 reaction_window: float = 0.25, delete_limit: int = 0, delete_window: float = 1.0,
+                 reaction_jitter: float = 0.0) -> None:
         self.limit, self.window, self.latency = limit, window, latency
         self.reaction_window = reaction_window
+        self.reaction_jitter = reaction_jitter   # extra random network delay on reactions, like a real connection
+        self._rng = random.Random(7)
         self.delete_limit, self.delete_window = delete_limit, delete_window  # 0 = deletes are not limited
         self.manage: set[str] = set()          # tokens with Manage Messages (delete others' messages, bulk delete)
         self.delete_attempts: list[tuple[str, int]] = []   # (token, status)
@@ -140,7 +144,7 @@ class FakeDiscord:
         if token is None:
             return self._error(401, 0, "401: Unauthorized")
         channel, mid = int(request.match_info["cid"]), int(request.match_info["mid"])
-        await asyncio.sleep(self.latency)
+        await asyncio.sleep(self.latency + self._rng.uniform(0, self.reaction_jitter))
         now = time.monotonic()
         entry = {"t": now, "token": token, "message": mid, "emoji": request.match_info["emoji"], "status": 204}
         self.reactions.append(entry)
