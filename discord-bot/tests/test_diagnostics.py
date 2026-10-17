@@ -197,3 +197,31 @@ def test_pushing_back_cuts_the_chain_of_429s_caused_by_discordpys_own_retries(mo
     without_push = run(trial())
     assert with_push[1] == 24 == without_push[1]                  # every reaction lands either way
     assert with_push[0] < without_push[0] * 0.7, (with_push, without_push)
+
+
+# ---- slow requests: new connection or not? ---------------------------------------------------------------
+def test_each_request_says_whether_it_opened_a_connection():
+    async def scenario():
+        async with World(helpers=0) as w:
+            seq = w.pool.tracer.seq
+            await burst(w, 5)                 # five at once: five connections, nothing to reuse yet
+            await asyncio.sleep(0.1)
+            await burst(w, 5)                 # the same five connections are free again
+            return w.pool.tracer.summary(seq)
+
+    summary = run(scenario())
+    conns = summary["connections"]
+    assert conns["new"] >= 1 and conns["reused"] >= 5 and conns["new"] + conns["reused"] == 10
+    assert summary["slowest"] == sorted(summary["slowest"], key=lambda r: r["ms"], reverse=True)
+    assert all(r["conn"] in ("new", "reused") for r in summary["slowest"])
+
+
+def test_the_report_names_a_slow_request_and_its_connection():
+    report = {"bots": 2, "profile": "rapida", "senders": [], "bursts": [], "reactions": None, "sustained": None,
+              "aborted": "", "errors": [], "planned": {"send_limit": 5, "send_window_ms": 5300, "react_spacing_ms": 300},
+              "trace": {"requests": 10, "kinds": {}, "observed": {}, "limited": [], "limited_total": 0, "phases": {},
+                        "connections": {"new": 2, "reused": 8, "connect_ms_max": 3012, "new_by_phase": {"ráfaga 2": 2}},
+                        "slowest": [{"at_ms": 9000, "phase": "ráfaga 2", "bot": "Bot#1234", "kind": "send", "ms": 3647,
+                                     "status": 200, "conn": "new", "connect_ms": 3012}]}}
+    text = "\n".join(benchmark.format_report(report))
+    assert "2 nuevas (2 en ráfaga 2)" in text and "3647 ms" in text and "3012 ms solo en conectar" in text

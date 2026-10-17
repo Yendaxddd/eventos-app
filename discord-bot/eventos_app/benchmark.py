@@ -16,7 +16,7 @@ from typing import Callable
 import discord
 
 from . import capacity as capacity_model
-from .diagnostics import explain_429, KIND_NAMES
+from .diagnostics import KIND_NAMES, explain_429, short_name
 from .multibot import SenderPool, _plain_params
 
 log = logging.getLogger(__name__)
@@ -302,6 +302,19 @@ def _diagnosis_lines(report: dict) -> list[str]:
         low, high = row["reset_after_ms"]
         lines.append(f"    Discord dice ({KIND_NAMES.get(kind, kind)}): límite {'/'.join(map(str, row['limit'])) or '?'}, "
                      f"reinicio {low}–{high} ms" + (f" · {plan}" if plan else ""))
+    conns = trace.get("connections") or {}
+    if conns.get("new") or conns.get("reused"):
+        where = ", ".join(f"{count} en {phase_name}" for phase_name, count in conns["new_by_phase"].items())
+        lines.append(f"    Conexiones: {conns['new']} nuevas" + (f" ({where})" if where else "") +
+                     f", {conns['reused']} reutilizadas · la nueva más lenta tardó {conns['connect_ms_max']} ms en abrirse")
+    slow = [r for r in trace.get("slowest", []) if r["ms"] >= 1000]
+    if slow:
+        lines.append("    Peticiones de más de 1 s (en una red sana no deberían pasar):")
+        for r in slow[:3]:
+            how = ("conexión nueva" + (f", {r['connect_ms']} ms solo en conectar" if r.get("connect_ms") else "")
+                   if r["conn"] == "new" else "conexión ya abierta" if r["conn"] == "reused" else "")
+            lines.append(f"      {KIND_NAMES.get(r['kind'], r['kind'])} de {short_name(r['bot'])} [{r['phase'] or '-'}]: "
+                         f"{r['ms']} ms (estado {r['status']}" + (f", {how}" if how else "") + ")")
     if trace["limited_total"]:
         lines.append(f"    {trace['limited_total']} respuestas 429 (ninguna petición se pierde: se reintenta). Las primeras:")
         for item in trace["limited"][:8]:

@@ -90,6 +90,19 @@ class RequestTracer:
         async def failed(session, ctx, params) -> None:
             self._finish(label(), params.method, str(params.url), ctx, error=params.exception)
 
+        async def connecting(session, ctx, params) -> None:       # no free connection: a new one is opened
+            ctx.conn = "new"
+            ctx.conn_started = time.perf_counter()
+
+        async def connected(session, ctx, params) -> None:
+            ctx.connect_ms = _ms(time.perf_counter() - getattr(ctx, "conn_started", time.perf_counter()))
+
+        async def reused(session, ctx, params) -> None:
+            ctx.conn = "reused"
+
+        cfg.on_connection_create_start.append(connecting)
+        cfg.on_connection_create_end.append(connected)
+        cfg.on_connection_reuseconn.append(reused)
         cfg.on_request_start.append(start)
         cfg.on_request_end.append(end)
         cfg.on_request_exception.append(failed)
@@ -111,7 +124,9 @@ class RequestTracer:
             kind, channel = classify(method, url)
             elapsed = time.perf_counter() - getattr(ctx, "started", time.perf_counter())
             event = {"t": round(time.time(), 3), "mono": time.monotonic(), "bot": bot, "kind": kind, "channel": channel,
-                     "phase": self.phase, "status": 0, "ms": _ms(elapsed)}
+                     "phase": self.phase, "status": 0, "ms": _ms(elapsed), "conn": getattr(ctx, "conn", "")}
+            if getattr(ctx, "connect_ms", None) is not None:
+                event["connect_ms"] = ctx.connect_ms
             if error is not None:
                 event["error"] = type(error).__name__
             if response is not None:
@@ -214,7 +229,16 @@ class RequestTracer:
             row["requests"] += 1
             row["429"] += e["status"] == 429
             row["errors"] += e["status"] == 0 or e["status"] >= 500
-        return {"requests": len(events), "kinds": kinds, "limited": limited[:15], "limited_total": len(limited),
+        slowest = [{"at_ms": round((e["mono"] - origin) * 1000), "phase": e["phase"], "bot": e["bot"], "kind": e["kind"],
+                    "ms": e["ms"], "status": e["status"], "conn": e.get("conn", ""), "connect_ms": e.get("connect_ms")}
+                   for e in sorted(events, key=lambda e: e["ms"], reverse=True)[:5]]
+        conns = {"new": sum(e.get("conn") == "new" for e in events), "reused": sum(e.get("conn") == "reused" for e in events),
+                 "connect_ms_max": max((e.get("connect_ms") or 0 for e in events), default=0),
+                 "new_by_phase": {}}
+        for e in events:
+            if e.get("conn") == "new":
+                conns["new_by_phase"][e["phase"] or "-"] = conns["new_by_phase"].get(e["phase"] or "-", 0) + 1
+        return {"requests": len(events), "kinds": kinds, "slowest": slowest, "connections": conns, "limited": limited[:15], "limited_total": len(limited),
                 "observed": observed, "phases": phases}
 
 

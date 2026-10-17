@@ -134,6 +134,18 @@ una parte esperó su turno → agrega bots auxiliares o reduce lo que el bot man
 - Carga del bot: 13 ms en el peor caso, así que el bot no va justo. Mensajes: 295 por minuto sostenidos. Discord dice que la
   ventana es de 5.0 s (la app usa 5.3 s de margen: ≈ 6 % de capacidad que se podría ganar si hiciera falta).
 
+### Tercera prueba real (0.3.3)
+
+- Ráfaga de 25: último a 624 ms (antes 1139 ms). Sostenido: 301 mensajes por minuto. Carga del bot: 13 ms.
+- Reacciones: 0 perdidas y 11 con un 429. **Son jitter de red, no un límite oculto**: Discord confirma 1 cada 250 ms y
+  las reacciones planificadas con 330 ms de hueco llegaron a veces con 39–249 ms porque la latencia de una reacción varía
+  entre 160 y 580 ms. Un 429 solo cuesta un reintento (≈ 300 ms) y es más rápido que espaciar a 500 ms para evitarlos:
+  60 reacciones en 5 s con 5 bots.
+- Ráfaga de 40: último a 8.9 s = 5.3 s de espera (esperado) + **una sola petición de 3.6 s**. En las tres pruebas hay una o
+  dos peticiones de ≈ 3 s entre 225 (3083 ms, 3647 ms): es el tiempo de retransmisión de un paquete SYN perdido al abrir una
+  conexión nueva en Windows. Desde la 0.3.4 el informe dice si cada petición lenta abrió una conexión nueva y cuánto tardó
+  en conectar, para confirmarlo.
+
 ## Diagnóstico de límites
 
 Para saber cuándo y por qué Discord limita (0.3.2):
