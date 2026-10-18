@@ -38,12 +38,15 @@ class _RateLimitCounter(logging.Handler):
         super().__init__(logging.WARNING)
         self.count = 0      # 429 on anything but reactions: the pool should never cause these
         self.reactions = 0  # 429 on reactions: spacing of 250 ms is tight, jitter makes a few unavoidable (retried at once)
+        self.webhooks = 0   # 429 on webhooks: they share one limit per channel and "shared" 429s are harmless, retried
 
     def emit(self, record: logging.LogRecord) -> None:
         text = record.getMessage()
         if "rate limited" in text.lower():
             if "/reactions/" in text:
                 self.reactions += 1
+            elif "/webhooks/" in text:
+                self.webhooks += 1
             else:
                 self.count += 1
 
@@ -152,7 +155,9 @@ async def run(pool: SenderPool, channel_id: int, *, profile: str = "rapida", say
 
         # 2. bursts: everyone answers at once (each starts with every bot's window completely free)
         working = [s for s, e in zip(senders, report["senders"]) if not e["error"]]
-        slots = sum(pool._limits_for(s, "send")[0] for s in working)      # messages that fit in one turn
+        # messages that fit in one turn: every bot has its own limit, but all the webhooks together have ONE
+        slots = sum(pool._limits_for(s, "send")[0] for s in working if not s.lane)
+        slots += max((pool._limits_for(s, "send")[0] for s in working if s.lane), default=0)
         sizes = [min(MAX_MESSAGES // 2, slots),
                  min(MAX_MESSAGES // 2, slots + len(working) * cfg["overflow_per_bot"])]
         burst_ids: list[int] = []
@@ -260,6 +265,7 @@ async def run(pool: SenderPool, channel_id: int, *, profile: str = "rapida", say
     # the report first: cleanup can take a while and must never hide the results
     report["rate_limits"] = counter.count
     report["reaction_retries"] = counter.reactions
+    report["webhook_retries"] = counter.webhooks
     report["held_back"] = sum(s["held_back"] for s in pool.snapshot())
     base_spacing = pool.limits["react"][1]
     spacing = statistics.mean(max(base_spacing, s.react_spacing) for s in senders) if senders else base_spacing
@@ -378,7 +384,8 @@ def format_report(report: dict) -> list[str]:
     if "rate_limits" in report:
         lines.append(f"  Límites de Discord (429) encontrados: {report['rate_limits']} · envíos frenados: {report['held_back']}"
                      + (f" · reacciones reintentadas por milisegundos de diferencia: {report['reaction_retries']}"
-                        if report.get("reaction_retries") else ""))
+                        if report.get("reaction_retries") else "")
+                     + (f" · webhooks reintentados: {report['webhook_retries']}" if report.get("webhook_retries") else ""))
     cleanup = report.get("cleanup")
     if cleanup:
         lines.append(f"  Mensajes de prueba borrados: {cleanup['deleted']} de {cleanup['requested']} en {cleanup['seconds']} s")
@@ -396,5 +403,8 @@ def format_report(report: dict) -> list[str]:
         without = capacity_model.capacity(max(1, inputs.get("bots", 1)), lanes=inputs.get("lanes", 0), **base).players
         lines.append(f"  Cada bot auxiliar que agregues suma ≈ {with_one - without} jugadores simultáneos.")
         if lanes:
-            lines.append(f"  Los {lanes} webhooks ya suman mensajes, pero no reacciones: las reacciones siguen necesitando un bot.")
+            planned = report.get("planned") or {}
+            lines.append(f"  Los webhooks de un canal comparten UN solo límite (≈ {planned.get('lane_limit')} mensajes cada "
+                         f"{planned.get('lane_window_ms', 0) / 1000:.1f} s en total, sean los que sean) y no mandan reacciones: "
+                         f"las reacciones siguen necesitando un bot.")
     return lines

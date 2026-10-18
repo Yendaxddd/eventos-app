@@ -402,10 +402,11 @@ class FakeDiscord:
         if hook is None:
             entry["status"] = 404
             return self._error(404, 10015, "Unknown Webhook")
-        bucket = self._webhook_buckets.get(hook["id"])
+        # like Discord: the webhooks of a channel share one limit (429 scope "shared")
+        bucket = self._webhook_buckets.get(hook["channel"])
         if bucket is None or now - bucket[0] >= self.webhook_window:
-            bucket = self._webhook_buckets[hook["id"]] = [now, 0]
-        headers = {"X-RateLimit-Limit": str(self.webhook_limit), "X-RateLimit-Bucket": f"wh-{hook['id']}"}
+            bucket = self._webhook_buckets[hook["channel"]] = [now, 0]
+        headers = {"X-RateLimit-Limit": str(self.webhook_limit), "X-RateLimit-Bucket": f"wh-{hook['channel']}"}
         if bucket[1] >= self.webhook_limit:
             retry = max(0.01, self.webhook_window - (now - bucket[0]))
             entry["status"] = 429

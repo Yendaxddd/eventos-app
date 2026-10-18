@@ -68,8 +68,9 @@ WARM_INTERVAL = 8.0        # seconds between keep-alive rounds (aiohttp closes i
 BULK_DELETE_MAX = 100      # Discord: bulk delete takes 2 to 100 messages younger than two weeks
 DELETE_PARALLEL = 4        # deletes in flight per sender when they have to go one by one
 WAIT_MEMORY = 2000         # admission waits kept for the performance test
-WEBHOOK_LIMIT = 5          # messages per window per webhook (Discord: ~5 / 2 s); learned from its headers
-WEBHOOK_WINDOW = 2.5       # a little more than the 2 s Discord documents
+WEBHOOK_LIMIT = 5          # messages per window for ALL the webhooks of a channel (Discord: ~5 / 2 s, scope "shared")
+WEBHOOK_WINDOW = 2.5       # a little more than the 2 s Discord documents; learned from its headers
+SEND_RETRIES = 3           # extra tries (on top of discord.py's own 5) before a rate-limited message is given up
 
 INVITE_PERMISSIONS = discord.Permissions(
     view_channel=True, send_messages=True, send_messages_in_threads=True, embed_links=True,
@@ -134,6 +135,9 @@ class SenderPool:
         self._no_bulk: set[int] = set()                    # users that may not bulk delete in this server
         self.lanes: list[Sender] = []                      # webhook lanes in the event channel (see `ensure_lanes`)
         self.lane_ids: set[int] = set()                    # their webhook ids: the bot must not take them for players
+        # Discord limits the webhooks of a channel TOGETHER (429 scope "shared"): every lane uses this one ledger
+        self._lane_slots: dict = {}
+        self._lane_shifted: dict = {}
         self.lane_channel = 0
         self.webhooks_enabled = True
         self.lane_store = webhooks.LaneStore()
@@ -297,7 +301,10 @@ class SenderPool:
                           user_id=info.webhook_id)
             lane.lane, lane.channel, lane.webhook_id, lane.owner = True, channel_id, info.webhook_id, owner
             lane.can_react = False
-            lane.send_limit, lane.send_window = WEBHOOK_LIMIT, WEBHOOK_WINDOW
+            lane._slots, lane._shifted = self._lane_slots, self._lane_shifted     # one limit for all of them
+            peer = next((l for l in self.lanes), None)                           # what the others already learned
+            lane.send_limit = peer.send_limit if peer else WEBHOOK_LIMIT
+            lane.send_window = peer.send_window if peer else WEBHOOK_WINDOW
             self.lanes.append(lane)
             self.lane_ids.add(info.webhook_id)
             owner.lane_note = "ok" if not info.created else "ok (webhook creado)"
@@ -449,15 +456,18 @@ class SenderPool:
         now = time.monotonic()
         if event["status"] == 429:
             wait = event.get("reset_after") or 1.0
-            lane.push_back("send", lane.channel, now, now + wait + 0.05)
+            lane.push_back("send", lane.channel, now, now + wait + 0.05)     # the ledger is shared: moves for every lane
             if now - lane.send_429_at > 1.0:      # one widening per episode of 429s
-                lane.send_window = min(WINDOW_SECONDS, (lane.send_window or WEBHOOK_WINDOW) * 1.25)
-            lane.send_429_at = now
+                for peer in self.lanes:
+                    peer.send_window = min(WINDOW_SECONDS, (lane.send_window or WEBHOOK_WINDOW) * 1.25)
+            for peer in self.lanes:
+                peer.send_429_at = now
         elif 200 <= event["status"] < 300 and event.get("limit"):
-            lane.send_limit = max(1, int(event["limit"]))
             remaining, reset = event.get("remaining"), event.get("reset_after")
-            if remaining is not None and reset and event["limit"] - remaining <= 1:   # the first message of a window
-                lane.send_window = min(WINDOW_SECONDS, max(1.0, reset + 0.2))
+            for peer in self.lanes:
+                peer.send_limit = max(1, int(event["limit"]))
+                if remaining is not None and reset and event["limit"] - remaining <= 1:   # first message of a window
+                    peer.send_window = min(WINDOW_SECONDS, max(1.0, reset + 0.2))
 
     def _remember(self, message_id: int, channel_id: int, sender: Sender) -> None:
         self._owners[message_id] = sender
@@ -480,6 +490,7 @@ class SenderPool:
         tried: set[Sender] = set(self.lanes) if needs_a_bot(params) else set()
         last_error: BaseException | None = None
         redone: set[Sender] = set()
+        gave_up = 0
         while True:
             sender = self._pick("send", channel_id, time.monotonic(), tried)
             if sender is None:
@@ -503,6 +514,15 @@ class SenderPool:
                     _reset_files(params)
                     continue
             except discord.HTTPException as exc:
+                if exc.status == 429 and gave_up < SEND_RETRIES:
+                    # discord.py gave up after 5 rate-limited tries: the message is NOT lost, plan it again (the
+                    # tracer already moved what was planned behind the 429). The lanes share one limit: skip them all.
+                    gave_up += 1
+                    sender.stats.failed += 1
+                    if sender.lane:
+                        tried.update(self.lanes)
+                    _reset_files(params)
+                    continue
                 # a sender that cannot write here is skipped; a webhook that Discord refuses (deleted, bad request)
                 # is skipped too. Anything else (e.g. discord.py giving up on a 429) is the caller's to handle.
                 refused = isinstance(exc, (discord.Forbidden, discord.NotFound)) or (sender.lane and exc.status in (400, 401))

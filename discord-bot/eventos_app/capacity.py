@@ -7,9 +7,9 @@ Discord limits each bot separately, so every extra bot adds the same capacity. F
   spacing each bot really needs (the performance test feeds the learned value in) -> ~3 per second;
 * edits of messages: the same 5 per window, shared by every message edited in that channel.
 
-Webhook lanes (one webhook registered by each bot) add messages and edits of their own, with their own limit
-(about 5 per 2 s each) but no reactions: those still need a bot, so with many lanes reactions become the
-first thing to run out.
+Webhook lanes (one webhook registered by each bot) add messages and edits, but Discord limits the webhooks of a
+channel TOGETHER (about 5 per 2 s in total, however many there are) and they cannot react: reactions still need
+a bot, so with lanes they become the first thing to run out.
 
 A *burst* (a group QTE where everybody answers within a couple of seconds) is limited by how many of those
 slots fall inside the time you are willing to wait for the last answer ("deadline"). Beyond that, the
@@ -53,7 +53,8 @@ def capacity(bots: int, *, lanes: int = 0, lane_limit: int = 5, lane_window: flo
     """
     bots, lanes = max(1, bots), max(0, lanes)
     usable = max(0.0, deadline - rtt)
-    messages = bots * limit * (1 + int(usable // window)) + lanes * lane_limit * (1 + int(usable // lane_window))
+    shared = 1 if lanes else 0         # all the webhooks of the channel are ONE bucket
+    messages = bots * limit * (1 + int(usable // window)) + shared * lane_limit * (1 + int(usable // lane_window))
     reactions = bots * (1 + int(usable // spacing))
     edits = messages
     limits = {
@@ -65,7 +66,7 @@ def capacity(bots: int, *, lanes: int = 0, lane_limit: int = 5, lane_window: flo
     return Capacity(
         bots=bots, lanes=lanes, deadline=deadline, rtt=rtt, messages_in_deadline=messages,
         reactions_in_deadline=reactions, edits_in_deadline=edits,
-        messages_per_minute=bots * limit * 60.0 / window + lanes * lane_limit * 60.0 / lane_window,
+        messages_per_minute=bots * limit * 60.0 / window + shared * lane_limit * 60.0 / lane_window,
         reactions_per_minute=bots * 60.0 / spacing,
         players=int(limits[limiting]), limiting=limiting,
     )

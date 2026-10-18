@@ -134,6 +134,14 @@ una parte esperó su turno → agrega bots auxiliares o reduce lo que el bot man
 - Carga del bot: 13 ms en el peor caso, así que el bot no va justo. Mensajes: 295 por minuto sostenidos. Discord dice que la
   ventana es de 5.0 s (la app usa 5.3 s de margen: ≈ 6 % de capacidad que se podría ganar si hiciera falta).
 
+### Prueba con webhooks (0.4.0): lo que falló
+
+La ráfaga de 50 mensajes (5 bots + 5 webhooks) dio 70 respuestas 429 de webhooks y **12 mensajes perdidos**, y la prueba se
+detuvo. Dos fallos míos: (1) supuse un límite independiente por webhook cuando es compartido por canal (arriba); (2) cuando
+discord.py se rendía tras 5 intentos con un 429, el envío fallaba en vez de planificarse otra vez. Desde la 0.4.1 un mensaje
+que discord.py abandona se vuelve a enviar (por un bot, si el límite de webhooks está lleno) y los 429 de webhooks ya no
+cuentan para detener la prueba (como los de reacciones: se reintentan).
+
 ### Tercera prueba real (0.3.3)
 
 - Ráfaga de 25: último a 624 ms (antes 1139 ms). Sostenido: 301 mensajes por minuto. Carga del bot: 13 ms.
@@ -161,8 +169,11 @@ emisores extra de mensajes:
   turno. El webhook muestra el nombre y la imagen del bot que lo registró.
 - **Solo mensajes.** Los webhooks no pueden reaccionar, responder (reply), usar stickers ni botones: eso sigue en los bots.
   Con muchos webhooks las reacciones pasan a ser el límite (la prueba de rendimiento lo dice).
-- **Su propio límite.** Discord documenta unos 5 mensajes cada 2 s por webhook. La app parte de 5 cada 2.5 s y aprende el
-  valor real de las cabeceras de Discord de cada webhook; si hay un 429 mueve lo planificado detrás.
+- **Un solo límite para todos los webhooks del canal.** Lo mostró la primera prueba real (0.4.0): los 429 de los webhooks
+  llegaron con `ámbito: shared` y las cabeceras dan 5 mensajes cada ~2 s **en total**, no por webhook. Cinco webhooks no
+  dan cinco veces más: dan lo mismo que uno (≈ 2.5 mensajes por segundo, el equivalente a unos 2–3 bots). Desde la 0.4.1 se
+  reparten como un único cupo y la app aprende ese límite de las cabeceras. Que cada bot registre el suyo no estorba, pero
+  tampoco suma.
 - **Edición y borrado** van al webhook que escribió el mensaje. El token del webhook nunca se escribe en los registros.
 - El bot ignora los mensajes de sus propios webhooks (no los confunde con jugadores ni con Tupperbox).
 - Se puede desactivar en *Configuración → Webhooks de envío*.

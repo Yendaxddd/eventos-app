@@ -155,9 +155,9 @@ def test_the_webhook_shows_the_bots_name_without_the_words_discord_refuses():
 # ---- sending through the lanes -------------------------------------------------------------------------------------
 def test_a_burst_that_the_bots_cannot_take_overflows_into_the_webhooks_without_waiting():
     async def scenario():
-        w = await with_lanes(helpers=1)          # 2 bots x 5 + 2 lanes x 5 = 20 messages in one turn
+        w = await with_lanes(helpers=1)          # 2 bots x 5 + ONE shared webhook limit of 5 = 15 messages in one turn
         try:
-            elapsed = await burst(w, 20)
+            elapsed = await burst(w, 15)
             by_hooks = sum(1 for m in w.server.messages.values() if m.get("webhook_id"))
             return elapsed, by_hooks, [r for r in w.server.requests if r["status"] == 429], \
                 [r for r in w.server.webhook_requests if r["status"] == 429]
@@ -165,8 +165,8 @@ def test_a_burst_that_the_bots_cannot_take_overflows_into_the_webhooks_without_w
             await w.__aexit__(None, None, None)
 
     elapsed, by_hooks, bot_429, hook_429 = run(scenario())
-    assert by_hooks == 10 and not bot_429 and not hook_429
-    assert elapsed < 0.5 * WINDOW, elapsed       # without lanes 20 messages need 2 windows
+    assert by_hooks == 5 and not bot_429 and not hook_429
+    assert elapsed < 0.5 * WINDOW, elapsed       # without lanes 15 messages need 2 windows
 
 
 def test_bots_are_preferred_and_lanes_only_take_what_the_bots_have_no_room_for():
@@ -323,12 +323,12 @@ def test_the_performance_test_counts_the_webhooks_and_cleans_up_after_them():
 
     report, left = run(scenario())
     assert (report["bots"], report["lanes"]) == (2, 2)
-    assert report["bursts"][0]["size"] == 20 and report["bursts"][0]["max_wait_ms"] < 100     # all in one turn
+    assert report["bursts"][0]["size"] == 15 and report["bursts"][0]["max_wait_ms"] < 100     # all in one turn
     assert report["reactions"]["failed"] == 0 and report["capacity"]["3"]["lanes"] == 2
     assert left == 0 and report["cleanup"]["deleted"] == report["cleanup"]["requested"]
     text = "\n".join(benchmark.format_report(report))
     assert "2 bots + 2 webhooks" in text and "(webhook)" in text and "mensaje por webhook" in text
-    assert "reacciones siguen necesitando un bot" in text
+    assert "comparten UN solo límite" in text and "reacciones siguen necesitando un bot" in text
 
 
 def test_lanes_add_messages_but_not_reactions_to_the_capacity_model():
@@ -337,7 +337,9 @@ def test_lanes_add_messages_but_not_reactions_to_the_capacity_model():
     with_lanes = capacity.capacity(5, lanes=5, deadline=3.0)
     assert with_lanes.messages_in_deadline > bots.messages_in_deadline
     assert with_lanes.reactions_in_deadline == bots.reactions_in_deadline
-    assert with_lanes.messages_per_minute > 2 * bots.messages_per_minute
+    assert with_lanes.messages_per_minute > 1.3 * bots.messages_per_minute
+    # the webhooks of a channel are ONE bucket: more of them add nothing
+    assert capacity.capacity(5, lanes=1, deadline=3.0).messages_per_minute == with_lanes.messages_per_minute
 
 
 # ---- the app side ----------------------------------------------------------------------------------------------------
@@ -374,3 +376,48 @@ def test_the_bot_ignores_its_own_webhooks_but_not_tupperbox():
     source = Path(bot_module.__file__).read_text(encoding="utf-8")
     assert "message.webhook_id not in self.own_webhook_ids" in source
     assert "msg.webhook_id not in self.own_webhook_ids" in source
+
+
+# ---- all the webhooks of a channel share ONE limit (what a real run showed: 429 with scope "shared") --------------
+def test_five_webhooks_are_paced_as_one_shared_limit_so_none_of_them_gets_a_429():
+    async def scenario():
+        w = await with_lanes(helpers=4)          # 5 bots + 5 webhooks
+        try:
+            elapsed = await burst(w, 40)         # 25 for the bots, 5 for the shared webhook limit, 10 have to wait
+            delivered = len(w.server.messages)
+            return elapsed, delivered, [r for r in w.server.webhook_requests if r["status"] == 429], \
+                [r for r in w.server.requests if r["status"] == 429], len({l._slots is w.pool._lane_slots for l in w.pool.lanes})
+        finally:
+            await w.__aexit__(None, None, None)
+
+    elapsed, delivered, hook_429, bot_429, one_ledger = run(scenario())
+    assert delivered == 40 and not hook_429 and not bot_429 and one_ledger == 1
+
+
+def test_a_message_discordpy_gave_up_on_is_sent_again_not_lost():
+    async def scenario():
+        w = await with_lanes(helpers=0)
+        try:
+            lane = w.pool.lanes[0]
+            calls = []
+
+            async def always_limited(*args, **kwargs):          # discord.py raises this after 5 rate-limited tries
+                calls.append(1)
+                raise discord.HTTPException(type("R", (), {"status": 429, "reason": "x"})(), "The resource is being rate limited.")
+
+            lane.endpoints = lane.endpoints._replace(send_message=always_limited)
+            await burst(w, 12)                       # 5 would go to the bot, 5 to the lane (which fails), 2 wait
+            return len(w.server.messages), len(calls), len(w.server.sent_by("tok-primary"))
+        finally:
+            await w.__aexit__(None, None, None)
+
+    delivered, lane_attempts, by_bot = run(scenario())
+    assert delivered == 12 and by_bot == 12 and lane_attempts >= 1       # every message reached Discord, via the bot
+
+
+def test_webhook_429s_do_not_stop_the_performance_test():
+    counter = benchmark._RateLimitCounter()
+    for text in ("We are being rate limited. POST https://x/webhooks/1/***/ responded with 429. Retrying in 1.00 seconds.",
+                 "We are being rate limited. PUT https://x/channels/1/messages/2/reactions/a/@me responded with 429."):
+        counter.emit(logging.LogRecord("discord.http", logging.WARNING, "", 0, text, (), None))
+    assert (counter.webhooks, counter.reactions, counter.count) == (1, 1, 0)
