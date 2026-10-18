@@ -33,6 +33,8 @@ class Settings:
     ollama_model: str = ""
     # extra bot accounts that share the sending load: [{"token": ..., "name": ..., "user_id": ...}]
     helper_bots: list = field(default_factory=list)
+    # every bot registers one webhook in the event channel and sends through it too (needs "Manage Webhooks")
+    use_webhooks: bool = True
     # names of the last event (ids + server/channel/role names), shown while the bot is off
     event_summary: dict = field(default_factory=dict)
     reset_on_start: bool = False

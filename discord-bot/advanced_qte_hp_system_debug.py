@@ -429,6 +429,7 @@ class AdvancedQTEBot:
         self._hp_update_task = None  # Background task for flushing
         self._hp_update_interval = 0.4  # HP bar edits are coalesced for this long (the sender pool does the pacing)
         self._tupper_seen = {}     # owner user id -> recent Tupperbox webhook messages
+        self.own_webhook_ids = set()  # webhooks this app registered to send faster (not Tupperbox: not players)
         self._tupper_waiters = {}  # owner user id -> futures waiting for the next one
         # ===============================================
         
@@ -2304,7 +2305,7 @@ Your response (1-2 sentences max):"""
             try:
                 recent_msgs = [msg async for msg in channel.history(limit=5)]
                 for msg in recent_msgs:
-                    if msg.author.id == user_id or (hasattr(msg, 'webhook_id') and msg.webhook_id):
+                    if msg.author.id == user_id or (msg.webhook_id and msg.webhook_id not in self.own_webhook_ids):
                         await msg.add_reaction("❗")
                         break
             except:
@@ -2591,7 +2592,7 @@ Your response (1-2 sentences max):"""
 
         @self.bot.event
         async def on_message(message):
-            if message.webhook_id:
+            if message.webhook_id and message.webhook_id not in self.own_webhook_ids:
                 self._note_webhook_message(message)
             if message.author.bot:
                 return

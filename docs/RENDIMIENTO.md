@@ -146,6 +146,30 @@ una parte esperó su turno → agrega bots auxiliares o reduce lo que el bot man
   conexión nueva en Windows. Desde la 0.3.4 el informe dice si cada petición lenta abrió una conexión nueva y cuánto tardó
   en conectar, para confirmarlo.
 
+## Webhooks como carriles de envío (0.4.0)
+
+Registrar más bots es engorroso, así que **cada bot registra un webhook** en el canal del evento y el reparto los usa como
+emisores extra de mensajes:
+
+- **Automático y uno por bot.** Al arrancar y cada vez que cambias el canal del evento, cada bot (el principal y los
+  auxiliares) busca su webhook en ese canal y solo crea uno si no tiene (`data\webhook_lanes.json` recuerda cuál; si se
+  pierde, lo reconoce por nombre). Un canal admite 15 webhooks en total, así que nunca se crean dos por bot. Los webhooks
+  del canal anterior no se borran: si vuelves, se reutilizan.
+- **Permiso.** El bot necesita «Gestionar webhooks» en el canal (la invitación nueva ya lo incluye; a los ya invitados hay que
+  dárselo). Si falta, o el canal ya tiene 15, ese bot sigue enviando como siempre y la pestaña Configuración dice por qué.
+- **Los bots van primero.** Un mensaje va al bot con hueco; los webhooks reciben lo que los bots ya no pueden mandar sin esperar
+  turno. El webhook muestra el nombre y la imagen del bot que lo registró.
+- **Solo mensajes.** Los webhooks no pueden reaccionar, responder (reply), usar stickers ni botones: eso sigue en los bots.
+  Con muchos webhooks las reacciones pasan a ser el límite (la prueba de rendimiento lo dice).
+- **Su propio límite.** Discord documenta unos 5 mensajes cada 2 s por webhook. La app parte de 5 cada 2.5 s y aprende el
+  valor real de las cabeceras de Discord de cada webhook; si hay un 429 mueve lo planificado detrás.
+- **Edición y borrado** van al webhook que escribió el mensaje. El token del webhook nunca se escribe en los registros.
+- El bot ignora los mensajes de sus propios webhooks (no los confunde con jugadores ni con Tupperbox).
+- Se puede desactivar en *Configuración → Webhooks de envío*.
+
+No se pudo comprobar contra el Discord real (solo contra el simulado): los números de arriba se confirman con la prueba de
+rendimiento, que ahora cuenta los webhooks (burst, ritmo y capacidad).
+
 ## Diagnóstico de límites
 
 Para saber cuándo y por qué Discord limita (0.3.2):

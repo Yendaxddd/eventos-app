@@ -75,3 +75,5 @@ discord-bot/config.json
 settings.json
 settings.json.bad
 settings.json.tmp
+discord-bot/data/webhook_lanes.json
+discord-bot/data/sender_owners.json

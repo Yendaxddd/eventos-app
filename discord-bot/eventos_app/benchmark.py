@@ -61,9 +61,10 @@ def _spread(samples: list[float]) -> dict:
 
 
 async def _settle(pool: SenderPool, senders, channel_id: int, say: Callable[[str], None], kind: str = "send") -> None:
-    """Wait until every bot has all its slots back, so a phase isn't slowed by what the previous one used."""
-    window = pool.limits[kind][1]
-    wait = max((s.quiet_in(kind, channel_id, time.monotonic(), window) for s in senders), default=0.0)
+    """Wait until every sender has all its slots back, so a phase isn't slowed by what the previous one used."""
+    now = time.monotonic()
+    wait = max((s.quiet_in(kind, channel_id, now, pool._limits_for(s, kind)[1]) for s in senders
+                if kind == "send" or s.can_react), default=0.0)
     if wait > 0.4:
         say(f"   esperando {wait:.1f} s a que Discord libere los turnos de todos los bots…")
     if wait > 0:
@@ -86,12 +87,13 @@ async def run(pool: SenderPool, channel_id: int, *, profile: str = "rapida", say
     """
     cfg = {**PROFILES[profile], **overrides}
     senders = [s for s in pool._all() if s.ready]
-    bots = len(senders)
+    lanes = sum(1 for s in senders if s.lane)
+    bots = len(senders) - lanes
     limit, window = pool.limits["send"]
     counter = _RateLimitCounter()
     logging.getLogger("discord.http").addHandler(counter)
     created: list[int] = []
-    report: dict = {"profile": profile, "channel_id": channel_id, "bots": bots, "senders": [], "bursts": [],
+    report: dict = {"profile": profile, "channel_id": channel_id, "bots": bots, "lanes": lanes, "senders": [], "bursts": [],
                     "reactions": None, "sustained": None, "aborted": "", "errors": [], "cleanup": None}
     usable: list[dict] = []
     tracer = pool.tracer
@@ -115,9 +117,9 @@ async def run(pool: SenderPool, channel_id: int, *, profile: str = "rapida", say
     async def measure() -> None:
         # 1. each bot on its own: how long does one message / one reaction take when nothing else is going on?
         phase("latencia")
-        say(f"1/4 Latencia de cada bot ({bots})…")
+        say(f"1/4 Latencia de cada emisor ({bots} bots" + (f" + {lanes} webhooks" if lanes else "") + ")…")
         for sender in senders:
-            entry = {"name": sender.name, "rtt_ms": 0, "reaction_ms": 0, "error": ""}
+            entry = {"name": sender.name, "lane": sender.lane, "rtt_ms": 0, "reaction_ms": 0, "error": ""}
             ids, times = [], []
             try:
                 for i in range(cfg["rtt_samples"]):
@@ -128,10 +130,11 @@ async def run(pool: SenderPool, channel_id: int, *, profile: str = "rapida", say
                     sender.reserve("send", channel_id, time.monotonic())  # direct call: tell the pool the slot is used
                     ids.append(int(data["id"]))
                     pool._remember(ids[-1], channel_id, sender)           # so it can be deleted by its author
-                started = time.perf_counter()
-                await sender.endpoints.add_reaction(channel_id, ids[0], "⭐")
-                entry["reaction_ms"] = _ms(time.perf_counter() - started)
-                sender.reserve("react", channel_id, time.monotonic())
+                if sender.can_react:
+                    started = time.perf_counter()
+                    await sender.endpoints.add_reaction(channel_id, ids[0], "⭐")
+                    entry["reaction_ms"] = _ms(time.perf_counter() - started)
+                    sender.reserve("react", channel_id, time.monotonic())
                 entry["rtt_ms"] = _ms(statistics.median(times))
             except (discord.Forbidden, discord.NotFound):
                 entry["error"] = "no puede escribir en el canal"
@@ -139,8 +142,7 @@ async def run(pool: SenderPool, channel_id: int, *, profile: str = "rapida", say
                 entry["error"] = f"Discord respondió {exc.status}"
             created.extend(ids)
             report["senders"].append(entry)
-            say(f"   {sender.name}: " + (f"mensaje {entry['rtt_ms']} ms, reacción {entry['reaction_ms']} ms"
-                                         if not entry["error"] else entry["error"]))
+            say(f"   {sender.name}: " + (_sender_line(entry) if not entry["error"] else entry["error"]))
             if should_stop():
                 return
         usable.extend(e for e in report["senders"] if not e["error"])
@@ -149,13 +151,15 @@ async def run(pool: SenderPool, channel_id: int, *, profile: str = "rapida", say
             return
 
         # 2. bursts: everyone answers at once (each starts with every bot's window completely free)
-        sizes = [min(MAX_MESSAGES // 2, len(usable) * limit),
-                 min(MAX_MESSAGES // 2, len(usable) * (limit + cfg["overflow_per_bot"]))]
+        working = [s for s, e in zip(senders, report["senders"]) if not e["error"]]
+        slots = sum(pool._limits_for(s, "send")[0] for s in working)      # messages that fit in one turn
+        sizes = [min(MAX_MESSAGES // 2, slots),
+                 min(MAX_MESSAGES // 2, slots + len(working) * cfg["overflow_per_bot"])]
         burst_ids: list[int] = []
         for number, size in enumerate(sizes, start=1):
             await _settle(pool, senders, channel_id, say)
             phase(f"ráfaga {number}")
-            fits = "caben en un turno" if size <= len(usable) * limit else "más de los que caben en un turno"
+            fits = "caben en un turno" if size <= slots else "más de los que caben en un turno"
             say(f"2/4 Ráfaga {number}: {size} mensajes a la vez ({fits})…")
             started = time.perf_counter()
             waits_before = pool.admitted
@@ -189,7 +193,8 @@ async def run(pool: SenderPool, channel_id: int, *, profile: str = "rapida", say
         # 3. reactions (✅/❌ under every reply)
         await _settle(pool, senders, channel_id, say, "react")
         phase("reacciones")
-        count = min(60, len(usable) * cfg["reactions_per_bot"], len(burst_ids) * len(EMOJIS))
+        reactors = sum(1 for s in working if s.can_react)
+        count = min(60, reactors * cfg["reactions_per_bot"], len(burst_ids) * len(EMOJIS))
         say(f"3/4 {count} reacciones a la vez…")
         started = time.perf_counter()
         done = []
@@ -237,7 +242,7 @@ async def run(pool: SenderPool, channel_id: int, *, profile: str = "rapida", say
             span = max(1e-6, (stamps[-1] if stamps else seconds) - window)
             per_minute = len(steady) / span * 60 if steady and span > 1 else len(stamps) / seconds * 60
             report["sustained"] = {"seconds": seconds, "messages": len(stamps), "per_minute": round(per_minute),
-                                   "per_bot_per_minute": round(per_minute / len(usable))}
+                                   "per_bot_per_minute": round(per_minute / len(usable))}   # per sender (bot or webhook)
             say(f"   {len(stamps)} mensajes · ritmo estable ≈ {round(per_minute)} por minuto")
 
     try:
@@ -258,14 +263,22 @@ async def run(pool: SenderPool, channel_id: int, *, profile: str = "rapida", say
     report["held_back"] = sum(s["held_back"] for s in pool.snapshot())
     base_spacing = pool.limits["react"][1]
     spacing = statistics.mean(max(base_spacing, s.react_spacing) for s in senders) if senders else base_spacing
-    report["planned"] = {"send_limit": limit, "send_window_ms": _ms(window), "react_spacing_ms": _ms(spacing)}
+    lane_senders = [s for s in senders if s.lane]
+    lane_limit = round(statistics.mean(pool._limits_for(s, "send")[0] for s in lane_senders)) if lane_senders else 0
+    lane_window = statistics.mean(pool._limits_for(s, "send")[1] for s in lane_senders) if lane_senders else 0.0
+    report["planned"] = {"send_limit": limit, "send_window_ms": _ms(window), "react_spacing_ms": _ms(spacing),
+                         "lane_limit": lane_limit, "lane_window_ms": _ms(lane_window)}
     report["trace"] = tracer.summary(seq0)
     report["loop_lag_ms"] = _ms(pool.monitor.worst)
     if usable:
         rtt = statistics.median([e["rtt_ms"] for e in usable]) / 1000 or 0.12
-        report["capacity"] = {
-            f"{d:g}": capacity_model.capacity(len(usable), deadline=d, rtt=rtt, limit=limit, window=window,
-                                              spacing=spacing).as_dict() for d in (2.0, 3.0, 5.0)}
+        usable_bots = sum(1 for e in usable if not e.get("lane"))
+        usable_lanes = len(usable) - usable_bots
+        model = dict(lanes=usable_lanes, lane_limit=lane_limit or 5, lane_window=lane_window or 2.5, rtt=rtt,
+                     limit=limit, window=window, spacing=spacing)
+        report["capacity_inputs"] = {**model, "bots": usable_bots}
+        report["capacity"] = {f"{d:g}": capacity_model.capacity(usable_bots, deadline=d, **model).as_dict()
+                              for d in (2.0, 3.0, 5.0)}
     if on_report is not None:
         try:
             on_report(report)
@@ -298,7 +311,9 @@ def _diagnosis_lines(report: dict) -> list[str]:
                      f"p95 {row['p95_ms']} ms, máx {row['max_ms']} ms")
     for kind, row in trace["observed"].items():
         plan = (f"la app planea {planned.get('send_limit')} cada {planned.get('send_window_ms')} ms" if kind == "send"
-                else f"la app espacia {planned.get('react_spacing_ms')} ms" if kind == "react" else "")
+                else f"la app espacia {planned.get('react_spacing_ms')} ms" if kind == "react"
+                else f"la app planea {planned.get('lane_limit')} cada {planned.get('lane_window_ms')} ms" if kind == "wsend"
+                else "")
         low, high = row["reset_after_ms"]
         lines.append(f"    Discord dice ({KIND_NAMES.get(kind, kind)}): límite {'/'.join(map(str, row['limit'])) or '?'}, "
                      f"reinicio {low}–{high} ms" + (f" · {plan}" if plan else ""))
@@ -328,15 +343,21 @@ def _diagnosis_lines(report: dict) -> list[str]:
     return lines
 
 
+def _sender_line(entry: dict, sep: str = ",") -> str:
+    if entry.get("lane"):
+        return f"mensaje {entry['rtt_ms']} ms (webhook)"
+    return f"mensaje {entry['rtt_ms']} ms{sep} reacción {entry['reaction_ms']} ms"
+
+
 def format_report(report: dict) -> list[str]:
     """Spanish lines for the log panel / a text file."""
-    lines = [f"PRUEBA DE RENDIMIENTO · {report['bots']} bot{'s' if report['bots'] != 1 else ''} "
-             f"· prueba {report['profile']}"]
+    lanes = report.get("lanes", 0)
+    lines = [f"PRUEBA DE RENDIMIENTO · {report['bots']} bot{'s' if report['bots'] != 1 else ''}"
+             + (f" + {lanes} webhook{'s' if lanes != 1 else ''}" if lanes else "") + f" · prueba {report['profile']}"]
     if report.get("aborted"):
         lines.append(f"⚠ Se detuvo: {report['aborted']}")
     for entry in report["senders"]:
-        lines.append(f"  {entry['name']}: " + (f"mensaje {entry['rtt_ms']} ms · reacción {entry['reaction_ms']} ms"
-                                              if not entry["error"] else f"✗ {entry['error']}"))
+        lines.append(f"  {entry['name']}: " + (_sender_line(entry, " ·") if not entry["error"] else f"✗ {entry['error']}"))
     for burst in report["bursts"]:
         lines.append(f"  Ráfaga de {burst['size']} mensajes: primero {burst['first_ms']} ms, mediana "
                      f"{burst['median_ms']} ms, último {burst['last_ms']} ms"
@@ -350,7 +371,7 @@ def format_report(report: dict) -> list[str]:
     if report.get("sustained"):
         s = report["sustained"]
         lines.append(f"  Ritmo sostenido: ≈ {s['per_minute']} mensajes por minuto en total "
-                     f"(≈ {s['per_bot_per_minute']} por bot)")
+                     f"(≈ {s['per_bot_per_minute']} por " + ("emisor, bot o webhook)" if lanes else "bot)"))
     lines.extend(_diagnosis_lines(report))
     for error in dict.fromkeys(report.get("errors") or []):
         lines.append(f"  ✗ {error}")
@@ -368,6 +389,12 @@ def format_report(report: dict) -> list[str]:
             lines.append(f"    en {deadline} s: ≈ {c['players']} jugadores (límite: {c['limiting']})")
         lines.append(f"  Ritmo máximo: ≈ {round(c3['messages_per_minute'])} mensajes y ≈ {round(c3['reactions_per_minute'])} "
                      f"reacciones por minuto en el canal.")
-        per_bot = capacity_model.capacity(1, deadline=3.0, rtt=c3["rtt"]).players
-        lines.append(f"  Cada bot auxiliar que agregues suma ≈ {per_bot} jugadores simultáneos.")
+        inputs = report.get("capacity_inputs") or {}
+        base = {k: v for k, v in inputs.items() if k not in ("bots", "lanes")}
+        base.update(deadline=3.0, rtt=c3["rtt"])
+        with_one = capacity_model.capacity(max(1, inputs.get("bots", 1)) + 1, lanes=inputs.get("lanes", 0), **base).players
+        without = capacity_model.capacity(max(1, inputs.get("bots", 1)), lanes=inputs.get("lanes", 0), **base).players
+        lines.append(f"  Cada bot auxiliar que agregues suma ≈ {with_one - without} jugadores simultáneos.")
+        if lanes:
+            lines.append(f"  Los {lanes} webhooks ya suman mensajes, pero no reacciones: las reacciones siguen necesitando un bot.")
     return lines

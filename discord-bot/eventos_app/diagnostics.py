@@ -28,6 +28,10 @@ from yarl import URL
 
 log = logging.getLogger("eventos_app.diagnostics")
 
+_WEBHOOK_ROUTES = (
+    (re.compile(r"^/webhooks/(\d+)/[^/]+$"), {"POST": "wsend"}),
+    (re.compile(r"^/webhooks/(\d+)/[^/]+/messages/\d+$"), {"PATCH": "wedit", "DELETE": "wdelete"}),
+)
 _ROUTES = (
     (re.compile(r"^/channels/(\d+)/messages/bulk-delete$"), {"POST": "bulk"}),
     (re.compile(r"^/channels/(\d+)/messages/\d+/reactions/.+/@me$"), {"PUT": "react"}),
@@ -35,14 +39,23 @@ _ROUTES = (
     (re.compile(r"^/channels/(\d+)/messages$"), {"POST": "send"}),
 )
 KIND_NAMES = {"send": "mensaje", "react": "reacción", "edit": "edición", "delete": "borrado", "bulk": "borrado en bloque",
+              "wsend": "mensaje por webhook", "wedit": "edición por webhook", "wdelete": "borrado por webhook",
               "other": "otra petición"}
+_TOKEN_IN_URL = re.compile(r"(/webhooks/\d+/)[\w-]+")
 
 
 def classify(method: str, url: str) -> tuple[str, int]:
-    """('send' | 'react' | 'edit' | 'delete' | 'bulk' | 'ping' | 'other', channel id or 0)."""
+    """('send' | 'react' | 'edit' | 'delete' | 'bulk' | 'wsend' | 'wedit' | 'wdelete' | 'ping' | 'other', id).
+
+    The id is the channel's, or the webhook's for the 'w…' kinds (a webhook's token is never kept anywhere).
+    """
     path = re.sub(r"^/api/v\d+", "", URL(url).raw_path)
     if path == "/gateway":
         return "ping", 0
+    for pattern, kinds in _WEBHOOK_ROUTES:
+        match = pattern.match(path)
+        if match and method in kinds:
+            return kinds[method], int(match.group(1))
     for pattern, kinds in _ROUTES:
         match = pattern.match(path)
         if match and method in kinds:
@@ -121,10 +134,13 @@ class RequestTracer:
     # ---- recording ---------------------------------------------------------------------------
     def _finish(self, bot: str, method: str, url: str, ctx, *, response=None, error: BaseException | None = None) -> None:
         try:
-            kind, channel = classify(method, url)
+            kind, ident = classify(method, url)
+            channel = 0 if kind.startswith("w") else ident
             elapsed = time.perf_counter() - getattr(ctx, "started", time.perf_counter())
             event = {"t": round(time.time(), 3), "mono": time.monotonic(), "bot": bot, "kind": kind, "channel": channel,
                      "phase": self.phase, "status": 0, "ms": _ms(elapsed), "conn": getattr(ctx, "conn", "")}
+            if kind.startswith("w"):
+                event["webhook"] = ident
             if getattr(ctx, "connect_ms", None) is not None:
                 event["connect_ms"] = ctx.connect_ms
             if error is not None:
@@ -141,7 +157,7 @@ class RequestTracer:
                 event["global"] = headers.get("X-RateLimit-Global") == "true"
                 event["via"] = bool(headers.get("Via"))
             if event["status"] == 429 and self.context is not None:
-                event["ours"] = self.context(bot, kind, channel)
+                event["ours"] = self.context(bot, kind, ident)
             if kind == "ping":
                 return
             self.seq += 1
@@ -240,6 +256,25 @@ class RequestTracer:
                 conns["new_by_phase"][e["phase"] or "-"] = conns["new_by_phase"].get(e["phase"] or "-", 0) + 1
         return {"requests": len(events), "kinds": kinds, "slowest": slowest, "connections": conns, "limited": limited[:15], "limited_total": len(limited),
                 "observed": observed, "phases": phases}
+
+
+class _RedactWebhookTokens(logging.Filter):
+    """discord.py logs the full URL of a rate-limited request; a webhook's token must not end up in a log file."""
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        try:
+            text = record.getMessage()
+        except Exception:  # noqa: BLE001
+            return True
+        if "/webhooks/" in text:
+            record.msg, record.args = _TOKEN_IN_URL.sub(r"\1***", text), ()
+        return True
+
+
+def install_log_redaction() -> None:
+    logger = logging.getLogger("discord.http")
+    if not any(isinstance(f, _RedactWebhookTokens) for f in logger.filters):
+        logger.addFilter(_RedactWebhookTokens())
 
 
 def explain_429(event: dict, *, limit: int = 5) -> str:

@@ -1,5 +1,13 @@
-"""Spread the bot's outgoing messages and reactions over several Discord bot accounts and remove the
-waiting discord.py adds on its own, so a burst of QTE traffic goes out with as little delay as possible.
+"""Spread the bot's outgoing messages and reactions over several senders and remove the waiting discord.py
+adds on its own, so a burst of QTE traffic goes out with as little delay as possible.
+
+Modules
+-------
+* `ratelimit`   -- the "open" buckets that stop discord.py from blocking (see there for why).
+* `sender`      -- `Sender` (one bot account or one webhook and what it has used) and its HTTP `Endpoints`.
+* `webhooks`    -- registering one webhook per bot in the event channel (the extra "lanes").
+* `diagnostics` -- request tracing, 429 explanations, event-loop lag.
+* `multibot`    -- this file: `SenderPool`, the routing between all of them.
 
 How it works
 ------------
@@ -13,23 +21,14 @@ of touching them all we swap a few methods of the primary bot's `HTTPClient` (`s
 * A send (or reaction) goes to the sender with the most room left in that channel's rate-limit window; the
   slot is reserved immediately so a burst of 10 messages is spread from the first one. If every sender is
   full, the call waits for the first free slot instead of being refused.
+* Webhook lanes (one per bot, registered in the event channel) are extra senders for plain messages: bots are
+  preferred, the lanes take what the bots have no room for. Replies, buttons and stickers always use a bot.
 * Edits and deletes go to the sender that wrote the message (Discord only lets a bot edit its own).
   For sticky channels (the HP bar thread) that knowledge survives restarts.
-* If a helper can't write there (not in the server, no permission), the message goes out through another
-  sender and that helper is skipped for that channel for a while.
+* If a sender can't write there (not in the server, no permission), the message goes out through another
+  sender and that one is skipped for that channel for a while.
 * Messages with buttons always go through the primary: clicks are delivered only to the bot that is
   connected to the gateway.
-
-Why the rate limit objects are replaced
----------------------------------------
-discord.py serialises requests per bucket and, when a request finishes, computes
-`remaining - still_in_flight`; if that is <= 0 it makes the call wait for the whole window to reset (the
-message is already posted, but `await send()` doesn't return). With three or four sends in flight on
-one bot that happens although plenty of quota is left, and the code awaiting the send (QTE timers!) is
-stalled for seconds. The pool already does the pacing, so for the message, reaction and ping routes it
-hands discord.py an "open" bucket that never blocks. Real 429s are still handled by discord.py's own
-retry loop. If a future discord.py no longer exposes `get_ratelimit`, the pool falls back to sending one
-message at a time per bot and channel, which avoids the stall the slow way.
 """
 
 from __future__ import annotations
@@ -46,12 +45,17 @@ from typing import Any, Callable, NamedTuple
 import aiohttp
 import discord
 
-from .diagnostics import LoopMonitor, RequestTracer
+from . import webhooks
+from .diagnostics import LoopMonitor, RequestTracer, install_log_redaction
+from .ratelimit import (  # noqa: F401 - re-exported: the rest of the app and the tests import them from here
+    _OPEN, OPEN_ROUTES, PING_ROUTE, REACT_ROUTE, SEND_ROUTE, WEBHOOK_SEND_ROUTE, OpenBucket, can_open_buckets,
+    open_buckets)
+from .sender import (  # noqa: F401
+    CHANNEL_LIMIT, WARM_CONNECTIONS, WINDOW_SECONDS, Endpoints, Sender, SenderStats, endpoints_of,
+    webhook_endpoints_of)
 
 log = logging.getLogger("eventos_app.multibot")
 
-CHANNEL_LIMIT = 5          # messages per window per channel per bot (Discord: 5 / 5 s)
-WINDOW_SECONDS = 5.3       # a little more than 5 s: network jitter can squeeze requests together
 REACTION_SPACING = 0.30    # Discord: 1 reaction per 250 ms (confirmed by its headers); the rest is margin for network jitter
 MAX_REACTION_SPACING = 0.8 # the most a bot is slowed down after repeated 429s on reactions
 REACT_RETRIES = 4          # extra tries (on top of discord.py's own 5) before a reaction is given up
@@ -61,211 +65,17 @@ BLOCK_SECONDS = 600.0      # skip a helper in a channel it can't write to for th
 OWNER_MEMORY = 20000       # message -> author sender, for edits/deletes
 STICKY_MEMORY = 500        # authors remembered across restarts (HP bar messages)
 WARM_INTERVAL = 8.0        # seconds between keep-alive rounds (aiohttp closes idle connections at 15 s)
-WARM_CONNECTIONS = CHANNEL_LIMIT  # connections kept ready per sender: a burst opens one per message
 BULK_DELETE_MAX = 100      # Discord: bulk delete takes 2 to 100 messages younger than two weeks
 DELETE_PARALLEL = 4        # deletes in flight per sender when they have to go one by one
 WAIT_MEMORY = 2000         # admission waits kept for the performance test
-
-SEND_ROUTE = "POST /channels/{channel_id}/messages"
-REACT_ROUTE = "PUT /channels/{channel_id}/messages/{message_id}/reactions/{emoji}/@me"
-PING_ROUTE = "GET /gateway"
-OPEN_ROUTES = (SEND_ROUTE, REACT_ROUTE, PING_ROUTE)
+WEBHOOK_LIMIT = 5          # messages per window per webhook (Discord: ~5 / 2 s); learned from its headers
+WEBHOOK_WINDOW = 2.5       # a little more than the 2 s Discord documents
 
 INVITE_PERMISSIONS = discord.Permissions(
     view_channel=True, send_messages=True, send_messages_in_threads=True, embed_links=True,
     attach_files=True, read_message_history=True, add_reactions=True, use_external_emojis=True,
+    manage_webhooks=True,   # lets the bot register its own webhook lane in the event channel
 )
-
-
-class Endpoints(NamedTuple):
-    send_message: Callable[..., Any]
-    edit_message: Callable[..., Any]
-    delete_message: Callable[..., Any]
-    add_reaction: Callable[..., Any]
-    ping: Callable[..., Any]
-    bulk_delete: Callable[..., Any] | None = None  # up to 100 messages in one call (needs Manage Messages)
-
-
-def endpoints_of(http) -> Endpoints:
-    async def ping():
-        return await http.request(discord.http.Route("GET", "/gateway"))
-
-    return Endpoints(http.send_message, http.edit_message, http.delete_message, http.add_reaction, ping,
-                     getattr(http, "delete_messages", None))
-
-
-class OpenBucket:
-    """Stands in for discord.py's `Ratelimit`: never blocks (the pool does the pacing)."""
-
-    limit = remaining = 1_000_000
-    outgoing = 0
-    reset_after = 0.0
-    expires = None
-    dirty = True
-
-    async def __aenter__(self) -> "OpenBucket":
-        return self
-
-    async def __aexit__(self, *exc) -> None:
-        return None
-
-    def update(self, response, *, use_clock: bool = False) -> None:
-        return None
-
-    def reset(self) -> None:
-        return None
-
-    def is_expired(self) -> bool:
-        return False
-
-    def is_inactive(self) -> bool:
-        return True
-
-
-_OPEN = OpenBucket()
-
-
-def can_open_buckets(http) -> bool:
-    return callable(getattr(http, "get_ratelimit", None)) and hasattr(discord.http, "Ratelimit")
-
-
-def open_buckets(http) -> None:
-    """Make the message / reaction / ping routes of this HTTP client non-blocking."""
-    original = http.get_ratelimit
-
-    def get_ratelimit(key: str):
-        head = key.rpartition(":")[0]  # "<route or bucket hash>:<major parameters>"
-        if head in OPEN_ROUTES or head in {http._bucket_hashes.get(r) for r in OPEN_ROUTES}:
-            return _OPEN
-        return original(key)
-
-    http.get_ratelimit = get_ratelimit
-
-
-@dataclass
-class SenderStats:
-    sent: int = 0
-    reactions: int = 0
-    edited: int = 0
-    deleted: int = 0
-    held_back: int = 0   # sends that were slowed down by a rate limit
-    failed: int = 0      # calls that had to be redone through another sender
-    pings: int = 0
-
-
-class Sender:
-    """One bot account used for outgoing traffic."""
-
-    def __init__(self, name: str, endpoints: Endpoints, *, primary: bool = False,
-                 client: discord.Client | None = None, user_id: int = 0) -> None:
-        self.name = name
-        self.endpoints = endpoints
-        self.primary = primary
-        self.client = client
-        self.user_id = user_id
-        self.access = ""  # result of the last check on the event channel: "ok", "no" or "?"
-        self.ready = True
-        self.error = ""
-        self.stats = SenderStats()
-        self.penalty_until = 0.0
-        self.react_spacing = 0.0     # learned from Discord's 429s / headers; 0 = use the pool's default
-        self.react_clean = 0         # successful reactions since the last 429
-        self.react_429_at = 0.0
-        self.last_used = 0.0
-        self.latencies: deque[float] = deque(maxlen=200)   # seconds per successful send
-        self._slots: dict[tuple[str, int], deque[float]] = {}
-        self._shifted: dict[tuple[str, int], float] = {}   # total seconds pending slots were pushed back (see push_back)
-        self._blocked: dict[tuple[str, int], float] = {}
-        self._locks: dict[int, asyncio.Lock] = {}
-
-    # -- scheduling -----------------------------------------------------------
-    def channel_lock(self, channel_id: int) -> asyncio.Lock:
-        """Only used when discord.py's buckets can't be opened (see the module docstring)."""
-        lock = self._locks.get(channel_id)
-        if lock is None:
-            lock = self._locks[channel_id] = asyncio.Lock()
-        return lock
-
-    def wait_for(self, kind: str, channel_id: int, now: float, limit: int, window: float) -> float:
-        """Seconds until this sender has a free slot of `kind` in the channel (0 = right now)."""
-        slots = self._slots.setdefault((kind, channel_id), deque())
-        while slots and now - slots[0] >= window:
-            slots.popleft()
-        wait = 0.0 if len(slots) < limit else slots[len(slots) - limit] + window - now
-        return max(wait, self.penalty_until - now, 0.0)
-
-    def reserve(self, kind: str, channel_id: int, at: float) -> None:
-        self._slots.setdefault((kind, channel_id), deque()).append(at)
-
-    def shifted(self, kind: str, channel_id: int) -> float:
-        return self._shifted.get((kind, channel_id), 0.0)
-
-    def push_back(self, kind: str, channel_id: int, now: float, earliest: float) -> float:
-        """Delay every slot that has not come yet so the first of them is not before `earliest`.
-
-        Used after a 429: discord.py retries that request on its own and the retry takes the next bit of quota;
-        the requests planned behind it would collide with it one after another. Returns the seconds moved.
-        """
-        slots = self._slots.get((kind, channel_id))
-        future = [t for t in slots if t > now] if slots else []
-        if not future:
-            return 0.0
-        delta = earliest - min(future)
-        if delta <= 0:
-            return 0.0
-        self._slots[(kind, channel_id)] = deque(t + delta if t > now else t for t in slots)
-        self._shifted[(kind, channel_id)] = self.shifted(kind, channel_id) + delta
-        return delta
-
-    def quiet_in(self, kind: str, channel_id: int, now: float, window: float) -> float:
-        """Seconds until every slot used so far has expired (0 = the sender is completely fresh)."""
-        slots = self._slots.get((kind, channel_id))
-        last = slots[-1] + window - now if slots else 0.0
-        return max(last, self.penalty_until - now, 0.0)
-
-    def load(self, now: float, window: float) -> int:
-        return sum(1 for (kind, _), slots in self._slots.items() if kind == "send" for t in slots if now - t < window)
-
-    def blocked(self, kind: str, channel_id: int, now: float) -> bool:
-        until = self._blocked.get((kind, channel_id))
-        if until is None:
-            return False
-        if now >= until:
-            del self._blocked[(kind, channel_id)]
-            return False
-        return True
-
-    def block(self, channel_id: int, now: float, seconds: float, kinds: tuple[str, ...] = ("send", "react")) -> None:
-        for kind in kinds:
-            self._blocked[(kind, channel_id)] = now + seconds
-
-    def unblock(self, channel_id: int) -> None:
-        for kind in ("send", "react"):
-            self._blocked.pop((kind, channel_id), None)
-
-    # -- measuring ------------------------------------------------------------
-    def percentile(self, p: float) -> float:
-        if not self.latencies:
-            return 0.0
-        ordered = sorted(self.latencies)
-        return ordered[min(len(ordered) - 1, int(p * len(ordered)))]
-
-    async def warm(self) -> None:
-        """Keep a few HTTPS connections open so the next burst doesn't pay for TCP + TLS handshakes."""
-        if not self.ready or time.monotonic() - self.last_used < 3.0:
-            return
-        results = await asyncio.gather(*(self.endpoints.ping() for _ in range(WARM_CONNECTIONS)), return_exceptions=True)
-        self.stats.pings += sum(1 for r in results if not isinstance(r, BaseException))
-
-    def snapshot(self) -> dict:
-        return {
-            "name": self.name, "primary": self.primary, "ready": self.ready, "error": self.error,
-            "user_id": self.user_id, "sent": self.stats.sent, "reactions": self.stats.reactions,
-            "edited": self.stats.edited, "held_back": self.stats.held_back, "failed": self.stats.failed,
-            "pings": self.stats.pings, "blocked_channels": len({c for (_, c) in self._blocked}),
-            "access": self.access, "react_spacing_ms": round(self.react_spacing * 1000),
-            "p50_ms": round(self.percentile(0.5) * 1000), "p95_ms": round(self.percentile(0.95) * 1000),
-        }
 
 
 def _reset_files(params) -> None:
@@ -277,7 +87,7 @@ def _reset_files(params) -> None:
             pass
 
 
-def has_components(params) -> bool:
+def _payload(params) -> dict:
     payload = getattr(params, "payload", None)
     if payload is None:
         for part in getattr(params, "multipart", None) or ():
@@ -287,7 +97,17 @@ def has_components(params) -> bool:
                 except (ValueError, TypeError):
                     payload = None
                 break
-    return bool(payload and payload.get("components"))
+    return payload or {}
+
+
+def has_components(params) -> bool:
+    return bool(_payload(params).get("components"))
+
+
+def needs_a_bot(params) -> bool:
+    """Replies, stickers and polls cannot be sent by a webhook; buttons need the bot that receives the clicks."""
+    payload = _payload(params)
+    return any(payload.get(key) for key in ("components", "message_reference", "sticker_ids", "poll"))
 
 
 _UNREACHABLE = (aiohttp.ClientError, asyncio.TimeoutError, OSError)
@@ -312,6 +132,12 @@ class SenderPool:
         self.admitted = 0                                  # how many sends/reactions went through `_admit`
         self.waits: deque[float] = deque(maxlen=WAIT_MEMORY)   # seconds each one waited for its turn
         self._no_bulk: set[int] = set()                    # users that may not bulk delete in this server
+        self.lanes: list[Sender] = []                      # webhook lanes in the event channel (see `ensure_lanes`)
+        self.lane_ids: set[int] = set()                    # their webhook ids: the bot must not take them for players
+        self.lane_channel = 0
+        self.webhooks_enabled = True
+        self.lane_store = webhooks.LaneStore()
+        self.primary_identity: Callable[[], Any] | None = None   # async () -> (display name, avatar bytes | None)
         self.trace_file: Path | None = None                # where every request is logged (set before `install`)
         self.tracer = RequestTracer()
         self.tracer.context = self._context
@@ -325,6 +151,7 @@ class SenderPool:
         if self._http is not None:
             return
         self._http = primary_http
+        install_log_redaction()
         self._open = can_open_buckets(primary_http)
         if self._open:
             open_buckets(primary_http)
@@ -411,6 +238,8 @@ class SenderPool:
         if sender in self.helpers:
             self.helpers.remove(sender)
         sender.ready = False
+        for lane in [l for l in self.lanes if l.owner is sender]:
+            self._drop_lane(lane)
         for message_id in [m for m, s in self._owners.items() if s is sender]:
             del self._owners[message_id]
         if sender.client is not None:
@@ -425,15 +254,108 @@ class SenderPool:
             self._task = None
         self.save_owners()
         self.uninstall()
+        self.lanes.clear()
+        self.lane_ids.clear()
         for sender in list(self.helpers):
             await self.remove_helper(sender)
 
+    # ---- webhook lanes -------------------------------------------------------------
+    def _http_of(self, owner: Sender):
+        return self._http if owner.primary else owner.client.http
+
+    async def _identity(self, owner: Sender) -> tuple[str, bytes | None]:
+        """The name and picture a bot's webhook shows: the bot's own."""
+        try:
+            if owner.primary:
+                if self.primary_identity is not None:
+                    return await self.primary_identity()
+                return owner.name.rsplit("#", 1)[0], None
+            user = owner.client.user
+            try:
+                return user.display_name, await user.display_avatar.replace(size=128, format="png").read()
+            except Exception:  # noqa: BLE001 - no picture is better than no lane
+                return user.display_name, None
+        except Exception:  # noqa: BLE001
+            return owner.name.rsplit("#", 1)[0], None
+
+    async def add_lane(self, owner: Sender, channel_id: int) -> dict:
+        """Register (or find) the one webhook of `owner` in `channel_id` and start using it. Never raises."""
+        existing = next((l for l in self.lanes if l.owner is owner and l.channel == channel_id), None)
+        if existing is not None:
+            return {"bot": owner.name, "ok": True, "reason": ""}
+        try:
+            name, avatar = await self._identity(owner)
+            info = await webhooks.register(self._http_of(owner), channel_id=channel_id, user_id=owner.user_id,
+                                           display_name=name, avatar=avatar, store=self.lane_store)
+        except webhooks.LaneError as exc:
+            owner.lane_note = str(exc)
+        except Exception as exc:  # noqa: BLE001 - a lane is a bonus: its failure must never hurt the bot
+            log.exception("could not register a webhook for %s", owner.name)
+            owner.lane_note = f"{type(exc).__name__}: {exc}"
+        else:
+            lane = Sender(f"{owner.name} · webhook", webhook_endpoints_of(self._http_of(owner), info.webhook_id, info.token),
+                          user_id=info.webhook_id)
+            lane.lane, lane.channel, lane.webhook_id, lane.owner = True, channel_id, info.webhook_id, owner
+            lane.can_react = False
+            lane.send_limit, lane.send_window = WEBHOOK_LIMIT, WEBHOOK_WINDOW
+            self.lanes.append(lane)
+            self.lane_ids.add(info.webhook_id)
+            owner.lane_note = "ok" if not info.created else "ok (webhook creado)"
+            self._changed()
+            return {"bot": owner.name, "ok": True, "reason": "", "created": info.created}
+        self._changed()
+        return {"bot": owner.name, "ok": False, "reason": owner.lane_note}
+
+    async def ensure_lanes(self, channel_id: int) -> list[dict]:
+        """Webhook lanes for this channel: one per bot (never more: a channel holds 15 webhooks in total).
+
+        Call it whenever the event channel changes. The webhooks of the previous channel are left where they are
+        (they are found again if you come back); only this pool stops using them.
+        """
+        channel_id = int(channel_id or 0)
+        self.drop_lanes()
+        self.lane_channel = channel_id
+        if not self.webhooks_enabled or not channel_id:
+            for bot in self._bots():
+                bot.lane_note = ""
+            self._changed()
+            return []
+        owners = [b for b in self._bots() if b.ready and b.access != "no"]
+        for bot in self._bots():
+            if bot not in owners:
+                bot.lane_note = "no ve el canal"
+        return list(await asyncio.gather(*(self.add_lane(o, channel_id) for o in owners)))
+
+    def drop_lanes(self) -> None:
+        for lane in list(self.lanes):
+            self._drop_lane(lane)
+
+    def _drop_lane(self, lane: Sender) -> None:
+        lane.ready = False
+        if lane in self.lanes:
+            self.lanes.remove(lane)
+        self.lane_ids.discard(lane.webhook_id)
+        self._changed()
+
+    def _lane_gone(self, lane: Sender) -> None:
+        """Discord says this webhook does not exist (deleted by hand): forget it and register again next time."""
+        lane.error = "el webhook ya no existe"
+        if lane.owner is not None:
+            lane.owner.lane_note = "el webhook fue borrado: se registrará de nuevo al cambiar de canal"
+            self.lane_store.forget(lane.channel, lane.owner.user_id)
+        self._drop_lane(lane)
+
     # ---- routing -----------------------------------------------------------------
-    def _all(self) -> list[Sender]:
+    def _bots(self) -> list[Sender]:
         return ([self.primary] if self.primary else []) + self.helpers
+
+    def _all(self) -> list[Sender]:
+        return self._bots() + self.lanes
 
     def _limits_for(self, sender: Sender, kind: str) -> tuple[int, float]:
         limit, window = self.limits[kind]
+        if kind == "send":    # a webhook lane has limits of its own
+            limit, window = sender.send_limit or limit, sender.send_window or window
         if kind == "react":   # a bot that got 429s on reactions is spaced out more (see `_learn`)
             window = max(window, sender.react_spacing)
         return limit, window
@@ -443,9 +365,12 @@ class SenderPool:
         for sender in self._all():
             if sender in exclude or not sender.ready or sender.blocked(kind, channel_id, now):
                 continue
+            if (sender.channel and sender.channel != channel_id) or (kind == "react" and not sender.can_react):
+                continue
             limit, window = self._limits_for(sender, kind)
             wait = round(sender.wait_for(kind, channel_id, now, limit, window), 3)
-            key = (wait, sender.load(now, self.limits["send"][1]), sender.last_used, sender.primary)
+            # soonest first; on a tie bots before lanes, then the least used, helpers before the main bot
+            key = (wait, sender.lane, sender.load(now, self.limits["send"][1]), sender.last_used, sender.primary)
             if best_key is None or key < best_key:
                 best, best_key = sender, key
         return best
@@ -468,10 +393,16 @@ class SenderPool:
 
     def _context(self, bot: str, kind: str, channel_id: int) -> dict:
         """What this program had planned for a bot when Discord answered 429 (for the diagnostics)."""
-        sender = next((s for s in self._all() if s.name == bot), None)
-        if sender is None or kind not in ("send", "react"):
-            return {}
-        window = self.limits["send"][1] if kind == "send" else 1.0
+        if kind == "wsend":     # `channel_id` is the webhook's id for these
+            sender = next((l for l in self.lanes if l.webhook_id == channel_id), None)
+            if sender is None:
+                return {}
+            kind, channel_id, window = "send", sender.channel, self._limits_for(sender, "send")[1]
+        else:
+            sender = next((s for s in self._bots() if s.name == bot), None)
+            if sender is None or kind not in ("send", "react"):
+                return {}
+            window = self.limits["send"][1] if kind == "send" else 1.0
         now = time.monotonic()
         slots = sender._slots.get((kind, channel_id), ())
         return {"reservas": sum(1 for t in slots if now - window < t <= now), "ventana_s": window}
@@ -479,9 +410,12 @@ class SenderPool:
     def _learn(self, event: dict) -> None:
         """React to what Discord answers: after a 429 move the pending requests out of the way, and adapt the
         spacing of reactions (wider after an episode of 429s, narrower after many clean reactions)."""
+        if event["kind"] == "wsend":
+            self._learn_lane(event)
+            return
         if event["kind"] not in ("react", "send"):
             return
-        sender = next((s for s in self._all() if s.name == event["bot"]), None)
+        sender = next((s for s in self._bots() if s.name == event["bot"]), None)
         if sender is None:
             return
         now = time.monotonic()
@@ -507,6 +441,24 @@ class SenderPool:
                 sender.react_spacing = max(base, sender.react_spacing * 0.92)
                 sender.react_clean = 0
 
+    def _learn_lane(self, event: dict) -> None:
+        """A webhook's limits are not the bots': take them from what Discord says about this very webhook."""
+        lane = next((l for l in self.lanes if l.webhook_id == event.get("webhook")), None)
+        if lane is None:
+            return
+        now = time.monotonic()
+        if event["status"] == 429:
+            wait = event.get("reset_after") or 1.0
+            lane.push_back("send", lane.channel, now, now + wait + 0.05)
+            if now - lane.send_429_at > 1.0:      # one widening per episode of 429s
+                lane.send_window = min(WINDOW_SECONDS, (lane.send_window or WEBHOOK_WINDOW) * 1.25)
+            lane.send_429_at = now
+        elif 200 <= event["status"] < 300 and event.get("limit"):
+            lane.send_limit = max(1, int(event["limit"]))
+            remaining, reset = event.get("remaining"), event.get("reset_after")
+            if remaining is not None and reset and event["limit"] - remaining <= 1:   # the first message of a window
+                lane.send_window = min(WINDOW_SECONDS, max(1.0, reset + 0.2))
+
     def _remember(self, message_id: int, channel_id: int, sender: Sender) -> None:
         self._owners[message_id] = sender
         self._owners.move_to_end(message_id)
@@ -525,7 +477,7 @@ class SenderPool:
             await self._admit(self.primary, "send", channel_id)
             return await self._send_via(self.primary, channel_id, params)
 
-        tried: set[Sender] = set()
+        tried: set[Sender] = set(self.lanes) if needs_a_bot(params) else set()
         last_error: BaseException | None = None
         redone: set[Sender] = set()
         while True:
@@ -550,11 +502,19 @@ class SenderPool:
                     redone.add(sender)
                     _reset_files(params)
                     continue
-            except (discord.Forbidden, discord.NotFound) as exc:
-                if sender.primary:
+            except discord.HTTPException as exc:
+                # a sender that cannot write here is skipped; a webhook that Discord refuses (deleted, bad request)
+                # is skipped too. Anything else (e.g. discord.py giving up on a 429) is the caller's to handle.
+                refused = isinstance(exc, (discord.Forbidden, discord.NotFound)) or (sender.lane and exc.status in (400, 401))
+                if sender.primary or not refused:
                     raise
-                sender.block(channel_id, time.monotonic(), BLOCK_SECONDS)
-                log.warning("helper %s cannot write in channel %s (%s); skipping it there", sender.name, channel_id, exc)
+                if exc.status != 400:
+                    sender.block(channel_id, time.monotonic(), BLOCK_SECONDS)
+                if sender.lane and exc.status in (401, 404):
+                    self._lane_gone(sender)
+                log.warning("%s cannot write in channel %s (%s); skipping it there",
+                            "webhook of " + sender.owner.name if sender.lane and sender.owner else "helper " + sender.name,
+                            channel_id, exc.status)
                 last_error = exc
             except _UNREACHABLE as exc:
                 if sender.primary:
@@ -629,6 +589,7 @@ class SenderPool:
         if owner is None and message_id in self._sticky:
             owner = self._by_user_id(self._sticky[message_id])
         rest = [s for s in self._all() if s.ready and s is not owner]
+        rest.sort(key=lambda s: s.lane)          # bots first: a lane only knows its own messages
         return ([owner] if owner and owner.ready else []) + rest
 
     async def _route_edit(self, channel_id, message_id, *, params):
@@ -636,8 +597,10 @@ class SenderPool:
         for sender in self._order_for(message_id):
             try:
                 data = await sender.endpoints.edit_message(channel_id, message_id, params=params)
-            except discord.Forbidden as exc:  # not the author: try the next sender
-                last = exc
+            except (discord.Forbidden, discord.NotFound) as exc:
+                if isinstance(exc, discord.NotFound) and not sender.lane:
+                    raise                           # the message itself is gone
+                last = exc                          # not the author (a lane answers 404 for foreign messages): next
                 _reset_files(params)
                 continue
             sender.stats.edited += 1
@@ -650,7 +613,9 @@ class SenderPool:
         for sender in self._order_for(message_id):
             try:
                 result = await sender.endpoints.delete_message(channel_id, message_id, reason=reason)
-            except discord.Forbidden as exc:
+            except (discord.Forbidden, discord.NotFound) as exc:
+                if isinstance(exc, discord.NotFound) and not sender.lane:
+                    raise
                 last = exc
                 continue
             sender.stats.deleted += 1
@@ -745,7 +710,7 @@ class SenderPool:
         return [s.snapshot() for s in self._all()]
 
     def ready_count(self) -> int:
-        return sum(1 for s in self._all() if s.ready)
+        return sum(1 for s in self._bots() if s.ready)
 
     def _changed(self) -> None:
         if self.on_change is not None:

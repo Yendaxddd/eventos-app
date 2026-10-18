@@ -28,11 +28,18 @@ def _json(data, status: int = 200, headers: dict | None = None) -> web.Response:
 class FakeDiscord:
     def __init__(self, *, limit: int = 5, window: float = 1.0, latency: float = 0.02,
                  reaction_window: float = 0.25, delete_limit: int = 0, delete_window: float = 1.0,
-                 reaction_jitter: float = 0.0) -> None:
+                 reaction_jitter: float = 0.0, webhook_limit: int = 5, webhook_window: float = 0.4,
+                 max_webhooks: int = 15) -> None:
         self.limit, self.window, self.latency = limit, window, latency
         self.reaction_window = reaction_window
         self.reaction_jitter = reaction_jitter   # extra random network delay on reactions, like a real connection
         self._rng = random.Random(7)
+        self.webhook_limit, self.webhook_window, self.max_webhooks = webhook_limit, webhook_window, max_webhooks
+        self.can_manage_webhooks: set[str] = set()        # tokens that may create / list webhooks
+        self.webhooks: dict[int, dict] = {}                # id -> {id, token, channel, name, creator(user id)}
+        self.webhook_requests: list[dict] = []             # every execute attempt, including 429s
+        self._webhook_buckets: dict[int, list] = {}
+        self._webhook_ids = itertools.count(9000)
         self.delete_limit, self.delete_window = delete_limit, delete_window  # 0 = deletes are not limited
         self.manage: set[str] = set()          # tokens with Manage Messages (delete others' messages, bulk delete)
         self.delete_attempts: list[tuple[str, int]] = []   # (token, status)
@@ -80,6 +87,12 @@ class FakeDiscord:
         app.router.add_patch("/api/v10/channels/{cid}/messages/{mid}", self._edit)
         app.router.add_delete("/api/v10/channels/{cid}/messages/{mid}", self._delete)
         app.router.add_post("/api/v10/channels/{cid}/messages/bulk-delete", self._bulk_delete)
+        app.router.add_get("/api/v10/channels/{cid}/webhooks", self._list_webhooks)
+        app.router.add_post("/api/v10/channels/{cid}/webhooks", self._create_webhook)
+        app.router.add_get("/api/v10/webhooks/{wid}/{wtoken}", self._get_webhook)
+        app.router.add_post("/api/v10/webhooks/{wid}/{wtoken}", self._execute_webhook)
+        app.router.add_patch("/api/v10/webhooks/{wid}/{wtoken}/messages/{mid}", self._edit_webhook_message)
+        app.router.add_delete("/api/v10/webhooks/{wid}/{wtoken}/messages/{mid}", self._delete_webhook_message)
         self._runner = web.AppRunner(app)
         await self._runner.setup()
         site = web.TCPSite(self._runner, "127.0.0.1", 0)
@@ -239,8 +252,11 @@ class FakeDiscord:
 
     def _message_json(self, mid: int) -> dict:
         m = self.messages[mid]
-        uid = self.bots[m["author_token"]]
+        webhook_id = m.get("webhook_id")
+        uid = webhook_id if webhook_id else self.bots[m["author_token"]]
+        extra = {"webhook_id": str(webhook_id)} if webhook_id else {}
         return {
+            **extra,
             "id": str(mid), "channel_id": str(m["channel"]), "content": m["content"],
             "author": {"id": str(uid), "username": f"bot{uid}", "discriminator": "0", "avatar": None, "bot": True},
             "timestamp": "2026-01-01T00:00:00+00:00", "edited_timestamp": None, "tts": False,
@@ -317,4 +333,111 @@ class FakeDiscord:
             return self._error(400, 50016, "Provide a message count between 2 and 100")
         for mid in ids:
             self.messages.pop(mid, None)
+        return web.Response(status=204)
+
+    # ---- webhooks --------------------------------------------------------------------------------
+    @staticmethod
+    def _hook_json(hook: dict, with_token: bool = True) -> dict:
+        data = {"id": str(hook["id"]), "type": 1, "channel_id": str(hook["channel"]), "name": hook["name"],
+                "user": {"id": str(hook["creator"]), "username": f"bot{hook['creator']}", "discriminator": "0",
+                         "avatar": None, "bot": True}}
+        if with_token:
+            data["token"] = hook["token"]
+        return data
+
+    async def _list_webhooks(self, request: web.Request) -> web.Response:
+        token = self._token(request)
+        if token is None:
+            return self._error(401, 0, "401: Unauthorized")
+        if token not in self.can_manage_webhooks:
+            return self._error(403, 50013, "Missing Permissions")
+        channel = int(request.match_info["cid"])
+        return _json([self._hook_json(h) for h in self.webhooks.values() if h["channel"] == channel])
+
+    async def _create_webhook(self, request: web.Request) -> web.Response:
+        token = self._token(request)
+        if token is None:
+            return self._error(401, 0, "401: Unauthorized")
+        if token not in self.can_manage_webhooks:
+            return self._error(403, 50013, "Missing Permissions")
+        channel = int(request.match_info["cid"])
+        payload = await request.json()
+        if sum(1 for h in self.webhooks.values() if h["channel"] == channel) >= self.max_webhooks:
+            return self._error(400, 30007, "Maximum number of webhooks reached (15)")
+        hook = {"id": next(self._webhook_ids), "token": f"hooktoken{next(self._ids)}", "channel": channel,
+                "name": payload.get("name", ""), "creator": self.bots[token], "avatar": bool(payload.get("avatar"))}
+        self.webhooks[hook["id"]] = hook
+        return _json(self._hook_json(hook))
+
+    def _hook(self, request: web.Request) -> dict | None:
+        hook = self.webhooks.get(int(request.match_info["wid"]))
+        return hook if hook and hook["token"] == request.match_info["wtoken"] else None
+
+    async def _get_webhook(self, request: web.Request) -> web.Response:
+        hook = self._hook(request)
+        if hook is None:
+            return self._error(404, 10015, "Unknown Webhook")
+        return _json(self._hook_json(hook, with_token=False))
+
+    async def _execute_webhook(self, request: web.Request) -> web.Response:
+        self._note_connection(request)
+        await asyncio.sleep(self.latency)
+        content, files, payload = "", [], {}
+        if request.content_type.startswith("multipart/"):
+            reader = await request.multipart()
+            async for part in reader:
+                data = await part.read()
+                if part.name == "payload_json":
+                    payload = json.loads(data)
+                    content = payload.get("content", "")
+                else:
+                    files.append({"name": part.filename, "size": len(data)})
+        else:
+            payload = await request.json()
+            content = payload.get("content", "")
+        hook = self._hook(request)
+        now = time.monotonic()
+        entry = {"t": now, "webhook": int(request.match_info["wid"]), "status": 200}
+        self.webhook_requests.append(entry)
+        if hook is None:
+            entry["status"] = 404
+            return self._error(404, 10015, "Unknown Webhook")
+        bucket = self._webhook_buckets.get(hook["id"])
+        if bucket is None or now - bucket[0] >= self.webhook_window:
+            bucket = self._webhook_buckets[hook["id"]] = [now, 0]
+        headers = {"X-RateLimit-Limit": str(self.webhook_limit), "X-RateLimit-Bucket": f"wh-{hook['id']}"}
+        if bucket[1] >= self.webhook_limit:
+            retry = max(0.01, self.webhook_window - (now - bucket[0]))
+            entry["status"] = 429
+            headers.update({"Retry-After": f"{retry:.3f}", "X-RateLimit-Remaining": "0", "Via": "1.1 fake-edge",
+                            "X-RateLimit-Reset-After": f"{retry:.3f}", "X-RateLimit-Scope": "shared"})
+            return _json({"message": "You are being rate limited.", "retry_after": retry, "global": False},
+                         status=429, headers=headers)
+        bucket[1] += 1
+        reset_after = self.webhook_window - (now - bucket[0])
+        headers.update({"X-RateLimit-Remaining": str(self.webhook_limit - bucket[1]),
+                        "X-RateLimit-Reset-After": f"{reset_after:.3f}"})
+        mid = next(self._ids)
+        self.messages[mid] = {"id": mid, "channel": hook["channel"], "author_token": None, "webhook_id": hook["id"],
+                              "content": content, "files": files, "components": payload.get("components")}
+        entry["message_id"] = mid
+        return _json(self._message_json(mid), headers=headers)
+
+    async def _edit_webhook_message(self, request: web.Request) -> web.Response:
+        hook = self._hook(request)
+        msg = self.messages.get(int(request.match_info["mid"]))
+        if hook is None or msg is None or msg.get("webhook_id") != hook["id"]:
+            return self._error(404, 10008, "Unknown Webhook Message")
+        payload = await request.json()
+        msg["content"] = payload.get("content", msg["content"])
+        msg["edited_by"] = f"webhook:{hook['id']}"
+        return _json(self._message_json(msg["id"]))
+
+    async def _delete_webhook_message(self, request: web.Request) -> web.Response:
+        hook = self._hook(request)
+        mid = int(request.match_info["mid"])
+        msg = self.messages.get(mid)
+        if hook is None or msg is None or msg.get("webhook_id") != hook["id"]:
+            return self._error(404, 10008, "Unknown Webhook Message")
+        del self.messages[mid]
         return web.Response(status=204)

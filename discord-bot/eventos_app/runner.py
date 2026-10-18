@@ -17,7 +17,7 @@ from typing import Awaitable, Callable
 
 import discord
 
-from . import benchmark, console_bridge, diagnostics, multibot, paths
+from . import benchmark, console_bridge, diagnostics, multibot, paths, webhooks
 from .settings import Settings
 
 log = logging.getLogger("eventos_app")
@@ -245,6 +245,7 @@ class BotRunner:
         if self._pool is not None:
             self._pool.sticky_channels = {app.hp_bar_thread_id} if app.hp_bar_thread_id else set()
             await self._pool.check_access(channel_id)
+            await self._sync_lanes()          # a new channel: every bot registers its one webhook there
         return {"ok": True, "thread": result["thread"].name, "created": result["created"]}
 
     def apply_event(self, channel_id: int, player_role_id: int | None = None,
@@ -275,7 +276,7 @@ class BotRunner:
             return "El bot principal todavía no está listo."
         self._helper_errors.pop(token, None)
         try:
-            await pool.add_helper(token)
+            sender = await pool.add_helper(token)
         except discord.LoginFailure:
             message = "Discord rechazó este token."
         except ValueError as exc:
@@ -286,6 +287,8 @@ class BotRunner:
             app = self._app
             if app.qte_channel_id:
                 await pool.check_access(app.qte_channel_id)
+                if pool.webhooks_enabled and sender.access != "no":
+                    await pool.add_lane(sender, app.qte_channel_id)
             return ""
         self._helper_errors[token] = message
         console_bridge.console.print(f"[yellow]⚠ Bot auxiliar no disponible: {message}[/yellow]")
@@ -370,6 +373,19 @@ class BotRunner:
         pool.tracer.listeners.append(self._on_trace)
         pool.on_lag = self._on_lag
         pool.sticky_channels = {app.hp_bar_thread_id} if app.hp_bar_thread_id else set()
+        pool.webhooks_enabled = settings.use_webhooks
+        pool.lane_store = webhooks.LaneStore(paths.data_dir() / "webhook_lanes.json")
+        app.own_webhook_ids = pool.lane_ids      # the bot must not take its own webhooks for players or Tupperbox
+
+        async def identity():
+            user = app.bot.user
+            try:
+                avatar = await user.display_avatar.replace(size=128, format="png").read()
+            except Exception:  # noqa: BLE001 - a webhook without a picture is fine
+                avatar = None
+            return user.display_name, avatar
+
+        pool.primary_identity = identity
         pool.install(app.bot.http, str(app.bot.user), app.bot.user.id)
         pool.start_background()  # keeps HTTPS connections warm for the next burst
         for token in settings.helper_tokens():
@@ -379,6 +395,35 @@ class BotRunner:
             console_bridge.console.print(
                 f"[green]✓ {online} bot{'s' if online != 1 else ''} auxiliar{'es' if online != 1 else ''} "
                 f"compartiendo el envío de mensajes[/green]")
+        await self._sync_lanes()
+
+    # ---- webhook lanes (one webhook per bot in the event channel) ---------------------
+    async def _sync_lanes(self, enabled: bool | None = None) -> dict:
+        """(Re)register the webhooks for the current event channel and say how it went."""
+        pool, app = self._pool, self._app
+        if pool is None or app is None:
+            return {"ok": False, "error": "El bot principal todavía no está listo."}
+        if enabled is not None:
+            pool.webhooks_enabled = enabled
+        if not pool.webhooks_enabled:
+            await pool.ensure_lanes(0)
+            return {"ok": True, "lanes": 0, "failed": [], "disabled": True}
+        if not app.qte_channel_id:
+            return {"ok": False, "error": "Elige primero el canal del evento (Configuración → Evento)."}
+        results = await pool.ensure_lanes(app.qte_channel_id)
+        good = [r for r in results if r["ok"]]
+        bad = [r for r in results if not r["ok"]]
+        out = console_bridge.console
+        if good:
+            out.print(f"[green]✓ {len(good)} webhook{'s' if len(good) != 1 else ''} de envío listo"
+                      f"{'s' if len(good) != 1 else ''} en el canal del evento (1 por bot)[/green]")
+        for item in bad:
+            out.print(f"[yellow]⚠ Sin webhook para {diagnostics.short_name(item['bot'])}: {item['reason']}[/yellow]")
+        return {"ok": True, "lanes": len(good), "failed": bad}
+
+    def refresh_lanes(self, enabled: bool | None = None) -> concurrent.futures.Future:
+        """Register the webhooks again (e.g. after granting «Gestionar webhooks») or switch them on/off now."""
+        return self.submit(lambda: self._sync_lanes(enabled))
 
     def _on_trace(self, event: dict) -> None:
         """Explain each 429 in the log (at most one line per bot and kind every 3 s; the file has them all)."""

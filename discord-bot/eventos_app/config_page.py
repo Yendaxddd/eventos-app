@@ -52,14 +52,16 @@ class ConfigPage(ctk.CTkFrame):
             "ollama_model": tk.StringVar(value=s.ollama_model),
             "reset_on_start": tk.BooleanVar(value=s.reset_on_start),
             "hotkeys_enabled": tk.BooleanVar(value=s.hotkeys_enabled),
+            "use_webhooks": tk.BooleanVar(value=s.use_webhooks),
             "auto_start": tk.BooleanVar(value=s.auto_start),
         }
         self._build_token(0)
         self._build_event(1)
         self._build_helpers(2)
-        self._build_performance(3)
-        self._build_startup(4)
-        self._build_ai(5)
+        self._build_webhooks(3)
+        self._build_performance(4)
+        self._build_startup(5)
+        self._build_ai(6)
 
         bar = ctk.CTkFrame(self, fg_color="transparent")
         bar.grid(row=1, column=0, sticky="ew", padx=20, pady=14)
@@ -466,6 +468,59 @@ class ConfigPage(ctk.CTkFrame):
 
         self.app.watch(future, done, failed)
 
+    # ---- webhooks -----------------------------------------------------------------------
+    def _build_webhooks(self, row: int) -> None:
+        box = self._section("Webhooks de envío (más mensajes sin más bots)", row)
+        self._note(box, 1, "Cada bot registra UN webhook en el canal del evento (se hace solo, y de nuevo al cambiar de "
+                           "canal). Los webhooks tienen su propio límite de Discord, así que sacan mensajes extra cuando los "
+                           "bots ya no tienen cupo. No mandan reacciones, respuestas ni botones: eso sigue siendo de los bots. "
+                           "Necesitan el permiso «Gestionar webhooks» del bot en ese canal (un canal admite 15 webhooks).")
+        ctk.CTkCheckBox(box, text="Usar un webhook por bot como carril de envío extra", variable=self.vars["use_webhooks"],
+                        fg_color=ACCENT, hover_color=ACCENT).grid(row=2, column=0, columnspan=3, padx=18, pady=(2, 6), sticky="w")
+        self.lanes_btn = ctk.CTkButton(box, text="Aplicar ahora", width=130, height=32, fg_color=ACCENT,
+                                       command=self._apply_lanes)
+        self.lanes_btn.grid(row=2, column=3, padx=(0, 18), pady=(2, 6), sticky="e")
+        self.lanes_status = ctk.CTkLabel(box, text="", text_color=MUTED, anchor="w", justify="left", wraplength=640)
+        self.lanes_status.grid(row=3, column=0, columnspan=4, padx=18, pady=(0, 12), sticky="w")
+
+    def _apply_lanes(self) -> None:
+        try:
+            future = self.app.runner.refresh_lanes(bool(self.vars["use_webhooks"].get()))
+        except RuntimeError as exc:
+            self.lanes_status.configure(text=str(exc), text_color=AMBER)
+            return
+        self.lanes_btn.configure(state="disabled")
+        self.lanes_status.configure(text="Registrando webhooks…", text_color=MUTED)
+
+        def done(result: dict) -> None:
+            self.lanes_btn.configure(state="normal")
+            if not result.get("ok"):
+                self.lanes_status.configure(text=result.get("error", ""), text_color=AMBER)
+
+        def failed(exc: BaseException) -> None:
+            self.lanes_btn.configure(state="normal")
+            self.lanes_status.configure(text=f"✗ {exc}", text_color=RED)
+
+        self.app.watch(future, done, failed)
+
+    def _refresh_webhooks(self) -> None:
+        """Which bots have their webhook (from the pool), updated while the bot runs."""
+        runner = self.app.runner
+        if not runner.is_active():
+            self.lanes_status.configure(text="Se registrarán al iniciar el bot y elegir el canal del evento.", text_color=MUTED)
+            return
+        bots = [s for s in runner.pool_snapshot() if not s["lane"]]
+        if not bots:
+            return
+        good = [b for b in bots if b["lane_note"].startswith("ok")]
+        bad = [b for b in bots if b["lane_note"] and not b["lane_note"].startswith("ok")]
+        if not self.vars["use_webhooks"].get() and not good:
+            self.lanes_status.configure(text="Desactivados.", text_color=MUTED)
+            return
+        lines = [f"● {len(good)} de {len(bots)} bots tienen su webhook en el canal del evento"]
+        lines += [f"✗ {b['name'].rsplit('#', 1)[0]}: {b['lane_note']}" for b in bad[:6]]
+        self.lanes_status.configure(text="\n".join(lines), text_color=GREEN if good and not bad else AMBER if good else MUTED)
+
     # ---- startup ---------------------------------------------------------------------
     def _build_startup(self, row: int) -> None:
         box = self._section("Inicio", row)
@@ -523,6 +578,7 @@ class ConfigPage(ctk.CTkFrame):
             self._snapshot = None
             self._show_offline_event()
         self._refresh_helper_status()
+        self._refresh_webhooks()
 
     def collect(self) -> Settings:
         """Settings as currently shown (helper bots and event names are kept up to date by the app)."""
