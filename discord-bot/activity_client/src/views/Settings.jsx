@@ -61,12 +61,21 @@ export function SettingsPage() {
       </Section>
 
       <Section title="Sonido y vibración">
-        <Setting title="Sonidos">
-          <button class="btn btn-sm btn-ghost" type="button" onClick={() => { play("qte"); setTimeout(() => play("parry"), 350); setTimeout(() => play("ok"), 700); }}><Volumen /> Probar</button>
-          <Switch label="Sonidos" checked={p.sound} onChange={(v) => setPrefs({ sound: v })} />
+        <Setting title="Música y sonidos del evento" hint="Lo que pone el equipo de GM: música, avisos de Black Flash, dominios, el jefe que cae…">
+          <Switch label="Música y sonidos del evento" checked={p.audio} onChange={(v) => setPrefs({ audio: v })} />
         </Setting>
-        <Setting title="Volumen" stack>
-          <Range label="Volumen" min={0} max={100} step={5} value={p.volume} disabled={!p.sound} onChange={(v) => setPrefs({ volume: v })} format={(v) => `${v} %`} />
+        <Setting title="Volumen de la música" stack>
+          <Range label="Volumen de la música" min={0} max={100} step={5} value={p.musicVolume} disabled={!p.audio} onChange={(v) => setPrefs({ musicVolume: v })} format={(v) => `${v} %`} />
+        </Setting>
+        <Setting title="Volumen de los efectos" stack>
+          <Range label="Volumen de los efectos" min={0} max={100} step={5} value={p.sfxVolume} disabled={!p.audio} onChange={(v) => setPrefs({ sfxVolume: v })} format={(v) => `${v} %`} />
+        </Setting>
+        <Setting title="Sonidos de la interfaz" hint="Los pitidos de tus botones: llega un QTE, aciertas o fallas.">
+          <button class="btn btn-sm btn-ghost" type="button" onClick={() => { play("qte"); setTimeout(() => play("parry"), 350); setTimeout(() => play("ok"), 700); }}><Volumen /> Probar</button>
+          <Switch label="Sonidos de la interfaz" checked={p.sound} onChange={(v) => setPrefs({ sound: v })} />
+        </Setting>
+        <Setting title="Volumen de la interfaz" stack>
+          <Range label="Volumen de la interfaz" min={0} max={100} step={5} value={p.volume} disabled={!p.sound} onChange={(v) => setPrefs({ volume: v })} format={(v) => `${v} %`} />
         </Setting>
         <Setting title="Vibración" hint="En el móvil, un toque corto cuando llega un QTE.">
           <button class="btn btn-sm btn-ghost" type="button" onClick={() => vibrate([40, 60, 40])}>Probar</button>

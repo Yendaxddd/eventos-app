@@ -1,5 +1,7 @@
-import { ArrowLeft, Menu, Settings, Swords, Users } from "lucide-preact";
-import { channelName, go, back, link, sheet, users, view } from "../state.js";
+import { ArrowLeft, Menu, Music, Settings, Swords, Users, Volume2, VolumeX } from "lucide-preact";
+import { channelName, go, back, link, prefs, sheet, users, view } from "../state.js";
+import { audioBlocked, music } from "../audio.js";
+import { setPrefs } from "../settings-actions.js";
 import { QUALITY } from "../terms.js";
 
 export function ConnBadge() {
@@ -8,6 +10,22 @@ export function ConnBadge() {
     <button class="conn-badge" type="button" data-q={l.quality} onClick={() => go("latency")} title={`Conexión: ${QUALITY[l.quality]}. Toca para medirla.`} data-testid="conn-badge">
       <span class="dot" />
       <span class="num">{l.median === null ? "—" : `${Math.round(l.median)} ms`}</span>
+    </button>
+  );
+}
+
+// What the game masters are playing, with a button to silence the event's sound for this player (or, if the browser is waiting for a touch, to allow it).
+function NowPlaying() {
+  const m = music.value;
+  const on = prefs.value.audio;
+  if (!m && !audioBlocked.value) return null;
+  const title = m ? m.sound.name : "Sonido del evento";
+  return (
+    <button class={`now-playing ${on ? "" : "is-off"} ${audioBlocked.value ? "is-blocked" : ""}`} type="button" data-testid="now-playing"
+      title={audioBlocked.value ? "Toca para activar el sonido" : on ? `Suena: ${title}. Toca para silenciar` : "Sonido del evento apagado. Toca para activarlo"}
+      onClick={() => setPrefs({ audio: !on })}>
+      {on ? (audioBlocked.value ? <Volume2 size={16} /> : <Music size={16} />) : <VolumeX size={16} />}
+      <span class="ellipsis">{audioBlocked.value ? "Toca para activar el sonido" : title}</span>
     </button>
   );
 }
@@ -30,6 +48,7 @@ export function Topbar({ layout }) {
         </div>
       </div>
       <div class="spacer" />
+      <NowPlaying />
       <ConnBadge />
       {v === "event" && layout.mode !== "wide" && (
         <button class="icon-btn" type="button" onClick={() => { sheet.value = "players"; }} aria-label="Ver jugadores" data-testid="players-button"><Users size={20} /></button>

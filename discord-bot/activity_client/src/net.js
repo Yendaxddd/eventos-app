@@ -14,6 +14,7 @@ import {
 } from "./qte-store.js";
 import { clearPanelCache } from "./panel/cache.js";
 import { describeNotice } from "./notices.js";
+import { onAudioFrame, onWelcomeAudio } from "./audio.js";
 
 function showNotice(kind, data) {
   const notice = describeNotice(kind, data);
@@ -66,6 +67,26 @@ export async function uploadImage(file) {
   try { data = await reply.json(); } catch { /* the answer was not JSON */ }
   if (!reply.ok) throw new Error(data.error || "No se pudo subir la imagen.");
   return data.url;
+}
+
+// A sound for the library (game masters only; the server checks the role again). `onProgress` gets 0–1 while it goes up.
+export function uploadAudio(file, kind, onProgress) {
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open("POST", `${base}/api/audio`);
+    xhr.setRequestHeader("X-Filename", encodeURIComponent(file.name || "sonido"));
+    xhr.setRequestHeader("X-Kind", kind || "");
+    if (accessToken) xhr.setRequestHeader("Authorization", `Bearer ${accessToken}`);
+    else if (devName) { xhr.setRequestHeader("X-Dev", devName); if (devGm) xhr.setRequestHeader("X-Gm", "1"); }
+    if (onProgress) xhr.upload.onprogress = (e) => { if (e.lengthComputable) onProgress(e.loaded / e.total); };
+    xhr.onerror = () => reject(new Error("No se pudo enviar el archivo. Revisa tu conexión."));
+    xhr.onload = () => {
+      let data = {};
+      try { data = JSON.parse(xhr.responseText); } catch { /* the answer was not JSON */ }
+      if (xhr.status === 200 && data.sound) resolve(data.sound); else reject(new Error(data.error || "No se pudo subir el sonido."));
+    };
+    xhr.send(file);
+  });
 }
 
 // request/answer over the socket (profile data, GM actions...)
@@ -155,6 +176,7 @@ function onFrame(frame, arrival) {
         const saved = store.get("eventos.as");
         if (saved && (frame.characters || []).includes(saved)) activeAs.value = saved;
         rules.value = frame.rules || null;
+        onWelcomeAudio(frame.audio, arrival);
         comp.value = { ...comp.value, ...(frame.comp || {}) };
         calib.value = frame.calib || null;
         if (frame.prefs) setPrefsFromServer(frame.prefs);
@@ -206,6 +228,7 @@ function onFrame(frame, arrival) {
     case "calib": calib.value = frame.calib || null; break;
     case "toast": toast(frame.text, frame.kind || "info"); break;
     case "notice": showNotice(frame.kind, frame.data); break;
+    case "audio": onAudioFrame(frame, arrival); break;
     case "slow": toast("Vas demasiado rápido: espera un momento.", "warn", 2000); break;
     case "rpc_ok": case "rpc_err": {
       const job = pending.get(frame.id);

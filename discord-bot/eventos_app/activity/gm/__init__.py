@@ -21,3 +21,9 @@ class GmPanel(EventOps, BossOps, PlayerOps, ValueOps, DataOps):
         self.log = log or GmLog()
         self.data_dir = Path(data_dir) if data_dir else None
         self.values_file = Path(values_file) if values_file else None
+
+    def _emit(self, event: str, /, **data) -> None:
+        """Tell the Activity (sound cues, cinematics) about what the panel just did, as the bot itself does for the same thing."""
+        emit = getattr(self.app, "emit_event", None)
+        if emit is not None:
+            emit(event, **data)

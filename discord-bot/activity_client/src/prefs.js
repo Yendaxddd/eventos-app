@@ -12,7 +12,8 @@ export const DEFAULT_PREFS = {
   buttonPlacement: "random",// random | bottom | left | right
   keepEvade: false,         // keep a small Evade button while the parry window is open
   queueMode: false,         // show only the most urgent QTE and queue the rest
-  sound: true, volume: 60,
+  sound: true, volume: 60,  // the little sounds of the interface (QTE arrives, verdicts) and their volume
+  audio: true, musicVolume: 70, sfxVolume: 85,   // the event's own sound: music and the sounds the game masters play or bind to events
   haptics: true,
   showAvatars: true, showMedia: true, showTimestamps: true,
   showPlayers: true, compactHud: false,
@@ -24,7 +25,7 @@ const CHOICES = {
   theme: ["dark", "oled", "contrast"], palette: ["default", "cb"], density: ["compact", "comfortable", "spacious"],
   motion: ["full", "reduced"], buttonPlacement: ["random", "bottom", "left", "right"],
 };
-const RANGES = { textScale: [85, 140], buttonScale: [70, 160], volume: [0, 100], messageLimit: [50, 400] };
+const RANGES = { textScale: [85, 140], buttonScale: [70, 160], volume: [0, 100], musicVolume: [0, 100], sfxVolume: [0, 100], messageLimit: [50, 400] };
 
 // Same rules as the server (eventos_app/activity/prefs.py): anything that does not fit falls back to the default.
 export function sanitizePrefs(raw) {

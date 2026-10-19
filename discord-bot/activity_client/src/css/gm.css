@@ -87,3 +87,25 @@
   .gm-log-item { flex-wrap: wrap; gap: 4px var(--sp-3); }
   .gm-log-item .grow { flex-basis: 100%; }
 }
+
+/* ---- audio ---- */
+.gm-now { display: flex; flex-direction: column; gap: var(--sp-2); padding: var(--sp-3); margin-bottom: var(--sp-3); border-radius: var(--r-md); background: var(--surface); border: 1px solid var(--line-soft); }
+.gm-pads { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(150px, 100%), 1fr)); gap: 8px; }
+.sound-pad { display: flex; align-items: center; gap: 8px; min-height: 44px; padding: 0 12px; border-radius: var(--r-md); background: var(--surface-3); border: 1px solid var(--line); color: var(--text); font-weight: 600; font-size: .8125rem; text-align: left; touch-action: manipulation; }
+.sound-pad:hover:not(:disabled) { border-color: var(--primary-2); background: color-mix(in srgb, var(--primary) 14%, var(--surface-3)); }
+.sound-pad:active:not(:disabled) { transform: scale(.97); }
+.sound-pad.is-on { border-color: var(--ok); box-shadow: 0 0 0 1px var(--ok); }
+.sound-pad:disabled { opacity: .55; }
+.gm-cue-group + .gm-cue-group { margin-top: var(--sp-3); }
+.gm-cue { display: grid; grid-template-columns: minmax(150px, 1.2fr) minmax(130px, 1fr) minmax(90px, .7fr) minmax(120px, .8fr) auto auto; gap: 8px; align-items: center; padding: 6px 0; border-bottom: 1px solid var(--line-soft); }
+.gm-cue .info strong { font-size: .8125rem; }
+.gm-cue .select { min-width: 0; }
+.gm-sounds { display: flex; flex-direction: column; margin-top: var(--sp-3); }
+.gm-sound { display: grid; grid-template-columns: minmax(130px, 1.3fr) minmax(90px, .6fr) minmax(80px, .8fr) auto auto auto auto auto; gap: 8px; align-items: center; padding: 8px 0; border-bottom: 1px solid var(--line-soft); }
+.gm-check { display: inline-flex; align-items: center; gap: 4px; font-size: .75rem; color: var(--text-dim); white-space: nowrap; }
+@media (max-width: 720px) {
+  .gm-cue { grid-template-columns: 1fr 1fr; }
+  .gm-cue .info { grid-column: 1 / -1; }
+  .gm-sound { grid-template-columns: 1fr 1fr; }
+  .gm-sound > input.input { grid-column: 1 / -1; }
+}

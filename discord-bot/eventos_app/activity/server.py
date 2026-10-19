@@ -27,7 +27,7 @@ from yarl import URL
 from .. import __version__
 from .auth import AuthError, DiscordAuth
 from .hub import Conn, Hub, RpcError
-from .media import CONTENT_TYPES, MediaStore
+from .media import AUDIO, CONTENT_TYPES, LIMITS, MediaStore
 
 log = logging.getLogger("eventos_app.activity")
 
@@ -151,6 +151,7 @@ class ActivityServer:
         for prefix in ("", "/.proxy"):
             app.router.add_post(f"{prefix}/api/report", self._report)
             app.router.add_post(f"{prefix}/api/upload", self._upload)
+            app.router.add_post(f"{prefix}/api/audio", self._upload_audio)
             app.router.add_get(f"{prefix}/api/config", self._config)
             app.router.add_post(f"{prefix}/api/token", self._token)
             app.router.add_get(f"{prefix}/ws", self._ws)
@@ -353,6 +354,35 @@ class ActivityServer:
             log.exception("could not store an uploaded picture")
             return web.json_response({"error": "No se pudo guardar la imagen."}, status=500)
         return web.json_response({"url": url})
+
+    async def _upload_audio(self, request: web.Request) -> web.Response:
+        """A sound for the library: only the game masters may add one. The body is the file itself."""
+        if self.actions is None or not hasattr(self.actions, "store_audio"):
+            return web.json_response({"error": "Esta Actividad es de solo lectura."}, status=403)
+        try:
+            user_id = await self._http_user(request)
+        except AuthError as exc:
+            return web.json_response({"error": str(exc)}, status=401)
+        limit = LIMITS[AUDIO]
+        if request.content_length is not None and request.content_length > limit:
+            return web.json_response({"error": f"El archivo pesa demasiado: el máximo es {limit // (1024 * 1024)} MB."}, status=413)
+        body = bytearray()
+        async for chunk in request.content.iter_chunked(1 << 18):
+            body += chunk
+            if len(body) > limit:
+                return web.json_response({"error": f"El archivo pesa demasiado: el máximo es {limit // (1024 * 1024)} MB."}, status=413)
+        name = unquote(request.headers.get("X-Filename", "sonido"))[:120]
+        dev_gm = bool(request.headers.get("X-Dev")) and request.headers.get("X-Gm") == "1"      # a test window on this PC that asked for the panel
+        try:
+            sound = await asyncio.wait_for(self.actions.store_audio(user_id, name, request.headers.get("X-Kind", ""), bytes(body), dev_gm), RPC_TIMEOUT * 2)
+        except RpcError as exc:
+            return web.json_response({"error": str(exc)}, status=403 if "equipo de GM" in str(exc) else 400)
+        except asyncio.TimeoutError:
+            return web.json_response({"error": "Tardó demasiado en guardar el sonido."}, status=504)
+        except Exception:  # noqa: BLE001
+            log.exception("could not store an uploaded sound")
+            return web.json_response({"error": "No se pudo guardar el sonido."}, status=500)
+        return web.json_response({"sound": sound})
 
     # ---- the WebSocket ---------------------------------------------------------------------------------
     async def _identify(self, hello: dict, request: web.Request) -> tuple[int, str, str, bool]:

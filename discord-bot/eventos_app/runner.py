@@ -468,7 +468,8 @@ class BotRunner:
                                          latency_file=paths.data_dir() / "activity_latency.json",
                                          data_dir=self._bot_data_dir(app), gm_log_file=paths.data_dir() / "gm_log.jsonl",
                                          values_file=paths.data_dir() / "gm_values.json", files=files,
-                                         char_images_file=paths.data_dir() / "character_images.json")
+                                         char_images_file=paths.data_dir() / "character_images.json",
+                                         audio_file=paths.data_dir() / "audio_library.json")
         server = activity.ActivityServer(hub, auth=auth, authorize=bridge.authorize, client_id=client_id,
                                          web_dir=paths.resource_path("eventos_app", "activity", "web"),
                                          actions=bridge, media_dir=paths.app_home() / "cache" / "media", files=files,

@@ -110,3 +110,11 @@
 /* Discord's floating (picture-in-picture) window */
 .pip-view { grid-template-rows: minmax(0, 1fr); }
 .pip-body { display: flex; flex-direction: column; justify-content: center; gap: var(--sp-2); padding: var(--sp-2); min-height: 0; overflow: hidden; }
+
+/* what the game masters are playing */
+.now-playing { display: inline-flex; align-items: center; gap: 6px; max-width: 170px; min-height: 34px; padding: 0 10px; border-radius: var(--r-pill); background: var(--surface-3); border: 1px solid var(--line); color: var(--text-dim); font-size: .75rem; font-weight: 600; }
+.now-playing:hover { color: var(--text); border-color: var(--text-faint); }
+.now-playing.is-off { opacity: .6; }
+.now-playing.is-blocked { border-color: var(--warn); color: var(--text); animation: now-pulse 1.6s ease-in-out infinite; }
+@keyframes now-pulse { 50% { box-shadow: 0 0 0 4px color-mix(in srgb, var(--warn) 25%, transparent); } }
+@media (max-width: 560px) { .now-playing { max-width: 38px; padding: 0 10px; } .now-playing span { display: none; } .now-playing.is-blocked { max-width: 150px; } .now-playing.is-blocked span { display: inline; } }

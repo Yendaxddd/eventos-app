@@ -13,7 +13,7 @@ log = logging.getLogger("eventos_app.activity")
 DEFAULTS: dict = {
     "theme": "dark", "palette": "default", "textScale": 100, "density": "comfortable", "motion": "full",
     "buttonScale": 100, "buttonPlacement": "random", "keepEvade": False, "queueMode": False,
-    "sound": True, "volume": 60, "haptics": True,
+    "sound": True, "volume": 60, "haptics": True, "audio": True, "musicVolume": 70, "sfxVolume": 85,
     "showAvatars": True, "showMedia": True, "showTimestamps": True, "showPlayers": True, "compactHud": False,
     "messageLimit": 150, "tutorialDone": False,
 }
@@ -21,7 +21,7 @@ CHOICES = {
     "theme": ("dark", "oled", "contrast"), "palette": ("default", "cb"), "density": ("compact", "comfortable", "spacious"),
     "motion": ("full", "reduced"), "buttonPlacement": ("random", "bottom", "left", "right"),
 }
-RANGES = {"textScale": (85, 140), "buttonScale": (70, 160), "volume": (0, 100), "messageLimit": (50, 400)}
+RANGES = {"textScale": (85, 140), "buttonScale": (70, 160), "volume": (0, 100), "musicVolume": (0, 100), "sfxVolume": (0, 100), "messageLimit": (50, 400)}
 MAX_PEOPLE = 2000
 
 

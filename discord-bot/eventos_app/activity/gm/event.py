@@ -149,12 +149,14 @@ class EventOps:
                     stats["damage_taken_this_fight"] = 0
                     stats["critical_counters_this_fight"] = 0
             app._resume_ultimate_cooldowns()
+            self._emit("fight_start")
             self.log.add(actor, "Empezó el combate (los poderes vuelven a recargarse)")
         elif action == "end":
             if not app.fight_active:
                 raise RpcError("No hay un combate en curso.")
             app._pause_ultimate_cooldowns()
             app.fight_active, app.fight_start_time = False, None
+            self._emit("fight_end")
             self.log.add(actor, "Terminó el combate (las recargas se pausan)")
         else:
             raise RpcError("Esa acción no existe.")

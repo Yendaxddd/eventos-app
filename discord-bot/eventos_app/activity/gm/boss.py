@@ -80,6 +80,8 @@ class BossOps:
         channel = self._channel()
         app.active_boss = {"name": clean, "hp_current": health, "hp_max": health, "gif_url": picture, "participants": set()}
         self._start_fight()
+        self._emit("boss_spawn", name=clean)
+        self._emit("fight_start")
         embed = discord.Embed(title=f"⚔️ BOSS FIGHT STARTED: {clean}",
                               description=f"**HP**: {health}\n**Status**: ⚔️ **FIGHT IN PROGRESS!**\n\n🔥 Ultimate cooldowns are now active!", color=discord.Color.dark_red())
         if picture:
@@ -102,6 +104,8 @@ class BossOps:
         app.tupperbox_boss_mode = True
         app.fight_active, app.fight_start_time = True, time.time()
         app._resume_ultimate_cooldowns()
+        self._emit("boss_spawn", name=name)
+        self._emit("fight_start")
         embed = discord.Embed(title="👹 BOSS APPEARS!", description=f"**{name}** has entered the battlefield!\n\n❤️ **HP:** {health}\n⚔️ *The fight begins!*",
                               color=discord.Color.dark_red())
         spawn(channel.send(embed=embed), "announce the boss")

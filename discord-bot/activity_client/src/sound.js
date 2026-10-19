@@ -13,6 +13,9 @@ function audio() {
   return ctx;
 }
 
+// The one audio context of the page (the event's sounds and music use it too). Null when the browser has none.
+export const getContext = () => audio();
+
 // Browsers only let a page make sound after the person touched it once.
 export function unlockAudio() { audio(); }
 document.addEventListener("pointerdown", unlockAudio, { once: true, passive: true });

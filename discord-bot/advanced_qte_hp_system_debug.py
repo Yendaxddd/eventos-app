@@ -1656,6 +1656,7 @@ Your response (1-2 sentences max):"""
             duration = domain_config.get("duration", 30)
             effect_value = domain_config.get("effect_value", 10)
             gif = domain_config.get("gif")
+            self.emit_event("boss_domain", name=boss_name)
             
             # Create domain embed
             embed = discord.Embed(
@@ -2005,6 +2006,18 @@ Your response (1-2 sentences max):"""
         # For now, just return the filepath - in production, you'd host these or embed them
         return filepath
     
+    def emit_event(self, event: str, /, **data) -> None:
+        """Tell the Discord Activity that something happened in the game (it plays the sound cues and the cinematics bound to it).
+        Never waits and never raises: the game does not depend on it."""
+        hook = getattr(self, "activity_notify", None)
+        fn = getattr(hook, "on_event", None) if hook is not None else None
+        if fn is None:
+            return
+        try:
+            fn(event, data)
+        except Exception:  # noqa: BLE001
+            log.exception("could not tell the Activity about %s", event)
+
     # ========== ANSWER FEEDBACK: the channel, or the player's own Activity ==========
     def feedback_quiet(self, user_id=None, users=None) -> bool:
         """True when what happens to this player (or to all of `users`) is told in their Activity instead of the channel.
@@ -2033,6 +2046,8 @@ Your response (1-2 sentences max):"""
     async def feedback(self, user_id, kind, content=None, embed=None, *, users=None, **data):
         """What an answer led to (✅ evaded, ❌ too slow, Black Flash...). The player who is in the Activity gets a notification there
         (`kind` and `data` say what happened; the screen words it) and the channel stays quiet; everybody else gets the message as always."""
+        if kind in ("black_flash", "chain_max", "fake_fail", "combo_done", "group_done"):
+            self.emit_event(kind, user=user_id, **data)
         if self.feedback_quiet(user_id, users):
             try:
                 self.activity_notify.notify(users if users is not None else user_id, kind, data)
@@ -4270,6 +4285,8 @@ Your response (1-2 sentences max):"""
                 self.bot_instance.tupperbox_boss_mode = True
                 self.bot_instance.fight_active = True
                 self.bot_instance.fight_start_time = time.time()
+                self.bot_instance.emit_event("boss_spawn", name=boss_name)
+                self.bot_instance.emit_event("fight_start")
                 
                 # Resume cooldowns
                 self.bot_instance._resume_ultimate_cooldowns()
@@ -4907,6 +4924,8 @@ Your response (1-2 sentences max):"""
                 # Automatically start the fight when a boss is registered!
                 self.fight_active = True
                 self.fight_start_time = time.time()
+                self.emit_event("boss_spawn", name=name)
+                self.emit_event("fight_start")
                 
                 # Reset all players' fight-specific stats
                 for user_id in self.player_stats:
@@ -7674,6 +7693,7 @@ Your response (1-2 sentences max):"""
     async def trigger_checkpoint_heal(self, checkpoint_name):
         """Trigger HP regeneration for all living players at a checkpoint"""
         try:
+            self.emit_event("checkpoint", name=checkpoint_name)
             channel = self.bot.get_channel(self.qte_channel_id)
             healed_players = []
             
@@ -7886,6 +7906,7 @@ Your response (1-2 sentences max):"""
 
             # Mark as dead
             hp_data["alive"] = False
+            self.emit_event("player_down", user=user_id)
 
             # Get channel and member
             channel = self.bot.get_channel(self.qte_channel_id)
@@ -8100,6 +8121,7 @@ Your response (1-2 sentences max):"""
             
             # Check if boss defeated
             if boss['hp_current'] == 0:
+                self.emit_event("boss_defeated", name=boss_name)
                 # ========== END FIGHT - PAUSE COOLDOWNS ==========
                 self._pause_ultimate_cooldowns()
                 self.fight_active = False
@@ -10320,6 +10342,7 @@ Your response (1-2 sentences max):"""
                 "start_time": time.time(),
                 "task": cast_task
             }
+            self.emit_event("domain_cast", user=user_id, domain=domain_id)
             
         except Exception as e:
             console.print(f"[red]✗ Error handling domain expansion: {e}[/red]")
@@ -10342,6 +10365,7 @@ Your response (1-2 sentences max):"""
             
             # Remove from casting (successful)
             self.domain_casting.pop(user_id, None)
+            self.emit_event("domain", user=user_id, domain=domain_id)
             
             # Phase 2: Domain expands!
             domain_text = domain_config.get("domain_text", "DOMAIN EXPANSION")
