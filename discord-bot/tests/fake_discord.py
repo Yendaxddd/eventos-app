@@ -441,7 +441,9 @@ class FakeDiscord:
                         "X-RateLimit-Reset-After": f"{reset_after:.3f}"})
         mid = next(self._ids)
         self.messages[mid] = {"id": mid, "channel": hook["channel"], "author_token": None, "webhook_id": hook["id"],
-                              "content": content, "files": files, "components": payload.get("components")}
+                              "content": content, "files": files, "components": payload.get("components"),
+                              "username": payload.get("username"), "avatar_url": payload.get("avatar_url"),
+                              "allowed_mentions": payload.get("allowed_mentions")}
         entry["message_id"] = mid
         return _json(self._message_json(mid), headers=headers)
 

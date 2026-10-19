@@ -1,6 +1,8 @@
-"""Discord Activity: a web app that runs inside Discord and mirrors the event channel (phase 0: read only).
+"""Discord Activity: a web app that runs inside Discord, mirrors the event channel, lets the players write and
+answer QTEs with buttons timed on their own screen.
 
-* `hub`      -- who is connected, broadcasting, clock-sync statistics, the recent-messages backlog.
+* `hub`      -- who is connected, broadcasting, clock-sync statistics, the recent-messages backlog, running QTEs.
+* `qte`      -- `QteBook` (the bot's active QTEs, announcing starts/ends) and the button press dressed as a message.
 * `auth`     -- OAuth2 code exchange and "who is this token" checks against Discord.
 * `server`   -- the local aiohttp server: static client, `/api/token`, `/ws`.
 * `bridge`   -- connects the bot (messages of the event channel, who may join) to the hub.

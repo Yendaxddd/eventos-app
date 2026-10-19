@@ -40,6 +40,7 @@ import time
 from collections import OrderedDict, deque
 from dataclasses import dataclass, field
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any, Callable, NamedTuple
 
 import aiohttp
@@ -559,6 +560,37 @@ class SenderPool:
         if isinstance(data, dict) and data.get("id"):
             self._remember(int(data["id"]), channel_id, sender)
         return data
+
+    async def send_as(self, channel_id, *, content: str, username: str, avatar_url: str | None = None):
+        """Post as `username` (with that picture) through a webhook lane; nobody is pinged.
+
+        Returns the message data, or None when there is no lane that can do it (no webhooks, or all refused),
+        so the caller can fall back to writing it as the bot.
+        """
+        channel_id = int(channel_id)
+        payload = {"content": content, "username": webhooks.lane_name(username)[:80] or "Jugador",
+                   "allowed_mentions": {"parse": []}}
+        if avatar_url:
+            payload["avatar_url"] = avatar_url
+        params = SimpleNamespace(payload=payload, files=None, multipart=None)
+        tried: set[Sender] = set(self._bots())
+        for _ in range(SEND_RETRIES + 1):
+            lane = self._pick("send", channel_id, time.monotonic(), tried)
+            if lane is None:
+                return None
+            await self._admit(lane, "send", channel_id)
+            try:
+                return await self._send_via(lane, channel_id, params)
+            except discord.HTTPException as exc:
+                lane.stats.failed += 1
+                if exc.status == 429:
+                    continue                      # the tracer moved the plan back: ask again
+                if exc.status in (401, 404):
+                    self._lane_gone(lane)
+                tried.add(lane)
+            except _UNREACHABLE:
+                tried.add(lane)
+        return None
 
     async def _route_react(self, channel_id, message_id, emoji):
         channel_id = int(channel_id)

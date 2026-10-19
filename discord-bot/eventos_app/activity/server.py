@@ -44,8 +44,9 @@ def is_local_request(request: web.Request) -> bool:
 
 class ActivityServer:
     def __init__(self, hub: Hub, *, auth: DiscordAuth, authorize: Authorize, web_dir: Path, client_id: int,
-                 host: str = "127.0.0.1", port: int = DEFAULT_PORT, allow_dev: bool = True) -> None:
+                 host: str = "127.0.0.1", port: int = DEFAULT_PORT, allow_dev: bool = True, actions=None) -> None:
         self.hub, self.auth, self.authorize = hub, auth, authorize
+        self.actions = actions     # what the players can do (write, press a QTE button): see ActivityBridge.say / press
         self.web_dir = Path(web_dir)
         self.client_id = client_id
         self.host, self.port = host, port
@@ -152,8 +153,11 @@ class ActivityServer:
             users = self.hub.participants()
             if not any(u["id"] == str(user_id) for u in users):
                 users.append(conn.public())          # you are in the list you are first shown
+            characters = self.actions.characters_of(user_id) if self.actions is not None else []
             await ws.send_json({"t": "welcome", "you": conn.public(), "serverTime": self.hub.now_ms(),
-                                "channel": self.hub.channel_name, "users": users, "backlog": backlog})
+                                "channel": self.hub.channel_name, "users": users, "backlog": backlog,
+                                "characters": characters, "qtes": list(self.hub.qtes.values()),
+                                "canWrite": self.actions is not None})
             await self.hub.add(conn)
             async for message in ws:
                 if message.type != aiohttp.WSMsgType.TEXT:
@@ -184,6 +188,14 @@ class ActivityServer:
             except (KeyError, TypeError, ValueError):
                 return
             self.hub._changed()
-        elif kind == "chat":
-            await conn.ws.send_json({"t": "error", "code": "readonly",
-                                     "reason": "Por ahora el espejo es de solo lectura: escribe en el chat de Discord."})
+        elif kind in ("say", "press"):
+            if self.actions is None:
+                await conn.ws.send_json({"t": "error", "code": "readonly", "reason": "Esta Actividad es de solo lectura."})
+                return
+            try:
+                reason = await (self.actions.say if kind == "say" else self.actions.press)(conn, frame)
+            except Exception:  # noqa: BLE001 - one bad frame must not close the connection
+                log.exception("could not handle a %r frame", kind)
+                reason = "Algo falló al procesarlo; inténtalo otra vez."
+            if reason:
+                await conn.ws.send_json({"t": "error", "code": kind, "reason": reason, "id": frame.get("id")})

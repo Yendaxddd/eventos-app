@@ -210,3 +210,40 @@ def test_saving_does_not_block_the_caller(tmp_path, monkeypatch):
     assert time.monotonic() - started < 0.1  # the event loop doesn't wait for the disk
     module.flush_saves()
     assert (tmp_path / "data3" / "x.json").exists()
+
+
+# ---- answers pressed in the Discord Activity ---------------------------------------------------------
+def test_a_button_pressed_in_the_activity_uses_the_time_its_screen_measured(tmp_path, monkeypatch):
+    from eventos_app.activity.qte import ActivityInput
+
+    bot, _ = bot_shell(tmp_path, monkeypatch)
+    bot.qte_channel_id = 5
+    bot.character_registry = {"Ana": 1}          # the author's display name looks like somebody else's character
+    bot.qte_times = {"easy": {"evade_window": 6.0, "parry_window": (4.0, 7.0), "perfect_parry": 5.5}}
+    channel = NS(id=5)
+    bot.active_qtes = {1: {"mode": "single", "difficulty": "easy", "target": NS(id=9), "participants": {}, "start": at(0),
+                           "message": NS(created_at=at(0))}}
+    seen = []
+
+    async def single(qte_id, qte_data, message, user_id, content, response_time, *windows):
+        seen.append((user_id, response_time))
+
+    bot.handle_single_qte_response = single
+
+    chat = NS(channel=channel, content="*evade*", author=NS(id=9, display_name="Luis"), created_at=at(1.5))
+    asyncio.run(bot.handle_qte_response(chat))                                     # from the chat: Discord's clock
+    press = ActivityInput(NS(id=9, display_name="Ana"), channel, "*evade*", user_id=9)
+    asyncio.run(bot.handle_qte_response(press, measured=2.5))                      # from the Activity: the player's clock
+    assert seen == [(9, 1.5), (9, 2.5)]
+
+
+def test_the_bots_active_qtes_tell_the_activity_when_they_start_and_end(tmp_path, monkeypatch):
+    from eventos_app.activity.qte import QteBook
+
+    monkeypatch.setenv("EVENTOS_HOME", str(tmp_path))
+    monkeypatch.setattr(paths, "_home_cache", None)
+    import advanced_qte_hp_system_debug as module
+
+    assert module.QteBook is QteBook
+    source = Path(module.__file__).read_text(encoding="utf-8")
+    assert "self.active_qtes = QteBook()" in source

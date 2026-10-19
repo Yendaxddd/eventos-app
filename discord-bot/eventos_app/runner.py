@@ -411,9 +411,10 @@ class BotRunner:
         client_id = app.bot.application_id or app.bot.user.id
         hub = activity.Hub()
         auth = activity.DiscordAuth(client_id=client_id, client_secret=settings.activity_client_secret.strip())
-        bridge = activity.ActivityBridge(hub, app)
+        bridge = activity.ActivityBridge(hub, app, pool=lambda: self._pool)
         server = activity.ActivityServer(hub, auth=auth, authorize=bridge.authorize, client_id=client_id,
-                                         web_dir=paths.resource_path("eventos_app", "activity", "web"))
+                                         web_dir=paths.resource_path("eventos_app", "activity", "web"),
+                                         actions=bridge)
         try:
             port = await server.start()
         except OSError as exc:

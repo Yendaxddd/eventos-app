@@ -189,11 +189,11 @@ def test_a_connection_that_floods_is_told_to_slow_down_instead_of_being_served()
     assert "slow" in kinds and kinds.count("pong") < 200
 
 
-def test_chat_frames_are_refused_while_the_mirror_is_read_only():
+def test_writing_is_refused_when_the_server_has_no_actions():
     async def scenario():
         async with Rig() as rig:
             ws, _ = await rig.hello({"t": "hello", "dev": "Ana"})
-            await ws.send_json({"t": "chat", "text": "hola"})
+            await ws.send_json({"t": "say", "text": "hola"})
             return await frame(ws)
 
     reply = run(scenario())
@@ -307,7 +307,8 @@ def test_a_message_becomes_plain_data_for_the_client():
     assert frame["author"] == {"id": "77", "name": "Ana", "avatar": "https://cdn.example/a.png", "bot": False,
                                "webhook": True, "ours": True, "color": "#336699"}
     assert frame["attachments"] == [{"url": "https://cdn.example/x.png", "name": "x.png", "image": True}]
-    assert frame["embeds"][0] == {"title": "Black Flash", "description": "boom", "image": "https://i/x.gif", "color": "#ff0000"}
+    assert frame["embeds"][0]["title"] == "Black Flash" and frame["embeds"][0]["image"] == "https://i/x.gif"
+    assert frame["embeds"][0]["color"] == "#ff0000" and frame["reactions"] == [] and frame["reply"] is None
     json.dumps(frame)      # it must be JSON-able as it is
 
 
@@ -357,7 +358,8 @@ def test_the_bridge_mirrors_only_the_event_channel_and_checks_who_may_see_it():
     sent, ok, errors, registered, after, name = run(scenario())
     assert [m["id"] for m in sent] == ["5"] and ok == {"name": "Ana", "avatar": "u"} and name == "qte"
     assert "acceso al canal" in errors[0] and "miembro" in errors[1]
-    assert registered == ["on_message", "on_message_edit", "on_message_delete"] and after == []
+    assert registered[:3] == ["on_message", "on_message_edit", "on_message_delete"] and "on_reaction_add" in registered
+    assert after == []
 
 
 # ---- the tunnel -----------------------------------------------------------------------------------------------------------------------

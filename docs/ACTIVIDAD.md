@@ -1,12 +1,11 @@
-# Actividad de Discord (beta, fase 0)
+# Actividad de Discord (beta, fase 1)
 
-Una **Actividad** es una pantalla web que Discord abre dentro de la app (PC y móvil). La idea final: el tablero de los QTE con
-botones y tiempos medidos en tu pantalla (sin depender de mensajes ni reacciones) y el canal del evento a la vista, para no
-cambiar de canal en pleno timing. **Esta versión (0.5.0) es la fase 0, un prototipo para comprobar que todo funciona con tus
-jugadores**: espeja el canal en solo lectura, muestra quién está conectado y mide la conexión de cada uno. Todavía no cambia
-cómo se juegan los QTE.
+Una **Actividad** es una pantalla web que Discord abre dentro de la app (PC y móvil). Es el tablero de los QTE: botones grandes
+con el tiempo medido **en tu pantalla** (sin depender de mensajes ni reacciones), el canal del evento a la vista y una caja
+para escribir, para no cambiar de canal en pleno timing.
 
-Plan completo y fases: ver el final de este documento.
+**Versión 0.6.0 (fase 1):** se puede **escribir** desde la Actividad y **responder QTE con botones**. Los QTE siguen funcionando
+también por el chat de siempre, para quien no use la Actividad.
 
 ## Cómo funciona
 - La app abre un servidor web en tu PC (puerto 8765) dentro del mismo proceso del bot.
@@ -17,6 +16,23 @@ Plan completo y fases: ver el final de este documento.
   servidor y pueda ver el canal del evento: si no, no ve nada.
 - El cliente y el servidor sincronizan relojes (ping/pong tipo NTP) y la app muestra el ida y vuelta y el desfase de cada
   jugador. Es la base para mostrar cosas a la misma hora a todos y medir reacciones en el cliente.
+
+## Jugar desde la Actividad
+- **Escribir:** la caja de abajo publica en el canal del evento **con tu nombre y tu foto** (por el webhook del bot, sin
+  menciones/pings). Si tienes personajes registrados aparece un selector para escribir como uno de ellos (con la foto con la
+  que Tupperbox lo mostró por última vez). El bot trata lo escrito como cualquier mensaje del chat: `*attack*`, frases entre
+  comillas, etc. funcionan igual. Sin permiso «Gestionar webhooks» el bot lo publica como `**Nombre:** texto`.
+- **QTE:** cuando aparece uno, el panel de abajo se enciende con una barra de tiempo. Si es para ti, **Evade** y **Parry** se
+  activan. Se miden desde que el QTE se pinta en tu pantalla; el servidor suma la mitad del ida y vuelta y rechaza tiempos
+  imposibles (menos de 80 ms) o más largos que el tiempo real. **Adapt** y **Ataque** (contraataque) funcionan siempre, igual
+  que escribir `*adapt*` / `*attack*`.
+- **Teclas (PC):** `E` evade, `P` parry, `A` adapt, `Q` ataque; mientras escribes en la caja, `Alt`+letra. `Esc` sale de la caja.
+- En el canal, la respuesta aparece con ✅/❌ en el mensaje del QTE, como siempre, y los mensajes de resultado de siempre.
+- **Por ahora solo** los QTE normales (individual y de grupo). Combo, dirección, falso, Cadena BF, poderes y dominio siguen
+  por el chat (también puedes escribirlos en la caja: `*power1*`, etc. pasan por el mismo camino que el chat, pero sin la
+  medición del cliente).
+- El espejo muestra ahora respuestas, reacciones, stickers y embeds completos (imagen, GIF de Tenor/Klipy como clip silencioso,
+  campos, pie).
 
 ## Puesta en marcha (una sola vez)
 En <https://discord.com/developers/applications> → tu aplicación (la del bot principal):
@@ -45,13 +61,17 @@ En <https://discord.com/developers/applications> → tu aplicación (la del bot 
 
 ## Qué hace falta de Discord y qué no
 - No se puede incrustar el canal real de Discord dentro de la Actividad: se hace un **espejo** (el bot ya lee los mensajes).
-- Escribir desde la Actividad llegará en la fase 1 (publicará con un webhook a nombre del jugador).
 - Si el servidor supera los 25 miembros hará falta verificar la aplicación en Discord.
 
 ## Fases previstas
-0. **Prototipo y puerta de decisión** (esta versión): servidor, túnel, autenticación, sincronización de reloj, espejo de solo
-   lectura. Se prueba con 2–3 testers en PC y móvil.
-1. Espejo con escritura (webhook) y paneles de HP/jefe.
-2. QTE sencillos dentro de la Actividad (evade/parry/adapt) con tiempos medidos en el cliente y resumen único en Discord.
-3. Resto de modos (grupo, combo, dirección, contraataque…) y paleta de poderes.
+0. Prototipo y puerta de decisión (0.5.0): servidor, túnel, autenticación, reloj, espejo de solo lectura.
+1. **Escribir + QTE básico** (0.6.0, esta versión): caja de escribir con identidad, botones evade/parry/adapt/ataque con tiempo
+   medido en el cliente, render mejorado del espejo.
+2. Paneles de HP/jefe y estado del jugador.
+3. Resto de modos (combo, dirección, falso, Cadena BF…) y paleta de poderes con medición propia.
 4. Pulido, antitrampas y documentación.
+
+## Qué falta comprobar en esta versión
+- Que escribir con webhook salga con el nombre/foto correctos y sin duplicar mensajes, y cómo se siente el teclado en móvil.
+- Que los resultados de un QTE respondido con botón coincidan con lo esperado (compáralo con un QTE respondido por el chat).
+- Los GIF de otros sitios (Klipy/Tenor) llegan por el proxy de Discord; si alguno no se ve dentro de la Actividad, dímelo.

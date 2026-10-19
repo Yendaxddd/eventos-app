@@ -528,8 +528,8 @@ class ConfigPage(ctk.CTkFrame):
     def _build_activity(self, row: int) -> None:
         box = self._section("Actividad de Discord (beta)", row)
         self._note(box, 1, "Una Actividad es una pantalla del juego dentro de Discord (PC y móvil) que muestra el canal del "
-                           "evento y mide los tiempos sin depender de los mensajes. Esta versión es un prototipo: espeja el "
-                           "canal en solo lectura y mide la conexión de cada jugador. Funciona desde este PC con un túnel "
+                           "evento, deja escribir y responder los QTE con botones midiendo los tiempos en la pantalla del jugador, "
+                           "sin depender de los mensajes. Funciona desde este PC con un túnel "
                            "gratuito de Cloudflare cuya dirección cambia cada vez. Pasos en docs/ACTIVIDAD.md.")
         ctk.CTkCheckBox(box, text="Activar la Actividad al iniciar el bot", variable=self.vars["activity_enabled"],
                         fg_color=ACCENT, hover_color=ACCENT).grid(row=2, column=0, columnspan=4, padx=18, pady=(2, 6), sticky="w")

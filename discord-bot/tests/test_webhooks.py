@@ -421,3 +421,31 @@ def test_webhook_429s_do_not_stop_the_performance_test():
                  "We are being rate limited. PUT https://x/channels/1/messages/2/reactions/a/@me responded with 429."):
         counter.emit(logging.LogRecord("discord.http", logging.WARNING, "", 0, text, (), None))
     assert (counter.webhooks, counter.reactions, counter.count) == (1, 1, 0)
+
+
+# ---- posting as somebody else (the Activity's message box) --------------------------------------------------------
+def test_send_as_posts_through_a_lane_with_the_given_name_picture_and_no_pings():
+    async def scenario():
+        w = await with_lanes(helpers=1)
+        try:
+            data = await w.pool.send_as(CHANNEL, content="hola <@5>", username="Ana · discord", avatar_url="https://cdn/x.png")
+            stored = w.server.messages[int(data["id"])]
+            return stored, w.server.sent_by("tok-primary")
+        finally:
+            await w.__aexit__(None, None, None)
+
+    stored, by_bot = run(scenario())
+    assert stored["username"] == "Ana · ·" and stored["avatar_url"] == "https://cdn/x.png"   # Discord refuses the word "discord"
+    assert stored["allowed_mentions"] == {"parse": []} and stored["webhook_id"] and not by_bot
+
+
+def test_send_as_gives_none_when_there_is_no_lane_so_the_caller_can_use_the_bot():
+    async def scenario():
+        w = World(helpers=1)
+        await w.__aenter__()
+        try:
+            return await w.pool.send_as(CHANNEL, content="hola", username="Ana")
+        finally:
+            await w.__aexit__(None, None, None)
+
+    assert run(scenario()) is None

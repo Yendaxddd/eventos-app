@@ -28,6 +28,8 @@ class Conn:
     rtt_ms: float | None = None          # last round trip measured by the client
     offset_ms: float | None = None       # server clock minus client clock, as estimated by the client
     joined: float = field(default_factory=time.time)
+    last_say: float = 0.0                # monotonic time of the last message written from the Activity
+    presses: dict = field(default_factory=dict)   # QTE id -> how many times this connection pressed a button for it
     _tokens: float = 2 * RATE_PER_SECOND
     _refilled: float = field(default_factory=time.monotonic)
 
@@ -58,6 +60,7 @@ class Hub:
         self.on_change: Callable[[], None] | None = None   # the app's window refreshes who is connected
         self.loader: Callable[[], Any] | None = None       # async () -> list of message frames, for the first joiner
         self._loaded = False
+        self.qtes: dict[str, dict] = {}                    # QTE id -> the frame the clients were shown (still running)
 
     # ---- clock ---------------------------------------------------------------------------
     @staticmethod
@@ -144,3 +147,14 @@ class Hub:
         self.backlog.clear()
         self.backlog.extend(kept)
         await self.broadcast({"t": "del", "id": message_id})
+
+    # ---- QTEs ---------------------------------------------------------------------------------
+    async def qte_start(self, frame: dict) -> None:
+        self.qtes[frame["id"]] = frame
+        await self.broadcast({"t": "qte", "q": frame})
+
+    async def qte_end(self, qte_id: str) -> None:
+        if self.qtes.pop(qte_id, None) is not None:
+            for conn in self.conns.values():
+                conn.presses.pop(qte_id, None)
+            await self.broadcast({"t": "qte_end", "id": qte_id})

@@ -19,9 +19,21 @@
     </section>
     <section id="chat" aria-label="Canal del evento">
       <div id="feed" role="log" aria-live="polite"></div>
-      <div id="composer">
-        <input id="input" type="text" placeholder="Solo lectura por ahora: escribe en el chat de Discord" disabled>
+      <div id="qte" data-active="false" aria-label="QTE">
+        <div id="qte-info"><strong id="qte-title">Sin QTE por ahora</strong><span id="qte-sub">Los botones se activan cuando te toque responder.</span></div>
+        <div id="qte-bar"><i id="qte-fill"></i></div>
+        <div id="actions">
+          <button class="act" data-cmd="evade" type="button" title="E (o Alt+E mientras escribes)" disabled><b>Evade</b><small>E</small></button>
+          <button class="act" data-cmd="parry" type="button" title="P (o Alt+P mientras escribes)" disabled><b>Parry</b><small>P</small></button>
+          <button class="act" data-cmd="adapt" type="button" title="A (o Alt+A mientras escribes)" disabled><b>Adapt</b><small>A</small></button>
+          <button class="act" data-cmd="attack" type="button" title="Q (o Alt+Q mientras escribes)" disabled><b>Ataque</b><small>Q</small></button>
+        </div>
       </div>
+      <form id="composer" autocomplete="off">
+        <select id="as" aria-label="Escribir como" disabled></select>
+        <input id="input" type="text" maxlength="2000" placeholder="Conectando…" enterkeyhint="send" disabled>
+        <button id="send" type="submit" disabled>Enviar</button>
+      </form>
     </section>
   </main>
   <div id="banner" hidden></div>

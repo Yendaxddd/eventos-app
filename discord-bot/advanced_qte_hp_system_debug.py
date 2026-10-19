@@ -46,6 +46,7 @@ except Exception as e:
 # or the log panel of the desktop app (see eventos_app/console_bridge.py).
 from eventos_app.console_bridge import console
 from eventos_app import paths as app_paths
+from eventos_app.activity.qte import QteBook
 
 # Load environment variables (an optional .env next to the app / script)
 load_dotenv(app_paths.app_home() / ".env")
@@ -308,7 +309,7 @@ class AdvancedQTEBot:
         console.print(f"[gold1]✓ Loaded {len(self.boss_defeat_gifs)} boss defeat GIFs[/gold1]")
 
         # QTE State Management - Support multiple concurrent QTEs
-        self.active_qtes = {}  # Dictionary: qte_id -> qte_data
+        self.active_qtes = QteBook()  # qte_id -> qte_data (a dict that also tells the Discord Activity when a QTE starts/ends)
         self.qte_counter = 0   # Counter for unique QTE IDs
         self.afk_users = set()
         self.last_qte_completion = {}  # {user_id: timestamp} for anti-spam
@@ -8830,8 +8831,12 @@ Your response (1-2 sentences max):"""
         except Exception as e:
             console.print(f"[red]✗ Error triggering group QTE: {e}[/red]")
 
-    async def handle_qte_response(self, message):
-        """Handle player responses to QTE events - OPTIMIZED"""
+    async def handle_qte_response(self, message, measured=None):
+        """Handle player responses to QTE events - OPTIMIZED
+
+        measured: seconds the player took, when the Discord Activity timed it on the player's own screen;
+        None = measure it from Discord's timestamps, as for a chat message.
+        """
         profiler.start('handle_qte_response')
         try:
             # Early exits for performance
@@ -8883,7 +8888,7 @@ Your response (1-2 sentences max):"""
                 if not qte_data:
                     continue
                     
-                response_time = self.qte_response_time(message, qte_data, now)
+                response_time = measured if measured is not None else self.qte_response_time(message, qte_data, now)
 
                 timing = self.qte_times[qte_data['difficulty']]
                 evade_window = timing['evade_window']
@@ -8954,6 +8959,9 @@ Your response (1-2 sentences max):"""
 
     def resolve_user_id(self, message):
         """Resolve user ID, handling Tupperbox characters"""
+        activity_user = getattr(message, 'activity_user_id', None)   # pressed in the Discord Activity: already known
+        if activity_user is not None:
+            return activity_user
         author_name = message.author.display_name
         if author_name in self.character_registry:
             return self.character_registry[author_name]
