@@ -651,3 +651,66 @@ def test_pictures_come_through_the_server_only_from_discord_hosts_and_are_cached
     assert (out["big"][0], out["page"][0], out["down"][0]) == (413, 415, 502)
     assert out["range"] == (206, PNG[:4])                                    # Safari needs ranges to play a clip
     assert all("evil" not in c and "http://" not in c for c in calls)
+
+
+def test_a_funnel_command_that_hangs_is_explained_or_accepted_if_the_funnel_is_already_on(tmp_path, monkeypatch):
+    monkeypatch.setattr(tunnel_module, "CLI_TIMEOUT", 0.6)
+    hang = """
+        import json, sys, time
+        a = sys.argv[1:]
+        if a[:1] == ["status"]:
+            print(json.dumps({"BackendState": "Running", "Self": {"DNSName": "pc.tail1234.ts.net."}}))
+        elif a[:2] == ["funnel", "status"]:
+            print(%r)
+        elif a[:1] == ["funnel"] and "off" not in a:
+            print("Waiting for approval...", flush=True); time.sleep(30)
+    """
+    out = {}
+
+    async def scenario():
+        for name, listed in (("off", "No serve config"), ("on", "https://pc.tail1234.ts.net (Funnel on)")):
+            script = fake_cloudflared(tmp_path, hang % listed, f"ts_hang_{name}")
+            tunnel = tunnel_module.TailscaleTunnel(8765, command=lambda b, args, s=script: [sys.executable, str(s), *args])
+            tunnel.find_binary = lambda: Path(sys.executable)
+            try:
+                out[name] = await tunnel.start()
+            except tunnel_module.TunnelError as exc:
+                out[name] = str(exc)
+            await tunnel.stop()
+
+    run(scenario())
+    assert "tardó demasiado" in out["off"] and "Waiting for approval" in out["off"] and "tailscale funnel --bg 8765" in out["off"]
+    assert out["on"] == "https://pc.tail1234.ts.net"
+
+
+# ---- what the app's log learns about the Activity ------------------------------------------------------------------------------------
+def test_the_app_log_hears_about_page_requests_the_pages_own_progress_and_refused_logins():
+    notes = []
+
+    async def scenario():
+        async with Rig(web=False) as rig:
+            rig.server.on_event = notes.append
+            async with rig.http.get(rig.url("/healthz")) as r:
+                await r.read()
+            async with rig.http.get(rig.url("/.proxy/api/config"), headers={"User-Agent": "Mozilla/5.0 [odd]", "X-Forwarded-For": "1.2.3.4"}) as r:
+                await r.read()
+            for stage, detail in (("SDK de Discord listo", ""), ("error", "x is not defined (app.js:3)")):
+                async with rig.http.post(rig.url("/.proxy/api/report"), json={"stage": stage, "detail": detail}) as r:
+                    assert r.status == 200
+            async with rig.http.post(rig.url("/api/report"), data="garbage") as r:
+                assert r.status == 400
+            ws, _ = await rig.login(999)                                           # not in the server: refused
+            await ws.close()
+            ws, _ = await rig.login(111)
+            await ws.close()
+            for _ in range(60):                                                    # past the cap: told to stop, nothing logged
+                async with rig.http.post(rig.url("/api/report"), json={"stage": "error", "detail": "spam"}) as r:
+                    last = r.status
+            return last
+
+    last = run(scenario())
+    text = "\n".join(notes)
+    assert "GET /healthz → 200 (desde este PC" in text and "GET /api/config → 200 (por el túnel, Mozilla/5.0 [odd]" in text
+    assert "la página dice: SDK de Discord listo" in text and "la página dice: error — x is not defined (app.js:3)" in text
+    assert "entrada rechazada: No eres miembro" in text and "Ana entró a la Actividad" in text
+    assert last == 429 and text.count("spam") < 40

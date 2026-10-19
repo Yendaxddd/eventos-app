@@ -60,7 +60,8 @@ def is_local_request(request: web.Request) -> bool:
 class ActivityServer:
     def __init__(self, hub: Hub, *, auth: DiscordAuth, authorize: Authorize, web_dir: Path, client_id: int,
                  host: str = "127.0.0.1", port: int = DEFAULT_PORT, allow_dev: bool = True, actions=None,
-                 media_dir: Path | None = None, media_fetch: Fetch | None = None) -> None:
+                 media_dir: Path | None = None, media_fetch: Fetch | None = None,
+                 on_event: Callable[[str], None] | None = None) -> None:
         self.hub, self.auth, self.authorize = hub, auth, authorize
         self.actions = actions     # what the players can do (write, press a QTE button): see ActivityBridge.say / press
         self.web_dir = Path(web_dir)
@@ -68,6 +69,9 @@ class ActivityServer:
         self.host, self.port = host, port
         self.allow_dev = allow_dev
         self._runner: web.AppRunner | None = None
+        self.on_event = on_event       # one line of text per thing worth telling the person running the app (see `_note`)
+        self._reports = 0
+        self._reports_reset = 0.0
         self.media_dir = Path(media_dir) if media_dir else None
         self._media_fetch = media_fetch or self._download
         self._media_locks: dict[str, asyncio.Lock] = {}
@@ -75,9 +79,54 @@ class ActivityServer:
         self._media_writes = 0
 
     # ---- lifecycle ----------------------------------------------------------------------------
+    def _note(self, text: str) -> None:
+        if self.on_event is not None:
+            try:
+                self.on_event(text)
+            except Exception:  # noqa: BLE001
+                log.exception("on_event failed")
+
+    @web.middleware
+    async def _watch(self, request: web.Request, handler):
+        """Say in the app's log when somebody (Discord, above all) asks for the page: it shows whether Discord reaches us."""
+        path = request.path.removeprefix("/.proxy") or "/"
+        shown = path in ("/", "/index.html", "/api/config", "/api/token", "/ws", "/healthz")
+        try:
+            response = await handler(request)
+        except web.HTTPException as exc:
+            if shown:
+                self._note(f"{request.method} {path} → {exc.status} ({self._who(request)})")
+            raise
+        if shown:
+            self._note(f"{request.method} {path} → {response.status} ({self._who(request)})")
+        return response
+
+    @staticmethod
+    def _who(request: web.Request) -> str:
+        agent = request.headers.get("User-Agent", "sin User-Agent")
+        via = "por el túnel" if not is_local_request(request) else "desde este PC"
+        return f"{via}, {agent[:60]}"
+
+    async def _report(self, request: web.Request) -> web.Response:
+        """The page tells how far it got (and any error), so a blank Activity can be diagnosed from the app's log."""
+        now = time.monotonic()
+        if now - self._reports_reset > 60:
+            self._reports, self._reports_reset = 0, now
+        self._reports += 1
+        if self._reports > 40:
+            return web.json_response({"ok": False}, status=429)
+        try:
+            body = await request.json()
+            stage, detail = str(body.get("stage", ""))[:40], str(body.get("detail", ""))[:300]
+        except (ValueError, TypeError, AttributeError):
+            return web.json_response({"ok": False}, status=400)
+        self._note(f"la página dice: {stage}{' — ' + detail if detail else ''}")
+        return web.json_response({"ok": True})
+
     def _app(self) -> web.Application:
-        app = web.Application(client_max_size=MAX_FRAME)
+        app = web.Application(client_max_size=MAX_FRAME, middlewares=[self._watch])
         for prefix in ("", "/.proxy"):
+            app.router.add_post(f"{prefix}/api/report", self._report)
             app.router.add_get(f"{prefix}/api/config", self._config)
             app.router.add_post(f"{prefix}/api/token", self._token)
             app.router.add_get(f"{prefix}/ws", self._ws)
@@ -244,6 +293,7 @@ class ActivityServer:
                 hello = json.loads((await asyncio.wait_for(ws.receive(), HELLO_TIMEOUT)).data)
                 user_id, name, avatar, dev = await self._identify(hello, request)
             except AuthError as exc:
+                self._note(f"entrada rechazada: {exc}")
                 await ws.send_json({"t": "error", "code": "auth", "reason": str(exc)})
                 return ws
             except (asyncio.TimeoutError, ValueError, TypeError, AttributeError):
@@ -263,6 +313,7 @@ class ActivityServer:
                                 "me": self.actions.me_of(user_id) if self.actions is not None and not dev else {},
                                 "canWrite": self.actions is not None})
             await self.hub.add(conn)
+            self._note(f"{name} entró a la Actividad")
             async for message in ws:
                 if message.type != aiohttp.WSMsgType.TEXT:
                     continue

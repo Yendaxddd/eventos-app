@@ -244,13 +244,27 @@ class TailscaleTunnel(Tunnel):
         flags = getattr(__import__("subprocess"), "CREATE_NO_WINDOW", 0)
         proc = await asyncio.create_subprocess_exec(*self._cli(binary, args), stdout=asyncio.subprocess.PIPE,
                                                     stderr=asyncio.subprocess.STDOUT, creationflags=flags)
+        chunks: list[bytes] = []
+
+        async def pump() -> None:                # kept as it arrives: a command that hangs still leaves what it said
+            assert proc.stdout is not None
+            async for chunk in proc.stdout:
+                chunks.append(chunk)
+
+        reader = asyncio.get_running_loop().create_task(pump())
+        timed_out = False
         try:
-            out, _ = await asyncio.wait_for(proc.communicate(), CLI_TIMEOUT)
-        except asyncio.TimeoutError:             # e.g. `funnel` waiting for somebody to approve it in the browser
+            await asyncio.wait_for(proc.wait(), CLI_TIMEOUT)       # e.g. `funnel` waiting for approval in the browser
+        except asyncio.TimeoutError:
+            timed_out = True
             proc.kill()
-            out, _ = await proc.communicate()
-            return -1, out.decode("utf-8", "replace")
-        return proc.returncode or 0, out.decode("utf-8", "replace")
+            await proc.wait()
+        try:
+            await asyncio.wait_for(reader, 2.0)
+        except asyncio.TimeoutError:
+            reader.cancel()
+        text = b"".join(chunks).decode("utf-8", "replace")
+        return (-1 if timed_out else (proc.returncode or 0)), text
 
     def _fail(self, message: str) -> TunnelError:
         self.url = ""
@@ -274,10 +288,16 @@ class TailscaleTunnel(Tunnel):
             if link and (code != 0 or "not enabled" in out.lower() or "enable" in out.lower()):
                 raise self._fail(f"Funnel todavía no está permitido en tu Tailscale: abre {link.group(0)} una vez y apruébalo; "
                                  f"luego reinicia la Actividad.")
-            if code != 0:
+            timed_out = code == -1
+            if code != 0 and not timed_out:
                 raise self._fail(f"Tailscale no pudo activar el Funnel: {out.strip()[:300] or 'sin mensaje'}")
             self._exposed = True
-            code, out = await self._run(binary, ["funnel", "status"])
+            said = out.strip()[:300]
+            code, out = await self._run(binary, ["funnel", "status"])      # it may already be on (set by hand, or slow to answer)
+            if timed_out and address not in out:
+                raise self._fail("Tailscale tardó demasiado en activar el Funnel" + (f" y dijo: {said}" if said else "") +
+                                 f". Abre PowerShell y ejecuta «tailscale funnel --bg {self.port}» para ver qué pide "
+                                 "(casi siempre aprobar Funnel en el navegador).")
             if address not in out:
                 raise self._fail("Tailscale no confirmó el Funnel. Ejecuta «tailscale funnel status» para ver qué pasa.")
         except OSError as exc:

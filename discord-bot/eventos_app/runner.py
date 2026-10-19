@@ -18,6 +18,8 @@ from typing import Awaitable, Callable
 
 import discord
 
+from rich.markup import escape as markup_escape
+
 from . import activity, benchmark, console_bridge, diagnostics, multibot, paths, webhooks
 from .settings import Settings
 
@@ -415,7 +417,8 @@ class BotRunner:
                                          avatar_file=paths.data_dir() / "character_avatars.json")
         server = activity.ActivityServer(hub, auth=auth, authorize=bridge.authorize, client_id=client_id,
                                          web_dir=paths.resource_path("eventos_app", "activity", "web"),
-                                         actions=bridge, media_dir=paths.app_home() / "cache" / "media")
+                                         actions=bridge, media_dir=paths.app_home() / "cache" / "media",
+                                         on_event=lambda text: out.print(f"[dim]🌐 Actividad: {markup_escape(text)}[/dim]"))
         try:
             port = await server.start()
         except OSError as exc:

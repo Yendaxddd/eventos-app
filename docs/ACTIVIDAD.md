@@ -69,6 +69,16 @@ Al detener el bot la app apaga el Funnel (nada queda público). Con Funnel, el s
 internet en esa dirección: entrar exige iniciar sesión con Discord y ser miembro del servidor, el acceso de prueba local
 está bloqueado fuera de tu PC y `/media` solo sirve imágenes de Discord. Sin Tailscale, deja «Túnel rápido de Cloudflare».
 
+## Si la Actividad sale en blanco: el registro de la app
+La app escribe en su registro (gris, con 🌐) todo lo que pasa con la Actividad. Léelo mientras abres la Actividad en Discord:
+- `GET / → 200 (por el túnel, …)` o `GET /api/config → 200`: Discord **sí** llegó a tu PC. Si luego no hay nada más, el fallo está
+  en el navegador de Discord.
+- `la página dice: página cargada / SDK de Discord listo / autorizado por Discord / token canjeado / websocket abierto /
+  conectado`: hasta dónde llegó la página. La última línea es donde se atascó; `error — …` o `fallo — …` dicen por qué.
+- `entrada rechazada: …`: Discord entró pero la app no dejó pasar al jugador (no es miembro, sin acceso al canal, Client Secret).
+- **Nada de lo anterior**: Discord no llega a tu PC. Revisa el mapping del Portal (la raíz `/`), que el túnel esté «listo» y que
+  la dirección abra `/healthz` desde fuera. Tras cambiar el mapping, cierra la Actividad y vuelve a lanzarla.
+
 ## Cada evento
 1. En la app: marca *Activar la Actividad*, guarda e inicia el bot. Espera a ver «● Túnel listo: …».
 2. Pega esa dirección en URL Mappings `/` (paso 3) y guarda.

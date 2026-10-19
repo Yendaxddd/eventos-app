@@ -12,6 +12,23 @@ const state = { you: null, users: [], rtt: null, offset: null, messages: new Map
   canWrite: false, characters: [], qte: null, qteResult: null, game: null, me: null };
 window.__eventos = state;                           // handy for tests and for debugging from the console
 
+// ---- telling the app how far we got ------------------------------------------------------------------------------
+// A blank Activity is hard to diagnose from the outside, so the page reports its progress and its errors to the app
+// (which prints them in its log).
+const reported = new Set();
+let errorsReported = 0;
+function report(stage, detail = "") {
+  if (stage === "error" ? errorsReported++ >= 5 : reported.has(stage)) return;
+  reported.add(stage);
+  try {
+    fetch(`${base}/api/report`, { method: "POST", headers: { "Content-Type": "application/json" }, keepalive: true,
+      body: JSON.stringify({ stage, detail: String(detail).slice(0, 300) }) }).catch(() => {});
+  } catch { /* reporting is a courtesy */ }
+}
+window.addEventListener("error", (e) => report("error", `${e.message} (${(e.filename || "").split("/").pop()}:${e.lineno})`));
+window.addEventListener("unhandledrejection", (e) => report("error", (e.reason && e.reason.message) || e.reason));
+report("página cargada", inDiscord ? "dentro de Discord" : "fuera de Discord");
+
 // ---- status ----------------------------------------------------------------------------------------------
 function setState(name, text) {
   document.body.dataset.state = name;
@@ -448,12 +465,15 @@ async function login() {
   if (inDiscord) {
     const sdk = new DiscordSDK(config.clientId);
     await sdk.ready();
+    report("SDK de Discord listo");
     const { code } = await sdk.commands.authorize({
       client_id: config.clientId, response_type: "code", state: "", prompt: "none", scope: ["identify"],
     });
+    report("autorizado por Discord");
     const reply = await fetch(`${base}/api/token`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ code }) });
     const data = await reply.json();
     if (!reply.ok) throw new Error(data.error || "No se pudo iniciar sesión");
+    report("token canjeado");
     await sdk.commands.authenticate({ access_token: data.access_token });
     return { t: "hello", token: data.access_token };
   }
@@ -466,12 +486,12 @@ function connect(hello) {
   const ws = new WebSocket(`${proto}://${location.host}${base}/ws`);
   state.ws = ws;
   let welcomed = false;
-  ws.onopen = () => { ws.send(JSON.stringify(hello)); setState("starting", "Entrando…"); };
+  ws.onopen = () => { report("websocket abierto"); ws.send(JSON.stringify(hello)); setState("starting", "Entrando…"); };
   ws.onmessage = (event) => {
     const frame = JSON.parse(event.data);
     switch (frame.t) {
       case "welcome":
-        welcomed = true; state.retry = 0; state.you = frame.you; state.samples = [];
+        report("conectado"); welcomed = true; state.retry = 0; state.you = frame.you; state.samples = [];
         banner("");
         setState("connected", "Conectado");
         $("channel").textContent = frame.channel || "Evento";
@@ -525,6 +545,7 @@ function connect(hello) {
 
 function fail(error) {
   console.error(error);
+  report("fallo", (error && error.message) || error);
   setState("error", "Error");
   banner(error.message || String(error));
 }
