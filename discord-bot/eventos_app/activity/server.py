@@ -18,7 +18,7 @@ import time
 import zlib
 from pathlib import Path
 from typing import Awaitable, Callable
-from urllib.parse import urlsplit
+from urllib.parse import unquote, urlsplit
 
 import aiohttp
 from aiohttp import web
@@ -34,6 +34,7 @@ DEFAULT_PORT = 8765
 HELLO_TIMEOUT = 10.0
 RPC_TIMEOUT = 15.0
 MAX_FRAME = 64 * 1024
+UPLOAD_LIMIT = 9 * 1024 * 1024        # a little above what the bridge accepts, so it is the one that explains why
 # Pictures and clips the mirror shows come through this server (no URL Mappings needed in the Developer Portal),
 # and only from Discord's own hosts.
 MEDIA_HOSTS = re.compile(r"^(cdn\.discordapp\.com|media\.discordapp\.net|images-ext-\d+\.discordapp\.net)$")
@@ -48,6 +49,12 @@ _FALLBACK = ("<!doctype html><meta charset=utf-8><title>Eventos App</title><body
              "padding:2rem'><h1>La Actividad todavía no está construida</h1><p>Falta la carpeta "
              "<code>eventos_app/activity/web</code> (se genera con <code>npm run build</code> en "
              "<code>activity_client/</code>; el instalador ya la incluye).</p>")
+
+
+def dev_identity(name: str) -> tuple[int, str]:
+    """The (made-up, negative) id and name of a test window opened on this PC."""
+    clean = str(name).strip()[:32] or "Prueba"
+    return -(1000 + zlib.crc32(clean.encode()) % 1_000_000), f"{clean} (prueba local)"
 
 
 def is_local_request(request: web.Request) -> bool:
@@ -138,6 +145,7 @@ class ActivityServer:
         app = web.Application(client_max_size=MAX_FRAME, middlewares=[self._watch, self._fresh])
         for prefix in ("", "/.proxy"):
             app.router.add_post(f"{prefix}/api/report", self._report)
+            app.router.add_post(f"{prefix}/api/upload", self._upload)
             app.router.add_get(f"{prefix}/api/config", self._config)
             app.router.add_post(f"{prefix}/api/token", self._token)
             app.router.add_get(f"{prefix}/ws", self._ws)
@@ -292,6 +300,46 @@ class ActivityServer:
         except AuthError as exc:
             return web.json_response({"error": str(exc)}, status=400)
 
+    # ---- pictures a player sends from their device ---------------------------------------------------------------
+    async def _http_user(self, request: web.Request) -> int:
+        """Who sends this request: the Discord token in `Authorization`, or a test window on this PC (`X-Dev`)."""
+        dev = request.headers.get("X-Dev")
+        if dev:
+            if not (self.allow_dev and is_local_request(request)):
+                raise AuthError("el modo de prueba solo funciona abriendo la página desde este mismo PC")
+            return dev_identity(dev)[0]
+        token = request.headers.get("Authorization", "").removeprefix("Bearer ").strip()
+        identity = await self.auth.identify(token)
+        await self.authorize(identity.user_id)
+        return identity.user_id
+
+    async def _upload(self, request: web.Request) -> web.Response:
+        """The body is the picture itself. The bridge checks it is a real picture, keeps it on Discord and answers its address."""
+        if self.actions is None or not hasattr(self.actions, "store_image"):
+            return web.json_response({"error": "Esta Actividad es de solo lectura."}, status=403)
+        try:
+            user_id = await self._http_user(request)
+        except AuthError as exc:
+            return web.json_response({"error": str(exc)}, status=401)
+        if request.content_length is not None and request.content_length > UPLOAD_LIMIT:
+            return web.json_response({"error": "La imagen pesa demasiado."}, status=413)
+        body = bytearray()
+        async for chunk in request.content.iter_chunked(1 << 16):
+            body += chunk
+            if len(body) > UPLOAD_LIMIT:
+                return web.json_response({"error": "La imagen pesa demasiado."}, status=413)
+        name = unquote(request.headers.get("X-Filename", "imagen"))[:120]         # sent URL-encoded: headers are plain ASCII
+        try:
+            url = await asyncio.wait_for(self.actions.store_image(user_id, name, bytes(body)), RPC_TIMEOUT * 2)
+        except RpcError as exc:
+            return web.json_response({"error": str(exc)}, status=400)
+        except asyncio.TimeoutError:
+            return web.json_response({"error": "Discord tardó demasiado en guardar la imagen."}, status=504)
+        except Exception:  # noqa: BLE001
+            log.exception("could not store an uploaded picture")
+            return web.json_response({"error": "No se pudo guardar la imagen."}, status=500)
+        return web.json_response({"url": url})
+
     # ---- the WebSocket ---------------------------------------------------------------------------------
     async def _identify(self, hello: dict, request: web.Request) -> tuple[int, str, str, bool]:
         """(user id, name, avatar, dev) of whoever said hello, or AuthError."""
@@ -301,8 +349,8 @@ class ActivityServer:
         if dev_name:
             if not (self.allow_dev and is_local_request(request)):
                 raise AuthError("el modo de prueba solo funciona abriendo la página desde este mismo PC")
-            name = str(dev_name).strip()[:32] or "Prueba"
-            return -(1000 + zlib.crc32(name.encode()) % 1_000_000), f"{name} (prueba local)", "", True
+            user_id, name = dev_identity(dev_name)
+            return user_id, name, "", True
         identity = await self.auth.identify(str(hello.get("token", "")))
         info = await self.authorize(identity.user_id)
         return identity.user_id, info.get("name") or identity.name, info.get("avatar") or identity.avatar, False

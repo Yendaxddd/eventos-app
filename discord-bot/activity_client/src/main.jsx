@@ -4,7 +4,7 @@ import "./css/main.css";
 import { App } from "./ui/App.jsx";
 import { boot } from "./net.js";
 import { installKeys } from "./keys.js";
-import { prefs, qtes, you, messages, link, comp, me, game, conn, view, tutorial } from "./state.js";
+import { prefs, qtes, you, messages, link, comp, me, game, conn, view, tutorial, characters } from "./state.js";
 import { applyPrefs } from "./prefs.js";
 
 effect(() => applyPrefs(prefs.value));      // the player's settings are applied to the page whenever they change
@@ -15,6 +15,7 @@ window.__eventos = {
   get qtes() { return qtes.value; }, get you() { return you.value; }, get messages() { return messages.value; },
   get link() { return link.value; }, get comp() { return comp.value; }, get me() { return me.value; }, get game() { return game.value; },
   get conn() { return conn.value; }, get view() { return view.value; }, get prefs() { return prefs.value; }, get tutorial() { return tutorial.value; },
+  get characters() { return characters.value; },
 };
 
 render(<App />, document.getElementById("root"));

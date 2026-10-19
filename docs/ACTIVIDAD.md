@@ -78,6 +78,32 @@ el chat de siempre.
 - **Tutorial:** por pasos (el canal, escribir, esquivar, parry con práctica real usando las ventanas del bot, rescatar/poderes,
   menú y ajustes). Empieza solo la primera vez y se repite desde el menú. La práctica no envía nada al servidor.
 
+## Mi panel (lo que antes era `/dashboard`)
+Menú (☰) → «Mi personaje», o la pestaña que quieras. Todo lo hace el servidor con **las mismas reglas que los comandos** (y siempre
+para ti: la página no puede pedir los datos de otra persona).
+- **Resumen:** tus números (aciertos, Black Flash, rachas, mejor tiempo y la gráfica de tus últimos tiempos), las cargas de tus
+  poderes, tus puntos de habilidad, título y dominio, tus puestos en el ranking y el interruptor de **participar en los QTE**
+  (el `/qte`).
+- **Logros:** por categorías, con lo que da cada uno (puntos, título, dominio), el avance de los que se pueden medir (p. ej. 12 / 100
+  esquives) y la fecha. Los **secretos** no cuentan nada hasta conseguirlos (el servidor ni siquiera los envía). Aquí eliges tu
+  **título** y tu **expansión de dominio** (con su recarga).
+- **Personajes:** registra (como `/register`, con sugerencias de los nombres que han hablado en el canal y nadie tiene), quita,
+  y crea o edita los **dos poderes** de cada uno (como `/registerpower`): nombre, qué hace, tipo, efecto (daño, curación,
+  aturdir), recarga, frase que lo activa e imagen. Al cambiar tus personajes, la lista «escribir como» se actualiza en todas tus
+  pantallas.
+- **Habilidades:** el árbol de cada rama con líneas entre cada habilidad y lo que necesita; toca una para ver qué hace por rango,
+  su coste y qué te falta, y **aprende** o mejora (como `/learnsk`).
+- **Inventario:** tus objetos especiales con rareza, lore y el **progreso de adaptación** (por dificultad o total) con cada
+  recompensa escrita en español.
+- **Imágenes:** las de tu contraataque (como `/setcountergif`): **sube una desde tu dispositivo** (PNG, JPG, GIF o WebP, hasta
+  8 MB; el servidor mira que de verdad sea una imagen y la guarda en Discord, en el canal del evento como un mensaje de
+  almacén que la Actividad oculta) o pega un enlace https.
+- **Ranking:** las seis clasificaciones del `/leaderboard`, con podio y tu puesto.
+
+Los textos de los datos (logros, habilidades, objetos) están en inglés en los archivos del bot; la Actividad los muestra en español
+con una tabla incorporada. Para traducir los tuyos, crea `data/i18n_es.json` (se recarga sola al guardarlo):
+`{"exact": {"Boss Slayer": "Cazajefes"}, "patterns": [["^Kill (\\d+) bosses$", "Derrota a \\1 jefes"]]}`.
+
 ## Puesta en marcha (una sola vez)
 En <https://discord.com/developers/applications> → tu aplicación (la del bot principal):
 1. **Activities**: actívalas («Enable Activities»). Discord crea el comando de entrada «Launch».
@@ -138,13 +164,15 @@ La app escribe en su registro (gris, con 🌐) todo lo que pasa con la Actividad
 1. **Escribir + QTE básico** (0.6.0), **estado, personajes, imágenes y enlace fijo** (0.7.0), **varios QTE, todos los modos y
    cooldowns** (0.8.x).
 2. **Interfaz nueva, QTE flotante, menú, ajustes, latencia y tutorial** (0.9.0).
-3. Paneles del jugador (perfil, logros, habilidades, inventario, ranking, jefe) y panel del GM: ver `CHANGELOG`/notas de versión.
+3. **Paneles del jugador** (perfil, logros, personajes y poderes, habilidades, inventario, imágenes, ranking) (0.10.0). Siguen:
+   panel del GM (0.11.0), app de escritorio renovada (1.0.0) y mensajes del bot en español.
 
 ## Desarrollo del cliente
 El cliente web está en `discord-bot/activity_client` (Preact + esbuild; `npm ci && npm run build` lo genera en
 `eventos_app/activity/web`). `npm test` ejecuta sus pruebas de lógica (ventanas de QTE, colocación de botones, latencia,
 ajustes) y `python activity_client/preview.py <carpeta> [escenario…]` lo abre con datos inventados y guarda capturas
-(`desktop`, `phone`, `pages`, `modes`, `crowd`, `tutorial`) para revisar el aspecto sin Discord.
+(`desktop`, `phone`, `pages`, `modes`, `crowd`, `tutorial`) para revisar el aspecto sin Discord; `preview_panel.py <carpeta>` hace lo
+mismo con los paneles del jugador, usando el puente real y un bot inventado.
 
 ## Qué falta comprobar en esta versión (con Discord real)
 - Cómo se ve y se siente el botón flotante en **móviles reales** dentro de Discord (tamaños, posiciones, zona del pulgar) y con
@@ -152,3 +180,5 @@ ajustes) y `python activity_client/preview.py <carpeta> [escenario…]` lo abre 
 - La **prueba de latencia** con conexiones y móviles distintos: si el ajuste te parece corto o largo, dime los números de
   *Ayuda → Datos de tu conexión*.
 - La mini-ventana de Discord (el comportamiento de la «PiP interactiva» depende de la versión de Discord).
+- **Subir una imagen desde el móvil** dentro de Discord: el selector de archivos de la Actividad puede comportarse distinto según
+  el sistema; el enlace https sirve siempre. Y que el canal del evento deje al bot publicar archivos (la imagen se guarda ahí).

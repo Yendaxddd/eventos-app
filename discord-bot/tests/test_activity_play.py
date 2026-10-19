@@ -103,6 +103,7 @@ class Rig:
         self.lanes = lanes
         self.verdict = "✅"
         self.characters = {111: ["Kuro", "Shiro"]}
+        self.web_dir = Path("/nonexistent")           # the browser tests point it at the built client
 
     async def __aenter__(self):
         await self.fake.start()
@@ -137,7 +138,7 @@ class Rig:
         self.bridge = ActivityBridge(self.hub, self.app, pool=lambda: NS(send_as=send_as))
         self.bridge.start()
         self.auth = DiscordAuth(client_id=42, client_secret="s", api_base=f"http://127.0.0.1:{self.fake.port}/api/v10")
-        self.server = ActivityServer(self.hub, auth=self.auth, authorize=self.bridge.authorize, web_dir=Path("/nonexistent"),
+        self.server = ActivityServer(self.hub, auth=self.auth, authorize=self.bridge.authorize, web_dir=self.web_dir,
                                      client_id=42, port=0, actions=self.bridge)
         self.port = await self.server.start()
         self.http = aiohttp.ClientSession()

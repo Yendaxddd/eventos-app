@@ -12,6 +12,7 @@ import { MenuPage } from "../views/Menu.jsx";
 import { SettingsPage } from "../views/Settings.jsx";
 import { HelpPage } from "../views/Help.jsx";
 import { LatencyPage } from "../views/Latency.jsx";
+import { PanelPage } from "../views/Panel.jsx";
 import { TutorialHost } from "../views/Tutorial.jsx";
 
 function Splash() {
@@ -57,6 +58,7 @@ function Pages({ layout }) {
       {v === "settings" && <SettingsPage />}
       {v === "latency" && <LatencyPage />}
       {v === "help" && <HelpPage />}
+      {v === "panel" && <PanelPage />}
     </div>
   );
 }

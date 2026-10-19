@@ -24,6 +24,7 @@ export function installKeys() {
     const target = event.target;
     const typing = target && (target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.tagName === "SELECT" || target.isContentEditable);
     if (event.key === "Escape") {
+      if (document.querySelector(".modal-card")) return;      // a dialog closes itself with Escape: it must not also leave the page behind it
       if (typing) { target.blur(); return; }
       if (sheet.value) { sheet.value = null; return; }
       if (view.value !== "event") back();

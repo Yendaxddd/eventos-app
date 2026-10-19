@@ -20,7 +20,7 @@ import discord
 
 from rich.markup import escape as markup_escape
 
-from . import activity, benchmark, console_bridge, diagnostics, multibot, paths, webhooks
+from . import activity, benchmark, console_bridge, diagnostics, i18n, multibot, paths, webhooks
 from .settings import Settings
 
 log = logging.getLogger("eventos_app")
@@ -411,6 +411,7 @@ class BotRunner:
             return
         app, out = self._app, console_bridge.console
         client_id = app.bot.application_id or app.bot.user.id
+        i18n.configure(overrides=paths.data_dir() / "i18n_es.json")       # the game masters' own Spanish for names and descriptions
         hub = activity.Hub()
         auth = activity.DiscordAuth(client_id=client_id, client_secret=settings.activity_client_secret.strip())
         bridge = activity.ActivityBridge(hub, app, pool=lambda: self._pool,

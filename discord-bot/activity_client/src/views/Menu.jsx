@@ -1,18 +1,29 @@
-import { Gauge, GraduationCap, LifeBuoy, Settings, Swords } from "lucide-preact";
+import { Backpack, Drama, Gauge, GitBranch, GraduationCap, Image as ImageIcon, LifeBuoy, Medal, Settings, Swords, Trophy, UserRound } from "lucide-preact";
 import { go, link, tutorial, you, version, perms } from "../state.js";
 import { QUALITY } from "../terms.js";
 import { Avatar } from "../ui/Avatar.jsx";
-import { Page } from "../ui/Controls.jsx";
+import { Page, Section } from "../ui/Controls.jsx";
 
-function Tile({ icon: Icon, title, sub, color, glow, onClick, id }) {
+function Tile({ icon: Icon, title, sub, color, onClick, id }) {
   return (
-    <button class="tile" type="button" onClick={onClick} style={{ "--tile-color": color, "--tile-glow": glow }} data-testid={`tile-${id}`}>
+    <button class="tile" type="button" onClick={onClick} style={{ "--tile-color": color, "--tile-glow": `color-mix(in srgb, ${color} 50%, transparent)` }} data-testid={`tile-${id}`}>
       <span class="tile-icon"><Icon size={22} /></span>
       <strong>{title}</strong>
       <span class="sub">{sub}</span>
     </button>
   );
 }
+
+// the player's own things: each opens its tab of «Mi panel»
+const MINE = [
+  ["summary", "Mi perfil", "Tus estadísticas, cargas y tiempos.", UserRound, "#a78bfa"],
+  ["achievements", "Logros", "Títulos, dominios y lo que te falta.", Trophy, "#fbbf24"],
+  ["characters", "Personajes", "Regístralos y crea sus poderes.", Drama, "#f472b6"],
+  ["skills", "Habilidades", "Gasta tus puntos en el árbol.", GitBranch, "#34d399"],
+  ["inventory", "Inventario", "Objetos especiales y su progreso.", Backpack, "#fb923c"],
+  ["images", "Imágenes", "Las que salen cuando contraatacas.", ImageIcon, "#60a5fa"],
+  ["ranking", "Ranking", "Quién va primero en cada cosa.", Medal, "#fb7185"],
+];
 
 export function MenuPage() {
   const who = you.value;
@@ -30,12 +41,22 @@ export function MenuPage() {
         <button class="btn btn-sm" type="button" onClick={() => go("event")}>Volver al evento</button>
       </div>
 
-      <div class="tiles">
-        <Tile id="settings" icon={Settings} title="Ajustes" sub="Pantalla, botones de QTE, sonido y chat." color="#a78bfa" glow="rgb(167 139 250 / .5)" onClick={() => go("settings")} />
-        <Tile id="latency" icon={Gauge} title="Prueba de latencia" sub="Mide tu conexión y tu dispositivo para ajustar tus tiempos." color="#34d399" glow="rgb(52 211 153 / .5)" onClick={() => go("latency")} />
-        <Tile id="tutorial" icon={GraduationCap} title="Tutorial" sub="Aprende a jugar y practica un QTE sin riesgo." color="#fbbf24" glow="rgb(251 191 36 / .5)" onClick={() => { tutorial.value = { active: true, step: 0 }; go("event"); }} />
-        <Tile id="help" icon={LifeBuoy} title="Ayuda y atajos" sub="Teclas, reglas de los QTE y datos para soporte." color="#60a5fa" glow="rgb(96 165 250 / .5)" onClick={() => go("help")} />
-      </div>
+      <Section title="Mi personaje">
+        <div class="tiles">
+          {MINE.map(([tab, title, sub, Icon, color]) => (
+            <Tile key={tab} id={tab} icon={Icon} title={title} sub={sub} color={color} onClick={() => go("panel", { tab })} />
+          ))}
+        </div>
+      </Section>
+
+      <Section title="La Actividad">
+        <div class="tiles">
+          <Tile id="settings" icon={Settings} title="Ajustes" sub="Pantalla, botones de QTE, sonido y chat." color="#a78bfa" onClick={() => go("settings")} />
+          <Tile id="latency" icon={Gauge} title="Prueba de latencia" sub="Mide tu conexión y tu dispositivo para ajustar tus tiempos." color="#34d399" onClick={() => go("latency")} />
+          <Tile id="tutorial" icon={GraduationCap} title="Tutorial" sub="Aprende a jugar y practica un QTE sin riesgo." color="#fbbf24" onClick={() => { tutorial.value = { active: true, step: 0 }; go("event"); }} />
+          <Tile id="help" icon={LifeBuoy} title="Ayuda y atajos" sub="Teclas, reglas de los QTE y datos para soporte." color="#60a5fa" onClick={() => go("help")} />
+        </div>
+      </Section>
 
       <p class="faint" style={{ marginTop: "var(--sp-5)", fontSize: ".75rem", textAlign: "center" }}>Eventos App{version.value ? ` ${version.value}` : ""}</p>
     </Page>

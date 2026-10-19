@@ -750,12 +750,13 @@ def test_keyboard_shortcuts_do_not_fire_while_typing_and_the_menu_pages_open_and
         await hub.qte_end("1")
 
         await page.click("[data-testid=menu-button]")
-        assert "prueba de latencia" in (await page.locator(".tiles").inner_text()).lower()
+        assert "prueba de latencia" in (await page.locator("[data-testid=page]").inner_text()).lower()
+        assert await page.locator("[data-testid=tile-achievements]").count() == 1                 # and the player's own things, above them
         await page.click("[data-testid=tile-help]")
         text = await page.locator("[data-testid=page]").inner_text()
         assert "reglas de los qte" in text.lower() and "espacio" in text.lower()
         await page.keyboard.press("Escape")                                                    # help -> menu
-        await page.wait_for_selector(".tiles")
+        await page.wait_for_selector("[data-testid=tile-help]")
         await page.keyboard.press("Escape")                                                    # menu -> event
         await page.wait_for_selector("[data-testid=composer]")
         assert await page.evaluate("window.__eventos.view") == "event"

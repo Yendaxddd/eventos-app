@@ -16,6 +16,7 @@ import discord
 
 from .auth import AuthError
 from .hub import Conn, Hub, RpcError
+from .panel_rpc import PanelRpc, is_storage_message
 from .latency import CAP_MS, LatencyBook, compensation
 from .prefs import PrefsStore
 from .qte import COMMANDS, TIMED, ActivityInput, describe, response_seconds
@@ -102,7 +103,7 @@ def serialize_message(message: Any, own_webhooks: set[int] | frozenset[int] = fr
     }
 
 
-class ActivityBridge:
+class ActivityBridge(PanelRpc):
     def __init__(self, hub: Hub, app: Any, pool: Callable[[], Any] | None = None, avatar_file: Path | None = None,
                  prefs_file: Path | None = None, latency_file: Path | None = None) -> None:
         self.hub, self.app = hub, app        # app: the AdvancedQTEBot instance
@@ -116,6 +117,7 @@ class ActivityBridge:
         self._load_avatars()
         self._warned_no_lane = False
         self._state_task = None
+        self._init_panel()                           # the player dashboards (panel_rpc.py)
 
     # ---- wiring ---------------------------------------------------------------------------------
     def start(self) -> None:
@@ -197,7 +199,7 @@ class ActivityBridge:
 
     # ---- bot -> Activity ---------------------------------------------------------------------------
     def _mine(self, message) -> bool:
-        return bool(self.app.qte_channel_id) and message.channel.id == self.app.qte_channel_id
+        return bool(self.app.qte_channel_id) and message.channel.id == self.app.qte_channel_id and not is_storage_message(message)
 
     async def _on_message(self, message) -> None:
         if self._mine(message):
@@ -223,7 +225,7 @@ class ActivityBridge:
         channel = self.channel()
         if channel is None:
             return []
-        frames = [self._frame(m) async for m in channel.history(limit=BACKLOG_FETCH, oldest_first=False)]
+        frames = [self._frame(m) async for m in channel.history(limit=BACKLOG_FETCH, oldest_first=False) if not is_storage_message(m)]
         return list(reversed(frames))
 
     def _qte_started(self, qte_id, data) -> None:

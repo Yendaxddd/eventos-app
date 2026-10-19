@@ -12,6 +12,7 @@ import { DEFAULT_PREFS, sanitizePrefs, saveLocalPrefs } from "./prefs.js";
 import {
   bindSender, startQte, endQte, clearQtes, onResult, onStep, onPressError, netMs,
 } from "./qte-store.js";
+import { clearPanelCache } from "./panel/cache.js";
 
 // ---- telling the app how far we got ---------------------------------------------------------------------------
 // A blank Activity is hard to diagnose from the outside, so the page reports its progress and its errors to the app
@@ -44,6 +45,22 @@ export function send(frame) {
   return false;
 }
 bindSender(send);
+
+// A picture chosen on the device goes up over plain HTTP (the socket carries small frames only). The server checks it is
+// a real picture, keeps it on Discord and answers its address.
+let accessToken = null;
+export async function uploadImage(file) {
+  const headers = { "Content-Type": file.type || "application/octet-stream", "X-Filename": encodeURIComponent(file.name || "imagen") };
+  if (accessToken) headers.Authorization = `Bearer ${accessToken}`;
+  else if (devName) headers["X-Dev"] = devName;
+  let reply;
+  try { reply = await fetch(`${base}/api/upload`, { method: "POST", headers, body: file }); }
+  catch { throw new Error("No se pudo enviar la imagen. Revisa tu conexión."); }
+  let data = {};
+  try { data = await reply.json(); } catch { /* the answer was not JSON */ }
+  if (!reply.ok) throw new Error(data.error || "No se pudo subir la imagen.");
+  return data.url;
+}
 
 // request/answer over the socket (profile data, GM actions...)
 const pending = new Map();
@@ -116,6 +133,7 @@ function onFrame(frame, arrival) {
     case "welcome": {
       report("conectado");
       welcomed = true; retry = 0; sync.samples.length = 0;
+      clearPanelCache();                                    // what the dashboards remembered may be from before a reconnect
       batch(() => {
         conn.value = { state: "connected", text: "Conectado", detail: "" };
         banner.value = null;
@@ -145,6 +163,13 @@ function onFrame(frame, arrival) {
       break;
     }
     case "users": users.value = frame.users || []; break;
+    case "chars":                                           // the player registered or dropped a character (maybe from another screen)
+      batch(() => {
+        characters.value = frame.characters || [];
+        charAvatars.value = frame.charAvatars || {};
+        if (activeAs.value !== "me" && !characters.value.includes(activeAs.value)) activeAs.value = "me";
+      });
+      break;
     case "reset":
       batch(() => { channelName.value = frame.channel || "Evento"; messages.value = trimMessages(frame.backlog || []); });
       break;
@@ -234,6 +259,7 @@ async function login() {
     report("token canjeado");
     await discord.commands.authenticate({ access_token: data.access_token });
     afterAuth();
+    accessToken = data.access_token;
     return { t: "hello", token: data.access_token };
   }
   if (devName && config.dev) return { t: "hello", dev: devName, gm: devGm };

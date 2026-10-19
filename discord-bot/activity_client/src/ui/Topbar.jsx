@@ -12,7 +12,7 @@ export function ConnBadge() {
   );
 }
 
-const TITLES = { menu: "Menú", settings: "Ajustes", latency: "Prueba de latencia", help: "Ayuda y atajos", profile: "Mi personaje", gm: "Panel del GM" };
+const TITLES = { menu: "Menú", settings: "Ajustes", latency: "Prueba de latencia", help: "Ayuda y atajos", panel: "Mi panel", gm: "Panel del GM" };
 
 export function Topbar({ layout }) {
   const v = view.value;
