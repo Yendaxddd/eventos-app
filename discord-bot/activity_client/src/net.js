@@ -13,6 +13,12 @@ import {
   bindSender, startQte, endQte, clearQtes, onResult, onStep, onPressError, netMs,
 } from "./qte-store.js";
 import { clearPanelCache } from "./panel/cache.js";
+import { describeNotice } from "./notices.js";
+
+function showNotice(kind, data) {
+  const notice = describeNotice(kind, data);
+  if (notice) toast(notice.text, notice.tone === "bf" ? "ok" : notice.tone, notice.tone === "bf" ? 4200 : 3600);
+}
 
 // ---- telling the app how far we got ---------------------------------------------------------------------------
 // A blank Activity is hard to diagnose from the outside, so the page reports its progress and its errors to the app
@@ -199,6 +205,7 @@ function onFrame(frame, arrival) {
     case "prefs": setPrefsFromServer(frame.prefs); break;
     case "calib": calib.value = frame.calib || null; break;
     case "toast": toast(frame.text, frame.kind || "info"); break;
+    case "notice": showNotice(frame.kind, frame.data); break;
     case "slow": toast("Vas demasiado rápido: espera un momento.", "warn", 2000); break;
     case "rpc_ok": case "rpc_err": {
       const job = pending.get(frame.id);

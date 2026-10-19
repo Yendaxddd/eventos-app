@@ -92,7 +92,12 @@ export function press(id, cmd) {
   const dt = Math.max(0, Math.round(now - seen));
   const combo = entry.q.mode === "combo";
   replace(entry.id, { pressed: !combo, busy: combo, pressedCmd: cmd, pressedAt: now });
-  sendFrame({ t: "press", id: entry.id, command: cmd, as: activeAs.value, dt });
+  if (document.activeElement && document.activeElement.blur && document.activeElement.closest && document.activeElement.closest(".qw, .rescue-chip")) document.activeElement.blur();
+  if (sendFrame({ t: "press", id: entry.id, command: cmd, as: activeAs.value, dt }) === false) {      // the socket is down: nothing was sent
+    replace(entry.id, { pressed: false, busy: false, pressedCmd: null });
+    toast("Sin conexión: no se envió. Se está reconectando…", "bad");
+    return false;
+  }
   return true;
 }
 

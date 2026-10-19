@@ -74,6 +74,7 @@ class ConfigPage(ctk.CTkFrame):
             "auto_start": tk.BooleanVar(value=s.auto_start),
             "backup_on_stop": tk.BooleanVar(value=s.backup_on_stop),
             "check_updates": tk.BooleanVar(value=s.check_updates),
+            "channel_feedback": tk.StringVar(value=s.channel_feedback),
         }
         self._building = "bot"
         self._build_token(0)
@@ -81,6 +82,7 @@ class ConfigPage(ctk.CTkFrame):
         self._building = "send"
         self._build_helpers(2)
         self._build_webhooks(3)
+        self._build_feedback(4)
         self._build_performance(5)
         self._building = "start"
         self._build_startup(6)
@@ -562,6 +564,21 @@ class ConfigPage(ctk.CTkFrame):
         lines = [f"● {len(good)} de {len(bots)} bots tienen su webhook en el canal del evento"]
         lines += [f"✗ {b['name'].rsplit('#', 1)[0]}: {b['lane_note']}" for b in bad[:6]]
         self.lanes_status.configure(text="\n".join(lines), text_color=GREEN if good and not bad else AMBER if good else MUTED)
+
+    # ---- what the channel says about each answer ---------------------------------------------------------------------------
+    def _build_feedback(self, row: int) -> None:
+        box = self._section("Mensajes del canal", row)
+        labels = {"auto": "Automático: la Actividad avisa a quien la tiene abierta", "quiet": "Silencioso: en el canal solo el mensaje del QTE",
+                  "chat": "Todo en el canal (como antes de la Actividad)"}
+        by_label = {label: key for key, label in labels.items()}
+        ctk.CTkLabel(box, text="Respuestas", text_color=MUTED, anchor="w").grid(row=1, column=0, padx=(18, 12), pady=6, sticky="w")
+        self.feedback_menu = ctk.CTkOptionMenu(
+            box, values=list(labels.values()), height=34, fg_color=BUTTON_NEUTRAL, button_color=CARD_BORDER, button_hover_color=BUTTON_NEUTRAL_HOVER,
+            command=lambda label: self.vars["channel_feedback"].set(by_label[label]))
+        self.feedback_menu.set(labels.get(self.vars["channel_feedback"].get(), labels["auto"]))
+        self.feedback_menu.grid(row=1, column=1, columnspan=3, padx=(0, 18), pady=6, sticky="ew")
+        self._note(box, 2, "Sin reacciones (✅ ❌ ⭐) ni un mensaje por cada esquive o parry: quien juega desde la Actividad lo ve en su pantalla. "
+                           "En «Automático» quien juega desde el chat sigue recibiendo los mensajes. Vale al reiniciar el bot.", pady=(0, 12))
 
     # ---- Discord Activity: the settings (the Activity page puts them in its own card) ----------------------------------------
     def build_activity_settings(self, box, first_row: int = 1) -> None:

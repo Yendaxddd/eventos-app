@@ -110,6 +110,14 @@ export function byUrgency(entries, nowMs) {
   });
 }
 
+// The QTE the keyboard answers: the most urgent one that can be answered right now. The screen marks the same one (the ring,
+// the key hint), so what the player sees is what a key does. When none can be answered yet (they are all waiting for their
+// window) the most urgent unanswered one leads, so the screen still has a head of the queue.
+export function leadOf(entries, nowMs) {
+  const open = byUrgency(entries.filter((e) => e.role === "target" && !e.pressed && !e.ended), nowMs);
+  return open.find((e) => phaseAt(e, elapsedSeconds(e, nowMs)).state === "live") || open[0] || null;
+}
+
 // Can this button be pressed right now? (The bot would refuse or punish the other cases.)
 //   ctx = { canWrite, parryCooldown (s left), saves: { left, wait (s until one frees up) }, keepEvade }
 export function canPress(entry, cmd, t, ctx = {}) {

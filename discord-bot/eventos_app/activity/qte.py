@@ -104,6 +104,10 @@ class ActivityInput:
         self.reactions: list[str] = []
         self.mirror_to: Any = None           # the QTE message in the channel, to echo the verdict on it
 
+    def record_reaction(self, emoji) -> None:
+        """Keep the verdict without putting anything in the channel (the channel is quiet for who plays from the Activity)."""
+        self.reactions.append(str(emoji))
+
     async def add_reaction(self, emoji) -> None:
         self.reactions.append(str(emoji))
         if self.mirror_to is not None:

@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { makeEntry, phaseAt, canPress, byUrgency, deadlineOf, verdictOf, roleOf, elapsedSeconds } from "../src/qte-model.js";
+import { makeEntry, phaseAt, canPress, byUrgency, deadlineOf, verdictOf, roleOf, elapsedSeconds, leadOf } from "../src/qte-model.js";
 
 const WIN = { evade: [0, 4.5], parry: [3.0, 5.0], bf: [3.8, 4.2] };
 const base = (extra = {}) => ({
@@ -131,4 +131,16 @@ test("verdicts name what happened", () => {
   assert.equal(verdictOf({ ...e, pressedCmd: "evade" }, { ok: true, ms: 900 }).label, "¡Esquivado!");
   assert.equal(verdictOf(e, { ok: false, ms: 1200 }).ok, false);
   assert.equal(verdictOf(e, { ok: null }).ok, null);
+});
+
+test("the lead is the most urgent QTE that can be answered now, and the one a key answers", () => {
+  const slow = mine(base({ id: "a", timeout: 5.0, windows: { evade: [0, 4.5], parry: [3.0, 5.0], bf: null } }));
+  const quick = mine(base({ id: "b", timeout: 3.0, windows: { evade: [0, 2.5], parry: [2.0, 3.0], bf: null } }));
+  assert.equal(leadOf([slow, quick], 1000).id, "b");                           // 1 s in: "b" runs out first
+  const waiting = makeEntry(base({ id: "c", windows: { evade: [0, 0.5], parry: [3.0, 5.0], bf: null } }), { arrival: 0, youId: "7" });
+  assert.equal(leadOf([waiting, slow], 1000).id, "a");                          // "c" is between its two windows: it cannot be answered, "a" can
+  assert.equal(leadOf([waiting], 1000).id, "c");                                // nothing live: the most urgent still heads the queue
+  assert.equal(leadOf([{ ...slow, pressed: true }, { ...quick, ended: true }], 1000), null);
+  const other = makeEntry(base({ id: "d", target: { id: "9", name: "Luis" } }), { arrival: 0, youId: "7" });
+  assert.equal(leadOf([other], 1000), null);                                    // somebody else's QTE is not ours to lead
 });

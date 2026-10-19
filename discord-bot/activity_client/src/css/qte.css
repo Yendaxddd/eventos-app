@@ -15,6 +15,7 @@
 .qw[data-kind="bf"] { --c: var(--bf); --c-deep: var(--bf-deep); --glow: var(--bf-glow); }
 .qw[data-kind="arrows"], .qw[data-kind="combo"] { --c: var(--evade); --c-deep: var(--evade-deep); --glow: var(--evade-glow); }
 .qw[data-lead="true"] { --lead-k: 1.14; z-index: 2; }
+.qw[data-lead="false"]:not([data-state="done"]) .qw-btn { filter: saturate(.7) brightness(.86); }       /* not the one a key answers */
 
 .qw-in { display: contents; }
 .qw > * { pointer-events: auto; }

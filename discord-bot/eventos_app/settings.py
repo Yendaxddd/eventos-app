@@ -50,6 +50,9 @@ class Settings:
     backup_on_stop: bool = True
     # ask GitHub (once, a few seconds after opening) whether there is a newer version: see updates.py
     check_updates: bool = True
+    # what the channel says about each answer: "auto" (the Activity tells whoever has it open; the channel tells the rest), "quiet"
+    # (the channel only has the QTE messages) or "chat" (everything in the channel, as before the Activity)
+    channel_feedback: str = "auto"
 
     def validate(self) -> list[str]:
         """Human-readable problems (Spanish, shown in the UI). Empty list = OK."""
@@ -72,6 +75,7 @@ class Settings:
             "AI_ENABLED": "1" if self.ai_enabled else "0",
             "EVENTOS_RESET_ON_START": "1" if self.reset_on_start else "0",
             "EVENTOS_HOTKEYS": "1" if self.hotkeys_enabled else "0",
+            "EVENTOS_FEEDBACK": self.channel_feedback if self.channel_feedback in ("auto", "quiet", "chat") else "auto",
         }
         for name, var in _ID_FIELDS.items():
             value = getattr(self, name).strip()

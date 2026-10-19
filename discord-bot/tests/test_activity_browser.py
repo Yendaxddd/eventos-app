@@ -52,6 +52,7 @@ class Actions:
         self.tutorial_done = True
         self.me = {}
         self.result_ms = 321
+        self.hold = False                     # keep the verdict back (a slow server), to see the screen while it waits
 
     def characters_of(self, user_id):
         return ["Kuro", "Shiro"]
@@ -75,6 +76,8 @@ class Actions:
 
     async def press(self, conn, frame):
         self.pressed.append(frame)
+        if self.hold:
+            return
         await self.hub.send(conn, {"t": "qte_result", "id": frame.get("id"), "ok": True, "ms": self.result_ms, "reactions": ["✅"]})
 
 
@@ -344,11 +347,11 @@ def test_a_qte_starts_as_evade_and_turns_into_parry_with_its_timer_on_top():
         await asyncio.sleep(0.2)
         assert await widget(page, 1).locator(".qw-fill").count() == 1
 
-        # the parry window opens: the widget becomes PARRY, somewhere else on the screen, with a window bar and the Black Flash band
+        # the parry window opens: the widget becomes PARRY, in the very place the Evade button was, with a window bar and the Black Flash band
         await page.wait_for_function("document.querySelector('[data-testid=qte-widget]').dataset.phase === 'parry'", timeout=3000)
         second = (await widgets(page))[0]
         assert second["kind"] == "parry" and (await widget(page, 1).locator(".qw-btn").inner_text()).lower() == "parry\np"
-        assert (abs(second["x"] - first["x"]) > 8 or abs(second["y"] - first["y"]) > 8), (first, second)
+        assert abs(second["x"] - first["x"]) <= 2 and abs(second["y"] - first["y"]) <= 2, (first, second)       # nothing moves under a finger
         assert await widget(page, 1).locator(".qw-zone").count() == 1 and await widget(page, 1).locator(".qw-cursor").count() == 1
         area = await page.locator("[data-arena]").bounding_box()                          # it lands on the chat
         assert area["x"] <= second["x"] and second["x"] + second["w"] <= area["x"] + area["width"] + 1
@@ -422,6 +425,34 @@ def test_several_qtes_never_overlap_are_ranked_by_urgency_and_each_button_answer
         assert acts.pressed[2]["id"] == "4"
         if SHOTS:
             await page.screenshot(path=str(Path(SHOTS) / "activity-multi.png"))
+        assert page.errors == []
+
+    asyncio.run(with_page(scenario, actions=True))
+
+
+def test_a_key_answers_only_the_lead_qte_and_the_timer_goes_away_the_moment_you_press():
+    async def scenario(hub, browser, url):
+        page = await open_page(browser, url, width=1100, height=800)
+        acts = hub.test_actions
+        acts.hold = True                                                                   # the server is slow: no verdict yet
+        await hub.qte_start(qte(hub, 1, page.me, timeout=6.0))
+        await hub.qte_start(qte(hub, 2, page.me, timeout=3.0))
+        await page.wait_for_function("document.querySelectorAll('[data-testid=qte-widget]').length === 2")
+        await asyncio.sleep(0.3)
+        assert {w["id"] for w in await widgets(page) if w["lead"] == "true"} == {"2"}
+        assert await widget(page, 2).locator(".kbd").count() == 1 and await widget(page, 1).locator(".kbd").count() == 0      # only the lead shows its key
+        await page.keyboard.press("p")                                                    # the lead is still in its evade phase: a parry key must not fall through to anything else
+        await asyncio.sleep(0.3)
+        assert acts.pressed == []
+        await page.keyboard.press("e")
+        await wait_presses(acts, 1)
+        assert [(f["id"], f["command"]) for f in acts.pressed] == [("2", "evade")]       # ONE answer, for the lead
+        await asyncio.sleep(0.3)
+        assert len(acts.pressed) == 1
+        assert await widget(page, 2).locator(".qw-timer").count() == 0                   # answered: its bar is gone before any verdict
+        assert await widget(page, 1).locator(".qw-timer").count() == 1                   # the other one is still running
+        assert {w["id"] for w in await widgets(page) if w["lead"] == "true"} == {"1"}     # and now leads
+        assert await widget(page, 1).locator(".kbd").count() == 1
         assert page.errors == []
 
     asyncio.run(with_page(scenario, actions=True))

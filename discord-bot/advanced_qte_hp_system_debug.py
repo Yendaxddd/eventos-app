@@ -382,6 +382,10 @@ class AdvancedQTEBot:
         self.counter_deadlines = {}  # {user_id: time.time() when the counter window closes} (shown by the Discord Activity)
         self.counter_context = {}  # {user_id: {"qte_id": qte_id, "difficulty": difficulty}}
         self.counter_window = 1.5  # LOWERED: 1.5 seconds from QTE start (was 2.0)
+        self.feedback_mode = os.environ.get("EVENTOS_FEEDBACK", "auto").strip().lower()   # see feedback_quiet
+        if self.feedback_mode not in ("auto", "quiet", "chat"):
+            self.feedback_mode = "auto"
+        self.activity_notify = None  # set by the Discord Activity's bridge while it runs (has_player / notify)
         self.enemy_stunned = False
         self.stun_end_time = None
         self.counter_gif_dir = pathlib.Path("assets/counter_gifs")
@@ -1441,7 +1445,7 @@ Your response (1-2 sentences max):"""
             channel = self.bot.get_channel(self.qte_channel_id)
             
             if completed < total:
-                await channel.send(f"❌ **COMBO FAILED!** {target_member.mention} only completed {completed}/{total}!")
+                await self.feedback(target_member.id, "combo_failed", f"❌ **COMBO FAILED!** {target_member.mention} only completed {completed}/{total}!", done=completed, total=total)
                 await self.damage_player(target_member.id, difficulty)
     
     async def trigger_direction_qte(self, difficulty: str, target_member, is_targeted: bool = False):
@@ -1514,7 +1518,7 @@ Your response (1-2 sentences max):"""
         qte_data = self.active_qtes.pop(qte_id, None)
         if qte_data:
             channel = self.bot.get_channel(self.qte_channel_id)
-            await channel.send(f"❌ **DIRECTION QTE FAILED!** {target_member.mention} didn't respond!")
+            await self.feedback(target_member.id, "timeout", f"❌ **DIRECTION QTE FAILED!** {target_member.mention} didn't respond!")
             await self.damage_player(target_member.id, difficulty)
     
     async def trigger_fake_qte(self, difficulty: str, target_member, is_targeted: bool = False):
@@ -2001,6 +2005,43 @@ Your response (1-2 sentences max):"""
         # For now, just return the filepath - in production, you'd host these or embed them
         return filepath
     
+    # ========== ANSWER FEEDBACK: the channel, or the player's own Activity ==========
+    def feedback_quiet(self, user_id=None, users=None) -> bool:
+        """True when what happens to this player (or to all of `users`) is told in their Activity instead of the channel.
+
+        `feedback_mode`: "auto" (the Activity for who has it open, the channel for the rest), "quiet" (never the channel, as long as the
+        Activity is running) or "chat" (always the channel, as before the Activity existed)."""
+        notify = self.activity_notify
+        if self.feedback_mode == "chat" or notify is None:
+            return False
+        if self.feedback_mode == "quiet":
+            return True
+        ids = list(users) if users is not None else ([user_id] if user_id is not None else [])
+        try:
+            return bool(ids) and all(notify.has_player(i) for i in ids)
+        except Exception:  # noqa: BLE001 - never break the game for a cosmetic thing
+            return False
+
+    def cue_quiet(self, qte_id) -> bool:
+        """The reaction cues on a QTE message (star, exclamation) are for who has to answer it: quiet if all of them are in the Activity."""
+        data = self.active_qtes.get(qte_id) if qte_id is not None else None
+        if not data:
+            return self.feedback_mode == "quiet" and self.activity_notify is not None
+        who = list(data.get("participants") or {}) or ([data["target"].id] if data.get("target") is not None else [])
+        return self.feedback_quiet(users=who) if who else False
+
+    async def feedback(self, user_id, kind, content=None, embed=None, *, users=None, **data):
+        """What an answer led to (✅ evaded, ❌ too slow, Black Flash...). The player who is in the Activity gets a notification there
+        (`kind` and `data` say what happened; the screen words it) and the channel stays quiet; everybody else gets the message as always."""
+        if self.feedback_quiet(user_id, users):
+            try:
+                self.activity_notify.notify(users if users is not None else user_id, kind, data)
+            except Exception:  # noqa: BLE001
+                log.exception("could not tell the Activity (%s)", kind)
+            return None
+        return await self.webhook_send(content=content, embed=embed)
+    # ==============================================================================
+
     async def webhook_send(self, content=None, embed=None, file=None, qte_id=None):
         """Send message to QTE channel with rate limit protection.
 
@@ -2325,8 +2366,10 @@ Your response (1-2 sentences max):"""
             if origin_message:
                 asyncio.create_task(self.add_reaction_to_response(channel, user_id, origin_message, "⭐"))
             
-            # Add exclamation reaction to indicate chain opportunity
+            # Add exclamation reaction to indicate chain opportunity (not for who plays from the Activity: its widget says it)
             try:
+                if self.feedback_quiet(user_id):
+                    raise StopIteration
                 recent_msgs = [msg async for msg in channel.history(limit=5)]
                 for msg in recent_msgs:
                     if msg.author.id == user_id or (msg.webhook_id and msg.webhook_id not in self.own_webhook_ids):
@@ -2364,7 +2407,8 @@ Your response (1-2 sentences max):"""
                 if user_id in self.bf_chain_active:
                     del self.bf_chain_active[user_id]
                 
-                await self.webhook_send(content=f"⏱️ **Chain ended!** {qte_data['target'].mention} - Parry cooldown: **{cooldown_seconds}s**")
+                await self.feedback(user_id, "chain_end", f"⏱️ **Chain ended!** {qte_data['target'].mention} - Parry cooldown: **{cooldown_seconds}s**",
+                                    why="timeout", level=chain_level, cooldown=cooldown_seconds)
                 console.print(f"[yellow]⏱ BF Chain {chain_level} ended (timeout) - {cooldown_seconds}s parry cooldown[/yellow]")
     
     async def handle_bf_chain_response(self, qte_id, qte_data, message, user_id, content, response_time):
@@ -2414,7 +2458,7 @@ Your response (1-2 sentences max):"""
                         color=discord.Color.from_rgb(255, 0, 255)
                     )
                     embed.set_image(url=self.black_flash_gif)
-                    await self.webhook_send(embed=embed)
+                    await self.feedback(user_id, "black_flash", embed=embed, damage=damage, chain=chain_level, ms=round(response_time * 1000))
                     
                     # Add charge
                     self.add_charge_from_damage_dealt(user_id, damage)
@@ -2441,9 +2485,11 @@ Your response (1-2 sentences max):"""
                         if user_id in self.bf_chain_active:
                             del self.bf_chain_active[user_id]
                         
-                        await self.webhook_send(
-                            content=f"🏆 **MAXIMUM BLACK FLASH CHAIN COMPLETE!** {message.author.mention}\n"
-                            f"Total damage potential unleashed! Parry cooldown: **{cooldown_seconds}s**"
+                        await self.feedback(
+                            user_id, "chain_max",
+                            f"🏆 **MAXIMUM BLACK FLASH CHAIN COMPLETE!** {message.author.mention}\n"
+                            f"Total damage potential unleashed! Parry cooldown: **{cooldown_seconds}s**",
+                            cooldown=cooldown_seconds
                         )
                         console.print(f"[bold gold1]🏆 MAX BF CHAIN ACHIEVED! {message.author.name}[/bold gold1]")
                     
@@ -2463,9 +2509,11 @@ Your response (1-2 sentences max):"""
                     
                     self.active_qtes.pop(qte_id, None)
                     
-                    await self.webhook_send(
-                        content=f"{parry_indicator} {message.author.mention} **parried [{timing_feedback}] but no Black Flash!** Chain ends.\n"
-                        f"Parry cooldown: **{cooldown_seconds}s**"
+                    await self.feedback(
+                        user_id, "chain_end",
+                        f"{parry_indicator} {message.author.mention} **parried [{timing_feedback}] but no Black Flash!** Chain ends.\n"
+                        f"Parry cooldown: **{cooldown_seconds}s**",
+                        why="noflash", level=chain_level, cooldown=cooldown_seconds, tag=timing_feedback
                     )
                     console.print(f"[yellow]⚔ BF Chain ended (no flash, {timing_feedback}) - {message.author.name}[/yellow]")
                     self.save_all_data()
@@ -2480,9 +2528,11 @@ Your response (1-2 sentences max):"""
                 
                 self.active_qtes.pop(qte_id, None)
                 
-                await self.webhook_send(
-                    content=f"❌ {message.author.mention} **mistimed!** Chain ends. (No damage taken)\n"
-                    f"Parry cooldown: **{cooldown_seconds}s**"
+                await self.feedback(
+                    user_id, "chain_end",
+                    f"❌ {message.author.mention} **mistimed!** Chain ends. (No damage taken)\n"
+                    f"Parry cooldown: **{cooldown_seconds}s**",
+                    why="mistimed", level=chain_level, cooldown=cooldown_seconds
                 )
                 console.print(f"[yellow]❌ BF Chain ended (mistimed) - {message.author.name}[/yellow]")
                 self.save_all_data()
@@ -7926,12 +7976,15 @@ Your response (1-2 sentences max):"""
             self.counter_messages = {}
         
         # MERGED: Success + Counter window in ONE message
-        counter_msg = await self.webhook_send(
-            content=f"✅ {author_mention} **evaded!** ({response_time:.2f}s) "
-            f"| ⚡ **COUNTER** `*attack*` <t:{int(time.time() + 5)}:R>"
+        counter_msg = await self.feedback(
+            user_id, "evade_ok",
+            f"✅ {author_mention} **evaded!** ({response_time:.2f}s) "
+            f"| ⚡ **COUNTER** `*attack*` <t:{int(time.time() + 5)}:R>",
+            ms=round(response_time * 1000), counter=True
         )
         
-        self.counter_messages[user_id] = counter_msg
+        if counter_msg is not None:      # in the Activity there is no message: the counter button says it
+            self.counter_messages[user_id] = counter_msg
         
         # Set counter window timeout (will delete message when expired)
         asyncio.create_task(self.counter_window_timeout(user_id, qte_id, 5.0))
@@ -8392,7 +8445,7 @@ Your response (1-2 sentences max):"""
                 return  # Another task handled it
 
             if mode == 'single' and target:
-                await self.webhook_send(content=f"💥 {target.mention} **failed to respond in time!**")
+                await self.feedback(target.id, "timeout", f"💥 {target.mention} **failed to respond in time!**")
                 await self.damage_player(target.id, qte_data['difficulty'])
                 console.print(f"[red]✗ Single QTE TIMEOUT - {target.name} failed[/red]")
 
@@ -8405,7 +8458,7 @@ Your response (1-2 sentences max):"""
                 failed = [p['member'] for p in participants.values() if not p['responded']]
                 if failed:
                     mentions = " ".join([m.mention for m in failed])
-                    await self.webhook_send(content=f"💥 {mentions} **failed to respond in time!**")
+                    await self.feedback(None, "timeout", f"💥 {mentions} **failed to respond in time!**", users=[m.id for m in failed])
                     console.print(f"[red]✗ Group QTE TIMEOUT - {len(failed)} players failed[/red]")
 
                     # Damage each failed player
@@ -8552,6 +8605,8 @@ Your response (1-2 sentences max):"""
     async def send_parry_and_bf_warning(self, qte_message, parry_start, bf_start, qte_id=None):
         """Add parry warning star, then replace with exclamation when BF window opens"""
         try:
+            if self.cue_quiet(qte_id):
+                return
             # Wait until parry window starts
             if parry_start > 0:
                 await asyncio.sleep(parry_start)
@@ -8589,6 +8644,8 @@ Your response (1-2 sentences max):"""
         """Add parry warning star reaction to QTE message (legacy fallback)"""
         try:
             await asyncio.sleep(delay)
+            if self.cue_quiet(None):
+                return
             await self.safe_add_reaction(qte_message, "⭐")
         except Exception:
             pass
@@ -8744,7 +8801,7 @@ Your response (1-2 sentences max):"""
             if qte_id in self.active_qtes:
                 # Timeout occurred
                 channel = self.bot.get_channel(self.qte_channel_id)
-                await self.webhook_send(content=f"💥 {target.mention} **failed to respond in time!**")
+                await self.feedback(target.id, "timeout", f"💥 {target.mention} **failed to respond in time!**")
                 await self.damage_player(target.id, difficulty)
                 await self.update_player_stats(target.id, 'evade', False, timeout_durations.get(difficulty, 5.0))
                 
@@ -9224,7 +9281,12 @@ Your response (1-2 sentences max):"""
                 waiters.remove(waiter)
 
     async def add_reaction_to_response(self, channel, user_id, original_message, emoji):
-        """Add reaction to the correct message (Tupper webhook or original)."""
+        """Add reaction to the correct message (Tupper webhook or original). Not for who plays from the Activity: it tells them there."""
+        if self.feedback_quiet(user_id):
+            keep = getattr(original_message, "record_reaction", None)
+            if keep is not None:                      # a press from the Activity: no reaction on any message, but the verdict is kept for its screen
+                keep(emoji)
+            return
         try:
             target_msg = await self.find_tupper_message(channel, user_id, original_message)
             await target_msg.add_reaction(emoji)
@@ -9249,7 +9311,7 @@ Your response (1-2 sentences max):"""
             # ========== BOSS DOMAIN STUN: AUTO-FAIL QTEs ==========
             if self.has_status_effect(user_id, "stunned"):
                 # Player is stunned from boss domain - auto-fail any QTE response
-                await self.webhook_send(content=f"🔒 {message.author.mention} is **STUNNED** and cannot react! (Boss Domain)")
+                await self.feedback(user_id, "stunned", f"🔒 {message.author.mention} is **STUNNED** and cannot react! (Boss Domain)")
                 await self.damage_player(user_id, difficulty)
                 responses.add(user_id)
                 
@@ -9296,7 +9358,7 @@ Your response (1-2 sentences max):"""
                                     self.player_hp[user_id]['current'] + heal_amount
                                 )
                                 new_hp = self.player_hp[user_id]['current']
-                                await self.webhook_send(content=f"🪞✨ **Mirror Shard** healed {message.author.mention}! ({old_hp} → {new_hp} HP)")
+                                await self.feedback(user_id, "mirror_heal", f"🪞✨ **Mirror Shard** healed {message.author.mention}! ({old_hp} → {new_hp} HP)", old=old_hp, new=new_hp)
                                 console.print(f"[green]🪞 Mirror Shard heal: {old_hp} → {new_hp} (+{heal_amount})[/green]")
                         
                         # Enable counter window if evaded fast enough OR has guaranteed_counter OR has Soul Manipulator
@@ -9320,7 +9382,7 @@ Your response (1-2 sentences max):"""
                             await self.process_next_player_qte(target)
                         return True
                     else:
-                        await self.webhook_send(content=f"❌ {message.author.mention} **evade too slow!** ({response_time:.2f}s)")
+                        await self.feedback(user_id, "evade_slow", f"❌ {message.author.mention} **evade too slow!** ({response_time:.2f}s)", ms=round(response_time * 1000))
                         await self.damage_player(user_id, difficulty)
                         await self.update_player_stats(user_id, 'evade', False, response_time)
                         console.print(f"[red]✗ EVADE FAILED (too slow) - {message.author.name}[/red]")
@@ -9343,7 +9405,7 @@ Your response (1-2 sentences max):"""
                     if user_id in self.player_parry_cooldown:
                         if time.time() < self.player_parry_cooldown[user_id]:
                             remaining = int(self.player_parry_cooldown[user_id] - time.time())
-                            await self.webhook_send(content=f"⏱️ {message.author.mention} **Parry on cooldown!** {remaining}s remaining")
+                            await self.feedback(user_id, "parry_cooldown", f"⏱️ {message.author.mention} **Parry on cooldown!** {remaining}s remaining", seconds=remaining)
                             return False
                     
                     # Get adjusted parry window for REVENGE mode
@@ -9418,7 +9480,7 @@ Your response (1-2 sentences max):"""
                                 embed.set_footer(text=f"Black Flash Chance: {bf_chance:.1f}% | Response Time: {response_time:.2f}s")
                             
                             embed.set_image(url=self.black_flash_gif)
-                            await self.safe_send(channel, embed=embed)
+                            await self.feedback(user_id, "black_flash", embed=embed, damage=(mirror_damage if mirror_shard_bf else base_damage), ms=round(response_time * 1000), mirror=bool(mirror_shard_bf))
                             
                             # Add exclamation reaction
                             asyncio.create_task(self.add_reaction_to_response(channel, user_id, message, "❗"))
@@ -9455,8 +9517,9 @@ Your response (1-2 sentences max):"""
                             bf_chance = self.player_stats.get(user_id, {}).get('black_flash_chance', 0)
                             if bf_chance > 0 and parry_indicator != "✅":
                                 # Show visual indicator for BF window
-                                await self.webhook_send(
-                                    content=f"{parry_indicator} {message.author.mention} **parried!** [{timing_feedback}] ({response_time:.2f}s)"
+                                await self.feedback(
+                                    user_id, "parry_ok", f"{parry_indicator} {message.author.mention} **parried!** [{timing_feedback}] ({response_time:.2f}s)",
+                                    ms=round(response_time * 1000), tag=timing_feedback
                                 )
                             
                             console.print(f"[cyan]⚔ PARRY SUCCESS - {message.author.name} in {response_time:.2f}s ({timing_feedback})[/cyan]")
@@ -9486,7 +9549,7 @@ Your response (1-2 sentences max):"""
                             await self.process_next_player_qte(target)
                         return True
                     else:
-                        await self.webhook_send(content=f"❌ {message.author.mention} **parry mistimed!** ({response_time:.2f}s)")
+                        await self.feedback(user_id, "parry_mistimed", f"❌ {message.author.mention} **parry mistimed!** ({response_time:.2f}s)", ms=round(response_time * 1000))
                         await self.damage_player(user_id, difficulty)
                         await self.update_player_stats(user_id, 'parry', False, response_time)
                         console.print(f"[red]✗ PARRY FAILED (mistimed) - {message.author.name}[/red]")
@@ -9523,7 +9586,7 @@ Your response (1-2 sentences max):"""
                     
                     # Adaptation uses parry timing
                     if not (adj_parry_min <= response_time <= adj_parry_max):
-                        await self.webhook_send(content=f"❌ {message.author.mention} **adapt mistimed!** ({response_time:.2f}s)")
+                        await self.feedback(user_id, "adapt_mistimed", f"❌ {message.author.mention} **adapt mistimed!** ({response_time:.2f}s)", ms=round(response_time * 1000))
                         await self.damage_player(user_id, difficulty)
                         console.print(f"[red]✗ ADAPT FAILED (mistimed) - {message.author.name} at {response_time:.2f}s[/red]")
                         
@@ -9559,8 +9622,9 @@ Your response (1-2 sentences max):"""
                             spins = self.special_objects_manager.get_tracking(user_id, obj_id, difficulty)
                             spin_info.append(f"**{obj['name']}**: {spins} {difficulty} spins")
                         
-                        await self.webhook_send(
-                            content=f"🔮 {message.author.mention} **adapted!** ({response_time:.2f}s)\n" + "\n".join(spin_info)
+                        await self.feedback(
+                            user_id, "adapt_ok", f"🔮 {message.author.mention} **adapted!** ({response_time:.2f}s)\n" + "\n".join(spin_info),
+                            ms=round(response_time * 1000), info=[s.replace("**", "") for s in spin_info]
                         )
                     
                     console.print(f"[magenta]🔮 ADAPT SUCCESS - {message.author.name}[/magenta]")
@@ -9580,12 +9644,12 @@ Your response (1-2 sentences max):"""
                 if '*save*' in content and target:
                     # Check save rate limit (2 per minute)
                     if not self.can_save_qte(user_id):
-                        await self.webhook_send(content=f"⏱️ {message.author.mention} **Save limit exceeded!** Max 2 saves per minute")
+                        await self.feedback(user_id, "save_limit", f"⏱️ {message.author.mention} **Save limit exceeded!** Max 2 saves per minute")
                         return False
                     
                     if response_time <= evade_window:
                         responses.add(user_id)
-                        await self.webhook_send(content=f"🛡️ {message.author.mention} **saved {target.mention}!** ({response_time:.2f}s)")
+                        await self.feedback(user_id, "save_ok", f"🛡️ {message.author.mention} **saved {target.mention}!** ({response_time:.2f}s)", target=target.display_name, ms=round(response_time * 1000))
                         await self.update_player_stats(user_id, 'save', True, response_time)
                         await self.update_player_stats(target.id, 'saved', True, response_time)
                         console.print(f"[magenta]🛡 SAVE SUCCESS - {message.author.name} saved {target.name}[/magenta]")
@@ -9595,7 +9659,7 @@ Your response (1-2 sentences max):"""
                         self.save_all_data()
                         return True
                     else:
-                        await self.webhook_send(content=f"❌ {message.author.mention} **save too slow!** ({response_time:.2f}s)")
+                        await self.feedback(user_id, "save_slow", f"❌ {message.author.mention} **save too slow!** ({response_time:.2f}s)", ms=round(response_time * 1000))
                         await self.damage_player(user_id, difficulty)
                         await self.update_player_stats(user_id, 'save', False, response_time)
                         console.print(f"[red]✗ SAVE FAILED (too slow) - {message.author.name}[/red]")
@@ -9653,7 +9717,7 @@ Your response (1-2 sentences max):"""
                                 self.player_hp[user_id]['current'] + heal_amount
                             )
                             new_hp = self.player_hp[user_id]['current']
-                            await self.webhook_send(content=f"🪞✨ **Mirror Shard** healed {message.author.mention}! ({old_hp} → {new_hp} HP)")
+                            await self.feedback(user_id, "mirror_heal", f"🪞✨ **Mirror Shard** healed {message.author.mention}! ({old_hp} → {new_hp} HP)", old=old_hp, new=new_hp)
                             console.print(f"[green]🪞 Mirror Shard heal: {old_hp} → {new_hp} (+{heal_amount})[/green]")
                     
                     # Enable counter window if evaded fast enough OR has guaranteed_counter
@@ -9665,18 +9729,18 @@ Your response (1-2 sentences max):"""
                         else:
                             console.print(f"[yellow]⚡ COUNTER ENABLED for {message.author.name}[/yellow]")
                     else:
-                        await self.webhook_send(content=f"✅ {message.author.mention} evaded! ({response_time:.2f}s)")
+                        await self.feedback(user_id, "evade_ok", f"✅ {message.author.mention} evaded! ({response_time:.2f}s)", ms=round(response_time * 1000))
                     
                     self.last_qte_completion[user_id] = current_time
                 else:
-                    await self.webhook_send(content=f"❌ {message.author.mention} evade too slow! ({response_time:.2f}s)")
+                    await self.feedback(user_id, "evade_slow", f"❌ {message.author.mention} evade too slow! ({response_time:.2f}s)", ms=round(response_time * 1000))
                     await self.damage_player(user_id, difficulty)
                     console.print(f"[red]✗ {message.author.name} - EVADE FAILED - {response_time:.2f}s[/red]")
                     self.last_qte_completion[user_id] = current_time
 
             elif '*parry*' in content:
                 # Block parry in GROUP QTEs
-                await self.webhook_send(content=f"❌ {message.author.mention} **Cannot parry in group QTEs!** Use *evade* instead")
+                await self.feedback(user_id, "group_no_parry", f"❌ {message.author.mention} **Cannot parry in group QTEs!** Use *evade* instead")
                 return False
                 
                 action = 'parry'
@@ -9718,7 +9782,7 @@ Your response (1-2 sentences max):"""
                             color=discord.Color.from_rgb(138, 43, 226)
                         )
                         embed.set_image(url=self.black_flash_gif)
-                        await self.webhook_send(embed=embed)
+                        await self.feedback(user_id, "black_flash", embed=embed, damage=base_damage)
                         
                         # Add exclamation reaction
                         asyncio.create_task(self.add_reaction_to_response(channel, user_id, message, "❗"))
@@ -9763,7 +9827,7 @@ Your response (1-2 sentences max):"""
             successful = sum(1 for p in participants.values() if p['success'])
             total = len(participants)
 
-            await self.safe_send(channel, content=f"📊 **Group QTE Complete!** {successful}/{total} succeeded")
+            await self.feedback(None, "group_done", f"📊 **Group QTE Complete!** {successful}/{total} succeeded", users=list(participants), ok=successful, total=total)
 
             console.print(Panel.fit(
                 f"[cyan]📊 GROUP QTE FINISHED (ID: {qte_id})[/cyan]\n"
@@ -9810,9 +9874,11 @@ Your response (1-2 sentences max):"""
                     if combo_index + 1 >= combo_length:
                         # COMBO COMPLETE!
                         self.active_qtes.pop(qte_id, None)
-                        await channel.send(
+                        await self.feedback(
+                            user_id, "combo_done",
                             f"# 🔥 **COMBO COMPLETE!** 🔥\n"
-                            f"{message.author.mention} completed all **{combo_length}** hits!"
+                            f"{message.author.mention} completed all **{combo_length}** hits!",
+                            length=combo_length
                         )
                         console.print(f"[green]🔥 COMBO QTE COMPLETE - {message.author.name}[/green]")
                         
@@ -9821,19 +9887,19 @@ Your response (1-2 sentences max):"""
                     else:
                         # Next in sequence
                         next_action = combo_sequence[combo_index + 1]
-                        await channel.send(f"✅ **{combo_index + 1}/{combo_length}!** Next: `*{next_action}*`")
+                        await self.feedback(user_id, "combo_step", f"✅ **{combo_index + 1}/{combo_length}!** Next: `*{next_action}*`", index=combo_index + 1, length=combo_length, next=next_action)
                     
                     return True
                 else:
                     # Too slow
                     self.active_qtes.pop(qte_id, None)
-                    await channel.send(f"❌ **COMBO BROKEN!** {message.author.mention} was too slow!")
+                    await self.feedback(user_id, "combo_broken", f"❌ **COMBO BROKEN!** {message.author.mention} was too slow!", why="slow")
                     await self.damage_player(user_id, difficulty)
                     return True
             else:
                 # Wrong action
                 self.active_qtes.pop(qte_id, None)
-                await channel.send(f"❌ **COMBO BROKEN!** {message.author.mention} used wrong action! Expected `*{expected_action}*`")
+                await self.feedback(user_id, "combo_broken", f"❌ **COMBO BROKEN!** {message.author.mention} used wrong action! Expected `*{expected_action}*`", why="wrong", expected=expected_action)
                 await self.damage_player(user_id, difficulty)
                 return True
             
@@ -9877,24 +9943,28 @@ Your response (1-2 sentences max):"""
             evade_window = timing['evade_window']
             
             if response_time > evade_window + 1.0:  # +1s for direction
-                await channel.send(f"❌ {message.author.mention} too slow! ({response_time:.2f}s)")
+                await self.feedback(user_id, "direction_slow", f"❌ {message.author.mention} too slow! ({response_time:.2f}s)", ms=round(response_time * 1000))
                 await self.damage_player(user_id, difficulty)
                 return True
             
             # Check if correct (OPPOSITE)
             if input_direction == correct_arrow:
-                await channel.send(
+                await self.feedback(
+                    user_id, "direction_ok",
                     f"✅ **DIRECTION CORRECT!** {message.author.mention}\n"
-                    f"_Shown: {shown_arrow} → Input: {input_direction} (opposite)_"
+                    f"_Shown: {shown_arrow} → Input: {input_direction} (opposite)_",
+                    ms=round(response_time * 1000)
                 )
                 console.print(f"[green]🎯 Direction QTE correct - {message.author.name}[/green]")
                 
                 # Grant counter window
                 await self.send_success_with_counter(channel, message.author.mention, response_time, user_id, qte_id, difficulty)
             else:
-                await channel.send(
+                await self.feedback(
+                    user_id, "direction_wrong",
                     f"❌ **WRONG DIRECTION!** {message.author.mention}\n"
-                    f"_Shown: {shown_arrow} → You input: {input_direction} (needed {correct_arrow})_"
+                    f"_Shown: {shown_arrow} → You input: {input_direction} (needed {correct_arrow})_",
+                    shown=str(shown_arrow), needed=str(correct_arrow)
                 )
                 await self.damage_player(user_id, difficulty)
             
@@ -9918,7 +9988,8 @@ Your response (1-2 sentences max):"""
             
             self.active_qtes.pop(qte_id, None)
             
-            await channel.send(
+            await self.feedback(
+                user_id, "fake_fail",
                 f"# 👻 **FAKE QTE!** 👻\n"
                 f"❌ {message.author.mention} fell for it!\n"
                 f"_There was no real attack!_"
@@ -12909,8 +12980,9 @@ Responde SOLAMENTE con un numero del 1 al 10."""
                                 spins = self.special_objects_manager.get_tracking(user_id, obj_id, difficulty)
                                 spin_info.append(f"**{obj['name']}**: {spins} {difficulty} spins")
                         
-                        await self.webhook_send(
-                            content=f"🔮 {message.author.mention} **adapted!** ({response_time:.2f}s)\n" + "\n".join(spin_info)
+                        await self.feedback(
+                            user_id, "adapt_ok", f"🔮 {message.author.mention} **adapted!** ({response_time:.2f}s)\n" + "\n".join(spin_info),
+                            ms=round(response_time * 1000), info=[s.replace("**", "") for s in spin_info]
                         )
                     
                     console.print(f"[magenta]🔮 ADAPT SUCCESS (during QTE) - {message.author.name}[/magenta]")

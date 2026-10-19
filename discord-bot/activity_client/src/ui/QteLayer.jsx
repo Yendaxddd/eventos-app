@@ -3,7 +3,7 @@ import {
   ArrowDown, ArrowLeft, ArrowRight, ArrowUp, Check, Crosshair, Hourglass, Lock, Shield, ShieldPlus, Swords, X, Zap,
 } from "lucide-preact";
 import { qtes, prefs, me, rules, canWrite } from "../state.js";
-import { byUrgency, canPress, elapsedSeconds, phaseAt } from "../qte-model.js";
+import { byUrgency, canPress, elapsedSeconds, leadOf, phaseAt } from "../qte-model.js";
 import { press, context } from "../qte-store.js";
 import { pickSpotFit, clampSpot, packAll, anyOverlap } from "../layout.js";
 import { pressCommand } from "./Actions.jsx";
@@ -124,7 +124,7 @@ function Widget({ entry, phase, rank, lead, spot, size, ctx }) {
   const onKey = (cmd) => (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); press(entry.id, cmd); } };
 
   const resultKind = result ? (result.bf ? "bf" : result.ok ? "ok" : "bad") : undefined;
-  const showTimer = state !== "late" && state !== "done";
+  const showTimer = state === "live" || state === "wait" || state === "locked";      // once answered (sent, done) or over (late) the bar goes away at once
   const windowTimer = phase.kind === "parry" || phase.kind === "bf";
   const Icon = result ? (result.ok ? (result.bf ? Zap : Check) : X) : state === "locked" ? Lock : v.icon;
   const label = result ? "" : state === "locked" ? "Parry" : state === "sent" ? "…" : v.label;      // the verdict is said once, under the button
@@ -164,7 +164,7 @@ function Widget({ entry, phase, rank, lead, spot, size, ctx }) {
           <Icon strokeWidth={2.4} />
           <span>{label}</span>
           {sub && <span class="sub num">{sub}</span>}
-          {state === "live" && v.key && !touch() && <span class="kbd">{v.key}</span>}
+          {state === "live" && lead && v.key && !touch() && <span class="kbd">{v.key}</span>}
         </button>
       )}
       {keepEvade && (
@@ -260,8 +260,9 @@ function allocate({ items, counterShown, area, avoid, spots, lastSpot, size, pla
 }
 
 // ---- the layer -------------------------------------------------------------------------------------------------------------------
-const spotKey = (entry, phase) => (phase.kind === "late" || phase.kind === "none" ? null
-  : entry.q.mode === "combo" || entry.q.mode === "direction" ? `${entry.id}:fixed` : `${entry.id}:${phase.kind === "bf" ? "parry" : phase.kind}`);
+// One place per QTE for its whole life: the Parry button appears exactly where the Evade button was (a player aiming at it never
+// finds it moved), and a late widget stays there too.
+const spotKey = (entry, phase) => (phase.kind === "none" ? null : `${entry.id}:fixed`);
 
 export function QteLayer() {
   const list = qtes.value;
@@ -300,9 +301,10 @@ export function QteLayer() {
   });
 
   const area = playArea();
+  const leader = leadOf(list, now);
   const items = shown.map((entry, i) => {
     const phase = phaseAt(entry, elapsedSeconds(entry, now));
-    return { entry, phase, lead: i === 0 && !entry.pressed, key: spotKey(entry, phase), rank: i + 1 };
+    return { entry, phase, lead: !!leader && leader.id === entry.id, key: spotKey(entry, phase), rank: i + 1 };
   });
   const counterLeft = counterAt ? Math.max(0, (counterAt - now) / 1000) : 0;
   const counterShown = counterLeft > 0;
@@ -313,7 +315,7 @@ export function QteLayer() {
     <>
       <div class="qlayer" data-testid="qte-layer" aria-live="assertive">
         {items.map((it) => (
-          <Widget key={`${it.entry.id}:${it.key || "late"}:${it.entry.q.mode === "combo" && it.entry.step ? it.entry.step.index : ""}`}
+          <Widget key={`${it.entry.id}:${it.phase.kind === "bf" ? "parry" : it.phase.kind === "none" ? "late" : it.phase.kind}:${it.entry.q.mode === "combo" && it.entry.step ? it.entry.step.index : ""}`}
             entry={it.entry} phase={it.phase} rank={it.rank} lead={it.lead} spot={it.spot} size={size} ctx={ctx} />
         ))}
         {counterShown && <CounterWidget left={counterLeft} spot={spots.current.get("counter")} size={size} />}

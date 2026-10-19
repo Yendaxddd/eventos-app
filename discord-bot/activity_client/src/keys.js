@@ -1,6 +1,6 @@
 // Keyboard shortcuts. The letter keys do nothing while typing in a box (Alt + the letter still works there).
 import { qtes, view, back, sheet } from "./state.js";
-import { byUrgency, canPress, elapsedSeconds, phaseAt } from "./qte-model.js";
+import { byUrgency, canPress, elapsedSeconds, leadOf, phaseAt } from "./qte-model.js";
 import { context, press } from "./qte-store.js";
 import { pressCommand } from "./ui/Actions.jsx";
 
@@ -10,12 +10,15 @@ const MAP = {
 };
 const TIMED = new Set(["evade", "parry", "save", "up", "down", "left", "right"]);
 
+// A key answers ONE QTE: the lead (see leadOf), or for a rescue the most urgent one. If the lead cannot take that button the key does
+// nothing: it never falls through to another QTE (that is how one key used to answer several at once).
 function pickEntry(cmd) {
   const now = performance.now();
   const ctx = context();
-  const wanted = cmd === "save" ? "rescuer" : "target";
-  const list = byUrgency(qtes.value.filter((e) => e.role === wanted), now);
-  return list.find((e) => canPress(e, cmd, elapsedSeconds(e, now), { ...ctx, canWrite: e.practice ? true : ctx.canWrite }));
+  const can = (e) => canPress(e, cmd, elapsedSeconds(e, now), { ...ctx, canWrite: e.practice ? true : ctx.canWrite });
+  if (cmd === "save") return byUrgency(qtes.value.filter((e) => e.role === "rescuer"), now).find(can) || null;
+  const lead = leadOf(qtes.value, now);
+  return lead && can(lead) ? lead : null;
 }
 
 export function installKeys() {
@@ -31,11 +34,12 @@ export function installKeys() {
       return;
     }
     if (typing && !event.altKey) return;
+    if (target && target.tagName === "BUTTON" && (event.code === "Space" || event.code === "Enter")) return;      // a focused button answers for itself
     let cmd = MAP[event.code];
     if (!cmd) return;
     if (cmd === "lead") {                                     // Space: whatever the most urgent QTE needs right now
       const now = performance.now();
-      const lead = byUrgency(qtes.value.filter((e) => e.role === "target" && !e.pressed && !e.ended), now)[0];
+      const lead = leadOf(qtes.value, now);
       if (!lead) return;
       const phase = phaseAt(lead, elapsedSeconds(lead, now));
       if (phase.state !== "live" || phase.cmd === "arrows") return;

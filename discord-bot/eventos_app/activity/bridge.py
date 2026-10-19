@@ -134,6 +134,7 @@ class ActivityBridge(PanelRpc, GmRpc):
         book = getattr(self.app, "active_qtes", None)
         if hasattr(book, "on_start"):
             book.on_start, book.on_end = self._qte_started, self._qte_ended
+        self.app.activity_notify = self               # the bot tells answers to the player here instead of in the channel (see feedback)
         self.hub.loader = self.load_backlog
         self.hub.on_tick = self.push_comps
         self.gm.apply_saved()                        # the numbers the game masters changed in the panel come back after a restart
@@ -153,6 +154,8 @@ class ActivityBridge(PanelRpc, GmRpc):
         book = getattr(self.app, "active_qtes", None)
         if hasattr(book, "on_start"):
             book.on_start = book.on_end = None
+        if getattr(self.app, "activity_notify", None) is self:
+            self.app.activity_notify = None
         self.hub.loader = None
         self.hub.on_tick = None
 
@@ -244,6 +247,18 @@ class ActivityBridge(PanelRpc, GmRpc):
                          chain_window=getattr(app, "bf_chain_timing_window", 0.0))
         if str(qte_id) in {str(k) for k in app.active_qtes}:       # it may have been answered already
             await self.hub.qte_start(frame)
+
+    # ---- notifications: what an answer led to, told to the player inside their Activity ----------------
+    def has_player(self, user_id) -> bool:
+        """Is this person inside the Activity right now (the host's own window does not count)?"""
+        return any(c.user_id == user_id and not c.hidden for c in list(self.hub.conns.values()))
+
+    def notify(self, who, kind: str, data: dict | None = None) -> None:
+        """A notice for one player, or for each of a list of them. `kind` says what happened and `data` its numbers; the screen words it."""
+        ids = {who} if isinstance(who, int) else set(who or ())
+        for conn in list(self.hub.conns.values()):
+            if conn.user_id in ids and not conn.hidden:
+                self._spawn(self.hub.send(conn, {"t": "notice", "kind": str(kind), "data": data or {}}))
 
     def _qte_ended(self, qte_id, data) -> None:
         self._spawn(self.hub.qte_end(str(qte_id)))
@@ -543,7 +558,8 @@ class ActivityBridge(PanelRpc, GmRpc):
         key, data = next(((k, v) for k, v in self.app.active_qtes.items() if str(k) == qte_id), (None, None))
         if key is None:
             return "Ese QTE ya terminó."
-        message.mirror_to = data.get("message") if data else None
+        quiet = getattr(self.app, "feedback_quiet", None)
+        message.mirror_to = None if (quiet is not None and quiet(conn.user_id)) else (data.get("message") if data else None)
         await self.app.handle_qte_response(message, measured=seconds, only=key)         # this QTE, not the first that takes it
         await self._verdict(conn, qte_id, message, seconds)
         if entry.get("mode") == "combo" and key in self.app.active_qtes:               # the next step is shown only to who earned it
