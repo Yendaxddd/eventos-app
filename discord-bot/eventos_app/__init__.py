@@ -5,5 +5,5 @@ deployment imports `eventos_app.paths` and `eventos_app.console_bridge` from the
 bot, so nothing GUI-related may be imported here.
 """
 
-__version__ = "0.8.0"
+__version__ = "0.8.1"
 APP_NAME = "Eventos App"

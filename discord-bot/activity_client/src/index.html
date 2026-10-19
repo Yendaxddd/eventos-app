@@ -30,10 +30,12 @@
       <div id="feed" role="log" aria-live="polite"></div>
       <div id="dock">
         <div id="qtes" aria-label="QTE en curso"></div>
-        <p id="idle">Sin QTE por ahora: los botones aparecen cuando te toque responder.</p>
         <div id="legend" hidden><span class="lg evade">Evade</span><span class="lg parry">Parry</span><span class="lg bf">Black Flash</span></div>
         <div id="actions"></div>
-        <label id="float-opt" title="El botón de Parry aparece en un sitio al azar de la pantalla cuando se abre su ventana"><input type="checkbox" id="float-parry"> Parry flotante</label>
+        <div id="dockbar">
+          <span id="idle">Sin QTE ahora: los botones de respuesta aparecen aquí cuando te toque.</span>
+          <label id="float-opt" title="Solo el botón de Parry: aparece en un sitio al azar de la pantalla cuando se abre su ventana. Los demás botones no se mueven."><input type="checkbox" id="float-parry"> Parry flotante</label>
+        </div>
       </div>
       <div id="float" aria-hidden="true"></div>
       <form id="composer" autocomplete="off">

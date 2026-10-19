@@ -714,3 +714,23 @@ def test_the_app_log_hears_about_page_requests_the_pages_own_progress_and_refuse
     assert "la página dice: SDK de Discord listo" in text and "la página dice: error — x is not defined (app.js:3)" in text
     assert "entrada rechazada: No eres miembro" in text and "Ana entró a la Actividad" in text
     assert last == 429 and text.count("spam") < 40
+
+
+def test_the_page_names_the_version_of_its_files_and_the_files_are_always_rechecked(tmp_path):
+    async def scenario():
+        async with Rig(tmp_path, web=True) as rig:
+            (tmp_path / "index.html").write_text('<link href="./style.css"><script src="./app.js"></script>', encoding="utf-8")
+            (tmp_path / "style.css").write_text("body{}", encoding="utf-8")
+            async with rig.http.get(rig.url("/")) as r:
+                first = await r.text()
+                index_cache = r.headers.get("Cache-Control")
+            async with rig.http.get(rig.url("/app.js")) as r:
+                js_cache = r.headers.get("Cache-Control")
+            (tmp_path / "app.js").write_text("console.log(2)", encoding="utf-8")        # a new version of the client
+            async with rig.http.get(rig.url("/")) as r:
+                second = await r.text()
+            return first, second, index_cache, js_cache
+
+    first, second, index_cache, js_cache = run(scenario())
+    assert "app.js?v=" in first and "style.css?v=" in first and first != second       # a changed file changes its address
+    assert index_cache == "no-cache" and js_cache == "no-cache"

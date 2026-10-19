@@ -101,6 +101,14 @@ class ActivityServer:
             self._note(f"{request.method} {path} → {response.status} ({self._who(request)})")
         return response
 
+    @web.middleware
+    async def _fresh(self, request: web.Request, handler):
+        """Files of the client are always re-checked (a cheap 304 when unchanged), so an update is seen at once."""
+        response = await handler(request)
+        if isinstance(response, web.FileResponse) and "Cache-Control" not in response.headers and not request.path.endswith("/media"):
+            response.headers["Cache-Control"] = "no-cache"
+        return response
+
     @staticmethod
     def _who(request: web.Request) -> str:
         agent = request.headers.get("User-Agent", "sin User-Agent")
@@ -124,7 +132,7 @@ class ActivityServer:
         return web.json_response({"ok": True})
 
     def _app(self) -> web.Application:
-        app = web.Application(client_max_size=MAX_FRAME, middlewares=[self._watch])
+        app = web.Application(client_max_size=MAX_FRAME, middlewares=[self._watch, self._fresh])
         for prefix in ("", "/.proxy"):
             app.router.add_post(f"{prefix}/api/report", self._report)
             app.router.add_get(f"{prefix}/api/config", self._config)
@@ -252,10 +260,21 @@ class ActivityServer:
             path.touch()
         return web.FileResponse(path, headers={"Cache-Control": "public, max-age=86400"})
 
+    def _versioned(self, text: str) -> str:
+        """`app.js` and `style.css` get a version in their address: Discord's browser keeps files it has seen for a
+        while, and an old script with a new page (or the other way round) leaves buttons missing."""
+        for name in ("app.js", "style.css"):
+            path = self.web_dir / name
+            if path.is_file():
+                version = hashlib.sha1(path.read_bytes()).hexdigest()[:10]
+                text = text.replace(f'"./{name}"', f'"./{name}?v={version}"')
+        return text
+
     async def _index(self, request: web.Request) -> web.StreamResponse:
         index = self.web_dir / "index.html"
         if index.is_file():
-            return web.FileResponse(index, headers={"Cache-Control": "no-cache"})
+            return web.Response(text=self._versioned(index.read_text(encoding="utf-8")), content_type="text/html",
+                                headers={"Cache-Control": "no-cache"})
         return web.Response(text=_FALLBACK, content_type="text/html", status=503)
 
     async def _token(self, request: web.Request) -> web.Response:
