@@ -17,6 +17,18 @@ log = logging.getLogger("eventos_app.activity")
 
 
 class CinemaRpc:
+    def _known_bosses(self) -> list[str]:
+        """The names a cinematic can be made for: the boss in the fight, the Tupperbox character who plays the boss, and the ones the cinematics already name."""
+        names = []
+        boss = getattr(self.app, "active_boss", None)
+        if isinstance(boss, dict) and boss.get("name"):
+            names.append(str(boss["name"]))
+        config = getattr(self.app, "tupperbox_boss_config", None)
+        if isinstance(config, dict) and config.get("character_name"):
+            names.append(str(config["character_name"]))
+        names += [c["boss"] for c in self.cinema.book.items.values() if c.get("boss")]
+        return list(dict.fromkeys(n for n in names if n))[:40]
+
     def _cinema_state(self) -> dict:
         run = self.cinema.current()
         files, size = self.audio.library.store.usage(IMAGES) if self.audio.library.store is not None else (0, 0)
@@ -24,7 +36,7 @@ class CinemaRpc:
                 "events": [{"id": e, "label": EVENTS[e][0]} for e in TRIGGER_EVENTS],
                 "sounds": [{"id": s["id"], "name": s["name"], "kind": s["kind"]} for s in self.audio.library.public()],
                 "images": {"files": files, "bytes": size}, "canStore": self.audio.library.store is not None,
-                "autoplay": self.cinema.on_event_enabled}
+                "autoplay": self.cinema.on_event_enabled, "bosses": self._known_bosses()}
 
     async def rpc_gm_cinemas(self, conn: Conn, args: dict):
         await self._gm(conn)
@@ -50,6 +62,24 @@ class CinemaRpc:
         cinema = self.cinema.book.duplicate(args.get("id"))
         self.gm.log.add(actor, f"Duplicó una cinemática como «{cinema['name']}»")
         return {**self._cinema_state(), "saved": cinema}
+
+    async def rpc_gm_cinema_link(self, conn: Conn, args: dict):
+        """The cinematic that starts by itself at a moment of the fight (only one: the others lose that trigger). An empty id leaves the moment with none."""
+        actor = await self._gm(conn)
+        event, wanted = str(args.get("event")), str(args.get("id") or "")
+        if event not in TRIGGER_EVENTS:
+            raise RpcError("Ese momento no puede empezar una cinemática.")
+        chosen = self.cinema.book.items.get(wanted) if wanted else None
+        if wanted and chosen is None:
+            raise RpcError("Esa cinemática ya no existe.")
+        for cinema in list(self.cinema.book.items.values()):
+            triggers = [t for t in cinema["triggers"] if t != event]
+            if chosen is not None and cinema["id"] == chosen["id"]:
+                triggers.append(event)
+            if triggers != cinema["triggers"]:
+                self.cinema.book.put({**cinema, "triggers": triggers})
+        self.gm.log.add(actor, f"La cinemática «{chosen['name']}» empieza sola en «{EVENTS[event][0]}»" if chosen else f"Ninguna cinemática empieza sola en «{EVENTS[event][0]}»")
+        return self._cinema_state()
 
     async def rpc_gm_cinema_play(self, conn: Conn, args: dict):
         actor = await self._gm(conn)

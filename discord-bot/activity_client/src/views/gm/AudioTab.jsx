@@ -116,6 +116,41 @@ function CuesCard({ d, run, replace }) {
   );
 }
 
+// ---- the music that follows the fight --------------------------------------------------------------------------------------------
+function PhaseRow({ event, d, run, replace }) {
+  const phase = d.phases[event.id] || null;
+  const tracks = d.library.filter((s) => s.kind === "music");
+  const value = !phase ? "" : phase.mode === "stop" ? "__stop" : phase.sound;
+  const change = async (choice) => {
+    const out = choice === "" ? await run(`phase-${event.id}`, "gm.phase_clear", { event: event.id })
+      : await run(`phase-${event.id}`, "gm.phase_set", { event: event.id, mode: choice === "__stop" ? "stop" : "music", sound: choice === "__stop" ? undefined : choice, volume: phase ? phase.volume : 100 });
+    if (out) replace(out);
+  };
+  const volume = async (v) => { const out = await run(`phase-${event.id}`, "gm.phase_set", { event: event.id, mode: "music", sound: phase.sound, volume: v }); if (out) replace(out); };
+  return (
+    <div class="gm-cue" data-testid={`gm-phase-${event.id}`}>
+      <div class="info"><strong>{event.label}</strong></div>
+      <select class="select" value={value} aria-label={`Música en «${event.label}»`} data-testid={`gm-phase-select-${event.id}`} onChange={(e) => change(e.currentTarget.value)}>
+        <option value="">— no cambia la música —</option>
+        <option value="__stop">Parar la música</option>
+        {tracks.map((s) => <option key={s.id} value={s.id}>Pone «{s.name}»</option>)}
+      </select>
+      {phase && phase.mode === "music" && <input class="range" type="range" min={0} max={100} step={5} value={phase.volume} aria-label={`Volumen de la música en «${event.label}»`} onChange={(e) => volume(Number(e.currentTarget.value))} />}
+    </div>
+  );
+}
+
+function PhasesCard({ d, run, replace }) {
+  const byId = Object.fromEntries(d.events.map((e) => [e.id, e]));
+  return (
+    <Card title="Música del combate" icon={Music} testid="gm-phases"
+      hint="La música cambia sola según el momento del combate: empieza una pista cuando aparece el jefe, otra cuando cae, o se para al terminar. Si pones música en dos momentos seguidos (aparece el jefe y empieza el combate), suena la del último.">
+      {d.library.some((s) => s.kind === "music") ? null : <p class="faint">Sube música a la biblioteca (tipo «música») para poder elegirla aquí.</p>}
+      {d.phaseEvents.filter((id) => byId[id]).map((id) => <PhaseRow key={id} event={byId[id]} d={d} run={run} replace={replace} />)}
+    </Card>
+  );
+}
+
 // ---- the library -------------------------------------------------------------------------------------------------------------------
 function SoundRow({ sound, d, run, replace }) {
   const [name, setName] = useState(null);
@@ -182,6 +217,7 @@ export function AudioTab() {
         <div class="dash-col" data-testid="gm-audio">
           <MusicCard d={d} run={run} replace={q.replace} busy={busy} />
           <BoardCard d={d} run={run} busy={busy} />
+          <PhasesCard d={d} run={run} replace={q.replace} />
           <CuesCard d={d} run={run} replace={q.replace} />
           <LibraryCard d={d} run={run} replace={q.replace} />
         </div>

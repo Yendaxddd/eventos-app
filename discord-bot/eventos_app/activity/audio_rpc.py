@@ -6,7 +6,7 @@ from __future__ import annotations
 
 import logging
 
-from .audio import EVENTS, KINDS
+from .audio import EVENTS, KINDS, PHASE_EVENTS
 from .hub import Conn, RpcError
 from .media import AUDIO
 
@@ -18,6 +18,7 @@ class AudioRpc:
         files, size = self.audio.library.store.usage(AUDIO) if self.audio.library.store is not None else (0, 0)
         return {"library": self.audio.library.public(), "cues": {e: dict(c) for e, c in self.audio.library.cues.items()},
                 "events": [{"id": e, "label": label, "scope": scope} for e, (label, scope) in EVENTS.items()],
+                "phases": {e: dict(p) for e, p in self.audio.library.phases.items()}, "phaseEvents": list(PHASE_EVENTS),
                 "kinds": [{"id": k, "label": label} for k, label in KINDS.items()], "music": self.audio.music_frame(),
                 "usage": {"files": files, "bytes": size}, "canStore": self.audio.library.store is not None}
 
@@ -85,6 +86,23 @@ class AudioRpc:
             raise RpcError("Ese aviso no existe.")
         self.audio.library.clear_cue(event)
         self.gm.log.add(actor, f"Quitó el sonido de «{EVENTS[event][0]}»")
+        return self._audio_state()
+
+    async def rpc_gm_phase_set(self, conn: Conn, args: dict):
+        actor = await self._gm(conn)
+        event = str(args.get("event"))
+        phase = self.audio.library.set_phase(event, args.get("mode"), args.get("sound"), args.get("volume", 100))
+        what = "pone la pista «%s»" % self.audio.library.get(phase["sound"])["name"] if phase["mode"] == "music" else "para la música"
+        self.gm.log.add(actor, f"La música ahora {what} en «{EVENTS[event][0]}»")
+        return self._audio_state()
+
+    async def rpc_gm_phase_clear(self, conn: Conn, args: dict):
+        actor = await self._gm(conn)
+        event = str(args.get("event"))
+        if event not in PHASE_EVENTS:
+            raise RpcError("Ese momento no puede cambiar la música.")
+        self.audio.library.clear_phase(event)
+        self.gm.log.add(actor, f"Quitó el cambio de música de «{EVENTS[event][0]}»")
         return self._audio_state()
 
     async def rpc_gm_cue_test(self, conn: Conn, args: dict):

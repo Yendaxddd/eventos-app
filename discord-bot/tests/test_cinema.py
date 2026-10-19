@@ -257,3 +257,52 @@ def test_every_request_of_the_cinematics_tab_is_part_of_the_role_checked_panel()
     names = handlers()
     for expected in ("gm.cinemas", "gm.cinema_save", "gm.cinema_delete", "gm.cinema_duplicate", "gm.cinema_play", "gm.cinema_stop", "gm.cinema_auto"):
         assert expected in names
+
+
+def test_a_script_made_for_one_boss_only_starts_for_that_boss_and_wins_over_one_for_any_boss(tmp_path):
+    async def scenario():
+        hub = Hub()
+        lib, raw = valid(tmp_path)
+        book = CinemaBook(tmp_path / "c.json", lib)
+        director = CinemaDirector(hub, book, post=None)
+        general = book.put({**raw, "name": "Cualquier jefe", "triggers": ["boss_defeated"]})
+        rey = book.put({**raw, "name": "Solo el Rey", "triggers": ["boss_defeated"], "boss": "  rey de las maldiciones "})
+        assert rey["boss"] == "rey de las maldiciones" and general["boss"] == ""
+        first = await director.on_event("boss_defeated", {"name": "Rey de las Maldiciones"})
+        started = director.current()["id"]
+        await director.stop()
+        other = await director.on_event("boss_defeated", {"name": "Goblin"})
+        second = director.current()["id"]
+        await director.stop()
+        return first, started == rey["id"], other, second == general["id"]
+
+    assert run(scenario()) == (True, True, True, True)
+
+
+def test_one_cinematic_is_chosen_for_a_moment_of_the_fight_and_the_others_lose_that_trigger(tmp_path):
+    async def scenario():
+        async with GmRig() as rig:
+            lib, raw = valid(tmp_path)
+            rig.bridge.cinema.book.library, rig.bridge.cinema.book.path = lib, tmp_path / "c.json"
+            first = rig.bridge.cinema.book.put({**raw, "name": "Uno", "triggers": ["boss_spawn", "boss_defeated"]})
+            second = rig.bridge.cinema.book.put({**raw, "name": "Dos", "triggers": []})
+            gm, _ = await rig.login(ME)
+            player, _ = await rig.login(OTHER)
+            moved = await rig.ask(gm, "gm.cinema_link", event="boss_spawn", id=second["id"])
+            triggers = {c["name"]: c["triggers"] for c in rig.bridge.cinema.book.listing()}
+            bad = await rig.ask(gm, "gm.cinema_link", event="qte_start", id=second["id"])
+            gone = await rig.ask(gm, "gm.cinema_link", event="boss_spawn", id="nope")
+            cleared = await rig.ask(gm, "gm.cinema_link", event="boss_defeated", id="")
+            await player.send_json({"t": "rpc", "id": "p", "op": "gm.cinema_link", "args": {"event": "boss_spawn", "id": ""}})
+            refused = None
+            while refused is None:
+                got = await asyncio.wait_for(player.receive_json(), 3)
+                if got.get("id") == "p":
+                    refused = got
+            return moved, triggers, bad, gone, cleared, refused, {c["name"]: c["triggers"] for c in rig.bridge.cinema.book.listing()}
+
+    moved, triggers, bad, gone, cleared, refused, after = run(scenario())
+    assert moved["t"] == "rpc_ok" and triggers == {"Uno": ["boss_defeated"], "Dos": ["boss_spawn"]}
+    assert bad["t"] == "rpc_err" and "no puede" in bad["reason"] and gone["t"] == "rpc_err" and "ya no existe" in gone["reason"]
+    assert cleared["t"] == "rpc_ok" and after == {"Uno": [], "Dos": ["boss_spawn"]}
+    assert refused["t"] == "rpc_err" and "equipo de GM" in refused["reason"]

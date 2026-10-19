@@ -199,6 +199,52 @@ tapado: los botones están por encima. Si el canal tiene mensajes activados, el 
 acento**, **esquinas** rectas, redondas o muy redondas y **fondo** liso, cuadrícula o aurora. Se guardan por persona en el servidor,
 así que te siguen del PC al móvil. «Daltonismo» y «Alto contraste» siguen funcionando con cualquier combinación.
 
+## Chat con los personajes (1.3.0)
+Los mensajes de un personaje ahora salen **juntos** (una sola cabecera mientras habla la misma persona, aunque el mensaje haya salido
+por otro de los webhooks del bot) y **con la imagen del personaje**: si la importaste de Tupperbox, el mensaje sale en el canal con esa
+imagen, que Discord descarga de la dirección del túnel de la Actividad. Sin túnel (o sin imagen importada) sale con la última
+imagen conocida o con tu foto, como antes.
+
+## Sonidos de combate (1.3.0)
+En *Panel del GM → Audio → Avisos automáticos* hay ranuras nuevas: **Tus respuestas** (esquive, parry, contraataque, rescate, paso de
+combo, fallo), **Golpes y vida** (un jugador recibe daño, vida baja, curación, el jefe recibe daño) y **Poderes** (cualquier poder, o
+el Poder 1 y el Poder 2 por separado). Los de «tus respuestas» y los golpes a jugadores suenan solo para quien los vive (se puede
+cambiar a «todos»).
+- **Música del combate:** la música también sigue al combate sola: elige una pista (o parar la música) para *empieza el combate*,
+  *aparece el jefe*, *el jefe despliega su dominio*, *cae el jefe* y *termina el combate*. Si pones música en dos momentos seguidos
+  suena la del último.
+
+## Efectos de los poderes y de lo que pasa (1.3.0)
+*Panel del GM → Efectos.* Cuando alguien usa un poder (o pasa algo: Black Flash, un golpe, el jefe que cae…), todas las pantallas
+dibujan un efecto: **corte, explosión, rayo, curación, escudo, carga, dominio, impacto o pulso**, con su color, **fuerza**,
+**velocidad**, **retraso**, un **rótulo** grande (el nombre del poder o el texto que escribas) y un **sonido**. Todo se guarda solo y
+hay un botón *Probar aquí*.
+- Un poder sin efecto propio usa el de su ranura («Poder 1» o «Poder 2»), luego el de «Alguien usa un poder» y, si no, un aspecto
+  según su tipo (destructivo: explosión, apoyo: curación, defensa: escudo, construcción: carga, control: rayo). Se apaga con *Por
+  defecto según su tipo*.
+- Cada jugador elige en *Ajustes → Efectos visuales*: **completos**, **suaves** (sin temblores ni destellos fuertes; también se
+  aplica con «animaciones reducidas») o **apagados**. Los efectos van por encima de la pantalla y por debajo de los botones de QTE.
+- Las **cinemáticas** tienen un paso nuevo, **Efecto visual**, con los mismos efectos. Los datos están en `data/activity_fx.json`.
+
+## Editor de cinemáticas (1.3.0)
+Rehecho: una **línea de tiempo con una fila por tipo de paso** (texto, sonido, imagen y escena, efectos, canal), un **bloque por paso**
+(clic para editarlo, arrastrar para moverlo; con el teclado, flechas izquierda y derecha), una **lista de pasos** debajo y **el
+formulario solo del paso elegido**. Eliges el segundo donde se añade el siguiente paso. **Se guarda sola**: arriba pone «Guardando…»
+y «Todo guardado», y si falta algo (el nombre, un texto vacío, un sonido sin elegir) dice cuál es el paso y por qué no se guarda
+todavía. *Ver aquí* la prueba solo en tu pantalla y *Poner para todos* la lanza. Una cinemática ligada a «aparece / cae el jefe» o a
+su dominio puede ser **solo para un jefe** por su nombre; la hecha para ese jefe gana a la de «cualquier jefe».
+
+## Mando del GM (1.3.0)
+Para quien tiene el rol de administrador, el panel de la derecha tiene dos pestañas: **Mi personaje** y **Mando del GM** (en el móvil,
+el botón de la corona de la barra de arriba). Todo a mano y sin salir del evento: **hacer aparecer al jefe de Tupperbox** (y el modo
+jefe), su vida (−5 %, −10 %, −25 %, +10 %, un daño exacto, derrotar, retirar), sus **habilidades y su dominio**, **iniciar o terminar el
+combate**, un **checkpoint**, **lanzar un QTE** al azar (tipo y dificultad), **poner una cinemática** o **música**, y un resumen de lo que
+tiene **enlazado cada momento** del combate. Cada botón hace lo mismo que su botón del panel completo y el servidor comprueba el rol
+en cada uno.
+- *Panel del GM → Jefe → «Qué pasa en cada momento del combate»*: para *empieza el combate*, *aparece el jefe*, *su dominio*, *cae el
+  jefe* y *termina el combate* eliges de una vez la **cinemática**, la **música**, el **efecto** y el **sonido**. Se guarda al elegir; los
+  detalles se afinan en las pestañas Cinemáticas, Audio y Efectos.
+
 ## Puesta en marcha (una sola vez)
 En <https://discord.com/developers/applications> → tu aplicación (la del bot principal):
 1. **Activities**: actívalas («Enable Activities»). Discord crea el comando de entrada «Launch».
@@ -291,3 +337,7 @@ exista y se llame como el bot lo declara (`test_activity_gm_contract.py`).
 - **Exportaciones reales de Tupperbox** (las pruebas usan archivos con el mismo formato documentado, no los de tu servidor).
 - **Voz:** esta versión no reproduce en un canal de voz; el sonido va por la Actividad de cada persona.
 - El bot sigue escribiendo en inglés los mensajes de **canal** (la traducción de esos textos queda para otra versión).
+- **Imagen del personaje en el canal (1.3.0):** que Discord descargue la imagen importada desde la dirección del túnel (con el túnel
+  rápido de Cloudflare la dirección cambia cada vez, pero Discord la pide en cada mensaje, así que no hay problema mientras la
+  Actividad esté abierta).
+- **Efectos visuales en móviles flojos:** si algún efecto va a tirones, *Ajustes → Efectos visuales → Suaves* los alivia.

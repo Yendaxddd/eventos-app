@@ -144,6 +144,39 @@ def test_the_combat_slots_exist_and_a_power_uses_its_slots_cue_before_the_genera
     assert EVENTS["parry_ok"][1] == "target" and EVENTS["boss_hit"][1] == "all"                # who hears it
 
 
+def test_the_music_follows_the_fight_by_itself_and_what_is_bound_to_a_deleted_track_goes_with_it(tmp_path):
+    async def scenario():
+        hub = Hub()
+        lib = library(tmp_path)
+        director = AudioDirector(hub, lib)
+        calm, battle = (lib.add(f"{n}.ogg", OGG + bytes([i]), "music")["id"] for i, n in enumerate(("calma", "batalla")))
+        for call, message in ((lambda: lib.set_phase("qte_start", "stop"), "no puede"), (lambda: lib.set_phase("fight_start", "music", "zz"), "pista"), (lambda: lib.set_phase("fight_start", "loud"), "no existe")):
+            try:
+                call()
+            except RpcError as exc:
+                assert message in str(exc)
+            else:
+                raise AssertionError(message)
+        lib.set_phase("fight_start", "music", battle, 80)
+        lib.set_phase("fight_end", "music", calm, 50)
+        lib.set_phase("boss_defeated", "stop")
+        seen = []
+        await director.dispatch("fight_start", {})
+        seen.append(director.music["sound"]["name"])
+        await director.dispatch("boss_defeated", {"name": "Rey"})
+        seen.append(director.music)
+        await director.dispatch("fight_end", {})
+        seen.append((director.music["sound"]["name"], director.music["volume"]))
+        reloaded = AudioLibrary(lib.store, lib.path)
+        lib.delete(battle)
+        return seen, dict(reloaded.phases), dict(lib.phases)
+
+    seen, reloaded, after = run(scenario())
+    assert seen == ["batalla", None, ("calma", 50)]
+    assert set(reloaded) == {"fight_start", "fight_end", "boss_defeated"} and reloaded["boss_defeated"]["mode"] == "stop"             # kept between runs
+    assert set(after) == {"fight_end", "boss_defeated"}
+
+
 # ---- playing ---------------------------------------------------------------------------------------------------------
 def test_a_cue_plays_for_who_it_is_about_or_for_everybody_and_the_music_is_the_same_for_all(tmp_path):
     async def scenario():

@@ -274,6 +274,12 @@ function Editor({ start, d, onClose, replace }) {
                 <label class="row" style={{ gap: "8px" }}><Switch label="Se puede saltar" checked={draft.skippable} onChange={(v) => set({ skippable: v })} /><span>Cada jugador puede saltarla</span></label>
                 <label class="row" style={{ gap: "8px" }}><span class="faint">Fondo</span><input type="color" value={draft.bg || "#000000"} onInput={(e) => set({ bg: e.currentTarget.value })} aria-label="Color de fondo de la cinemática" /></label>
               </div>
+              {draft.triggers.some((t) => ["boss_spawn", "boss_defeated", "boss_domain"].includes(t)) && (
+                <label class="field"><span class="field-label">Solo para el jefe <span class="faint">(vacío: para cualquiera)</span></span>
+                  <input class="input" maxLength={80} value={draft.boss || ""} placeholder="Nombre del jefe, tal como aparece" list="cine-bosses" onInput={(e) => set({ boss: e.currentTarget.value })} data-testid="cine-boss" />
+                  <datalist id="cine-bosses">{(d.bosses || []).map((b) => <option key={b} value={b} />)}</datalist>
+                </label>
+              )}
               <div class="col" style={{ gap: "6px" }}>
                 <span class="field-label">Empieza sola cuando… <span class="faint">(si no marcas nada, solo la pones tú)</span></span>
                 <div class="row wrap gm-chips">
@@ -324,7 +330,7 @@ function Editor({ start, d, onClose, replace }) {
   );
 }
 
-const BLANK = () => ({ id: "", name: "Nueva cinemática", steps: [newStep("scene", []), { ...newStep("text", [{ at: 0, duration: 1 }]), text: "Escribe aquí lo que se dice…" }], triggers: [], bg: "#000000", bars: true, skippable: true });
+const BLANK = () => ({ id: "", name: "Nueva cinemática", boss: "", steps: [newStep("scene", []), { ...newStep("text", [{ at: 0, duration: 1 }]), text: "Escribe aquí lo que se dice…" }], triggers: [], bg: "#000000", bars: true, skippable: true });
 
 function List({ d, replace, edit }) {
   const [busy, run] = useDo();

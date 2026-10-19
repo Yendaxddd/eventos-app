@@ -6,6 +6,7 @@ import { cdn } from "../../util.js";
 import { duration, num, parseNumber } from "../../panel/format.js";
 import { Bar, Card, NumberInput, PictureInput } from "./ui.jsx";
 import { useDo, useDraft, useLive } from "./hooks.js";
+import { LinksCard } from "./LinksCard.jsx";
 
 const DOMAIN_KINDS = [["simple", "Simple", "Daña a todos una vez."], ["dps", "Daño continuo", "Daña a todos cada pocos segundos mientras dura."], ["stun", "Aturdimiento", "Impide actuar a quien lo sufre."]];
 
@@ -301,6 +302,7 @@ export function BossTab() {
         {(d) => (
           <>
             <Active d={d} replace={q.replace} />
+            <LinksCard />
             <Register d={d} replace={q.replace} />
             <Settings d={d} replace={q.replace} />
             <Abilities d={d} replace={q.replace} />

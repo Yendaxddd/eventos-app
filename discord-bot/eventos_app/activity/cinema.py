@@ -41,6 +41,7 @@ EFFECTS = ("flash", "shake", "blackout")
 SIZES = ("normal", "big")
 _NOISY = {"evade_ok", "parry_ok", "counter", "rescue_ok", "combo_step", "player_hit", "heal", "boss_hit", "power_1", "power_2"}
 TRIGGER_EVENTS = tuple(e for e in EVENTS if not e.startswith("qte_") and e not in _NOISY)        # cinematics start on what happens, not on every QTE or blow
+BOSS_EVENTS = ("boss_spawn", "boss_defeated", "boss_domain")           # the events that say which boss they are about
 _COLOR = re.compile(r"^#[0-9a-fA-F]{6}$")
 _IMAGE = re.compile(r"^files/images/[0-9a-f]{24}\.(png|jpg|gif|webp)$")
 
@@ -164,7 +165,7 @@ def clean_cinema(raw: Any, library: AudioLibrary | None, known_id: str | None = 
             triggers.append(event)
     length = max(s["at"] + (s.get("duration") or 0) for s in steps)
     return {"id": known_id or str(raw.get("id") or "") or secrets.token_hex(4), "name": name, "steps": steps, "triggers": triggers,
-            "bg": _color(raw.get("bg"), "Fondo", "#000000"), "bars": bool(raw.get("bars", True)), "skippable": bool(raw.get("skippable", True)),
+            "boss": _line(raw.get("boss"), 80), "bg": _color(raw.get("bg"), "Fondo", "#000000"), "bars": bool(raw.get("bars", True)), "skippable": bool(raw.get("skippable", True)),
             "duration": round(length + 1.0, 2)}
 
 
@@ -301,8 +302,14 @@ class CinemaDirector:
         """Something happened in the game: start the first cinematic bound to it (unless one is already playing)."""
         if not self.on_event_enabled or self.current() is not None:
             return False
-        for cinema in self.book.items.values():
-            if event in cinema["triggers"]:
-                await self.play(cinema["id"])
-                return True
+        who = str((data or {}).get("name") or "").strip().casefold()
+        candidates = [c for c in self.book.items.values() if event in c["triggers"]]
+        # one made for this boss wins over one for any boss
+        candidates.sort(key=lambda c: 0 if c.get("boss") and event in BOSS_EVENTS else 1)
+        for cinema in candidates:
+            wanted = str(cinema.get("boss") or "").strip().casefold()
+            if wanted and event in BOSS_EVENTS and wanted != who:
+                continue
+            await self.play(cinema["id"])
+            return True
         return False

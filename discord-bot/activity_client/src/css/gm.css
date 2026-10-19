@@ -172,3 +172,8 @@
 .cine-step.t-vfx { --step: #fb7185; }
 .cine-settings summary { cursor: pointer; color: var(--text-dim); font-size: .8125rem; }
 @media (max-width: 560px) { .tl-label { width: 64px; font-size: .6875rem; } .tl-ruler { margin-left: 72px; } }
+
+/* ---- what each moment of the fight starts ---- */
+.gm-links { display: flex; flex-direction: column; gap: var(--sp-3); }
+.gm-link { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: var(--sp-2) var(--sp-3); padding: var(--sp-3); border-radius: var(--r-md); background: var(--surface); border: 1px solid var(--line-soft); }
+.gm-link-title { grid-column: 1 / -1; }

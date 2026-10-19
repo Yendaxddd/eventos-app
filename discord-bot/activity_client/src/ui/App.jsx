@@ -7,6 +7,7 @@ import { Feed } from "./Feed.jsx";
 import { Composer } from "./Composer.jsx";
 import { BossCard, MeCard, MiniHud, PlayersPanel, RightPanel } from "./Hud.jsx";
 import { Actions } from "./Actions.jsx";
+import { GmDeck } from "./GmDeck.jsx";
 import { QteLayer } from "./QteLayer.jsx";
 import { CinemaLayer } from "./CinemaLayer.jsx";
 import { MenuPage } from "../views/Menu.jsx";
@@ -102,6 +103,9 @@ export function App() {
             <PlayersPanel />
           </div>
         </Sheet>
+      )}
+      {sheet.value === "gm" && (
+        <Sheet title="Mando del GM" onClose={() => { sheet.value = null; }}><GmDeck /></Sheet>
       )}
       <Toasts />
       <FxLayer />

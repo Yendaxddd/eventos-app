@@ -1,6 +1,8 @@
-import { Flame, Skull, Swords, UserRound } from "lucide-preact";
-import { activeAs, charAvatars, game, me, myHp, users, you } from "../state.js";
-import { clamp, cx } from "../util.js";
+import { useState } from "preact/hooks";
+import { Crown, Flame, Skull, Swords, UserRound } from "lucide-preact";
+import { GmDeck } from "./GmDeck.jsx";
+import { activeAs, charAvatars, game, me, myHp, perms, users, you } from "../state.js";
+import { clamp, cx, store } from "../util.js";
 import { Avatar } from "./Avatar.jsx";
 import { Actions } from "./Actions.jsx";
 
@@ -120,12 +122,27 @@ export function PlayersPanel() {
 }
 
 export function RightPanel() {
+  const isGm = perms.value.gm;
+  const [tab, setTab] = useState(() => store.get("eventos.rightTab") || "me");
+  const shown = isGm ? tab : "me";
+  const choose = (value) => { setTab(value); store.set("eventos.rightTab", value); };
   return (
     <div class="panel" data-testid="right-panel">
-      <div class="panel-head"><span class="eyebrow"><UserRound size={12} style={{ verticalAlign: "-2px" }} /> Mi personaje</span></div>
+      {isGm ? (
+        <div class="panel-tabs" role="tablist" aria-label="Panel lateral">
+          <button type="button" role="tab" aria-selected={shown === "me" ? "true" : "false"} onClick={() => choose("me")} data-testid="side-tab-me"><UserRound size={13} /> Mi personaje</button>
+          <button type="button" role="tab" aria-selected={shown === "gm" ? "true" : "false"} onClick={() => choose("gm")} data-testid="side-tab-gm"><Crown size={13} /> Mando del GM</button>
+        </div>
+      ) : (
+        <div class="panel-head"><span class="eyebrow"><UserRound size={12} style={{ verticalAlign: "-2px" }} /> Mi personaje</span></div>
+      )}
       <div class="panel-body">
-        <MeCard />
-        <Actions variant="grid" />
+        {shown === "gm" ? <GmDeck /> : (
+          <>
+            <MeCard />
+            <Actions variant="grid" />
+          </>
+        )}
       </div>
     </div>
   );

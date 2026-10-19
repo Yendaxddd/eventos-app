@@ -44,6 +44,8 @@ EVENTS: dict[str, tuple[str, str]] = {
     "boss_hit": ("El jefe recibe daño", "all"),
     "power_used": ("Alguien usa un poder (cualquiera)", "all"), "power_1": ("Se usa un Poder 1", "all"), "power_2": ("Se usa un Poder 2", "all"),
 }
+PHASE_EVENTS = ("fight_start", "boss_spawn", "boss_domain", "boss_defeated", "fight_end")      # the moments of a fight that can change the music by themselves
+PHASE_MODES = ("music", "stop")
 QTE_FALLBACK = ("qte_start",)          # a QTE with no cue of its own uses this one
 
 
@@ -79,6 +81,7 @@ class AudioLibrary:
         self.path = path
         self.sounds: dict[str, dict] = {}
         self.cues: dict[str, dict] = {}
+        self.phases: dict[str, dict] = {}          # event -> {"mode": "music" | "stop", "sound", "volume"}: the music follows the fight
         self._load()
 
     # ---- keeping ----------------------------------------------------------------------------------------------------------
@@ -100,13 +103,17 @@ class AudioLibrary:
             clean = self._cue_from(event, cue)
             if clean is not None:
                 self.cues[event] = clean
+        for event, phase in (raw.get("phases") or {}).items():
+            clean = self._phase_from(event, phase)
+            if clean is not None:
+                self.phases[event] = clean
 
     def save(self) -> None:
         if self.path is None:
             return
         try:
             tmp = self.path.with_suffix(".tmp")
-            tmp.write_text(json.dumps({"sounds": list(self.sounds.values()), "cues": self.cues}, ensure_ascii=False, indent=1), encoding="utf-8")
+            tmp.write_text(json.dumps({"sounds": list(self.sounds.values()), "cues": self.cues, "phases": self.phases}, ensure_ascii=False, indent=1), encoding="utf-8")
             tmp.replace(self.path)
         except OSError:
             log.warning("could not save %s", self.path)
@@ -126,6 +133,13 @@ class AudioLibrary:
             return None
         return {"sound": str(cue["sound"]), "volume": _percent(cue.get("volume")),
                 "scope": cue.get("scope") if cue.get("scope") in SCOPES else EVENTS[event][1], "enabled": bool(cue.get("enabled", True))}
+
+    def _phase_from(self, event: str, phase: Any) -> dict | None:
+        if event not in PHASE_EVENTS or not isinstance(phase, dict) or phase.get("mode") not in PHASE_MODES:
+            return None
+        if phase["mode"] == "music" and str(phase.get("sound") or "") not in self.sounds:
+            return None
+        return {"mode": phase["mode"], "sound": str(phase.get("sound") or "") if phase["mode"] == "music" else "", "volume": _percent(phase.get("volume"))}
 
     # ---- the sounds -------------------------------------------------------------------------------------------------------
     def public(self) -> list[dict]:
@@ -177,6 +191,8 @@ class AudioLibrary:
             raise RpcError("Ese sonido ya no está en la biblioteca.")
         for event in [e for e, cue in self.cues.items() if cue["sound"] == sound["id"]]:
             del self.cues[event]
+        for event in [e for e, phase in self.phases.items() if phase["sound"] == sound["id"]]:
+            del self.phases[event]
         if self.store is not None and not any(s["file"] == sound["file"] for s in self.sounds.values()):
             _, name = sound["file"].rsplit("/", 1)
             self.store.delete(AUDIO, name)
@@ -198,6 +214,24 @@ class AudioLibrary:
     def clear_cue(self, event: Any) -> None:
         if str(event) in self.cues:
             del self.cues[str(event)]
+            self.save()
+
+    # ---- the music of a fight ----------------------------------------------------------------------------------------------
+    def set_phase(self, event: Any, mode: Any, sound_id: Any = None, volume: Any = 100) -> dict:
+        event = str(event)
+        if event not in PHASE_EVENTS:
+            raise RpcError("Ese momento no puede cambiar la música.")
+        if mode == "music" and self.get(sound_id) is None:
+            raise RpcError("Elige una pista de la biblioteca.")
+        phase = self._phase_from(event, {"mode": mode, "sound": sound_id, "volume": volume})
+        if phase is None:
+            raise RpcError("Esa acción no existe.")
+        self.phases[event] = phase
+        self.save()
+        return dict(phase)
+
+    def clear_phase(self, event: Any) -> None:
+        if self.phases.pop(str(event), None) is not None:
             self.save()
 
     def cue_for(self, event: str, data: dict) -> tuple[str, dict] | None:
@@ -278,9 +312,19 @@ class AudioDirector:
     async def dispatch(self, event: str, data: dict | None = None) -> bool:
         """Something happened in the game: play the cue bound to it, if there is one. `data["user"]` is who it is about."""
         data = data or {}
+        phase = self.library.phases.get(event)
+        if phase is not None:                                         # the music follows the fight
+            try:
+                if phase["mode"] == "stop":
+                    if self.music is not None:
+                        await self.stop_music()
+                else:
+                    await self.start_music(phase["sound"], phase["volume"])
+            except RpcError:
+                pass
         found = self.library.cue_for(event, data)
         if found is None:
-            return False
+            return bool(phase)
         _, cue = found
         sound = self.library.get(cue["sound"])
         if sound is None:

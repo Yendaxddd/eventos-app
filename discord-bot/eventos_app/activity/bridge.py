@@ -27,6 +27,7 @@ from .cinema import CinemaBook, CinemaDirector
 from .cinema_rpc import CinemaRpc
 from .fx import FxBook, FxDirector
 from .fx_rpc import FxRpc
+from .quick_rpc import QuickRpc
 from .latency import CAP_MS, LatencyBook, compensation
 from .prefs import PrefsStore
 from .qte import COMMANDS, TIMED, ActivityInput, describe, response_seconds
@@ -113,7 +114,7 @@ def serialize_message(message: Any, own_webhooks: set[int] | frozenset[int] = fr
     }
 
 
-class ActivityBridge(PanelRpc, GmRpc, TupperRpc, AudioRpc, CinemaRpc, FxRpc):
+class ActivityBridge(PanelRpc, GmRpc, TupperRpc, AudioRpc, CinemaRpc, FxRpc, QuickRpc):
     def __init__(self, hub: Hub, app: Any, pool: Callable[[], Any] | None = None, avatar_file: Path | None = None,
                  prefs_file: Path | None = None, latency_file: Path | None = None, data_dir: Path | None = None,
                  gm_log_file: Path | None = None, values_file: Path | None = None, files: MediaStore | None = None,
