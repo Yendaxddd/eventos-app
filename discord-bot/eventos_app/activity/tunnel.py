@@ -5,8 +5,8 @@ Discord's proxy downloads the Activity from the internet, so the PC needs a publ
 * `Tunnel`: a free Cloudflare "quick tunnel". Needs no account but gets a NEW address every time it starts: it has
   to be pasted in the Developer Portal (URL Mappings, root `/`) at the start of each event. cloudflared is downloaded
   once, from Cloudflare's own GitHub releases, into `<app home>/tools`.
-* `NgrokTunnel`: the free static domain of an ngrok account. The address never changes, so it is pasted in the
-  Portal once. Needs the account's authtoken and domain (both free).
+* `TailscaleTunnel`: Tailscale Funnel. The address never changes, so it is pasted in the Portal once, and there is no
+  warning page in front (ngrok's free plan has one, which leaves the Activity blank inside Discord).
 """
 
 from __future__ import annotations
@@ -18,8 +18,6 @@ import os
 import re
 import shutil
 import sys
-import zipfile
-from io import BytesIO
 from pathlib import Path
 from typing import Callable, Sequence
 
@@ -30,8 +28,6 @@ log = logging.getLogger("eventos_app.activity")
 URL_RE = re.compile(r"https://[a-z0-9][a-z0-9-]*\.trycloudflare\.com")
 DOWNLOAD_URL = "https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-windows-amd64.exe"
 URL_WAIT_SECONDS = 25.0
-NGROK_DOWNLOADS = ("https://bin.ngrok.com/c/bNyj1mQVY4c/ngrok-v3-stable-windows-amd64.zip",
-                   "https://bin.equinox.io/c/bNyj1mQVY4c/ngrok-v3-stable-windows-amd64.zip")
 
 
 class TunnelError(Exception):
@@ -193,90 +189,129 @@ class Tunnel:
             self._set("idle")
 
 
-def _ngrok_error(line: str) -> str:
-    """What went wrong, in Spanish, from one JSON log line of ngrok (or '' when the line is not an error)."""
+
+_FUNNEL_LINK = re.compile(r"https://login\.tailscale\.com/\S+")
+_TAILSCALE_PATHS = (r"C:\Program Files\Tailscale\tailscale.exe", r"C:\Program Files (x86)\Tailscale\tailscale.exe")
+TAILSCALE_DOWNLOAD = "https://tailscale.com/download"
+CLI_TIMEOUT = 25.0
+
+
+def find_tailscale() -> Path | None:
+    found = shutil.which("tailscale")
+    if found:
+        return Path(found)
+    return next((Path(p) for p in _TAILSCALE_PATHS if Path(p).is_file()), None)
+
+
+def read_status(output: str) -> tuple[str, str]:
+    """(address, problem) from the JSON of `tailscale status --json`: the machine's public name, or what is wrong."""
     try:
-        data = json.loads(line)
+        data = json.loads(output)
     except ValueError:
-        text = line.strip()
-        return text if "ERR_NGROK" in text or "unknown flag" in text else ""
-    if data.get("lvl") not in ("eror", "crit", "error"):
-        return ""
-    text = f"{data.get('err', '')} {data.get('msg', '')}"
-    if "ERR_NGROK_105" in text or "ERR_NGROK_107" in text or "authentication failed" in text.lower():
-        return "ngrok rechazó el authtoken: cópialo otra vez desde dashboard.ngrok.com → Your Authtoken."
-    if "ERR_NGROK_334" in text or "already online" in text.lower():
-        return "Ese dominio de ngrok ya está en uso (¿otro ngrok abierto en este PC u otro equipo?)."
-    if "ERR_NGROK_314" in text or "ERR_NGROK_313" in text or "domain" in text.lower() and "not" in text.lower():
-        return "ngrok no reconoce ese dominio: cópialo de dashboard.ngrok.com → Domains (debe ser el gratuito de tu cuenta)."
-    return text.strip()[:300]
+        return "", f"Tailscale no respondió como se esperaba: {output.strip()[:200] or 'sin salida'}"
+    state = data.get("BackendState")
+    if state == "NeedsLogin":
+        return "", "Tailscale no tiene la sesión iniciada: ábrelo (icono de la bandeja) e inicia sesión."
+    if state == "Stopped":
+        return "", "Tailscale está desconectado: actívalo desde el icono de la bandeja (Connect)."
+    if state != "Running":
+        return "", f"Tailscale no está listo (estado: {state or 'desconocido'}). Ábrelo y espera a que conecte."
+    name = str((data.get("Self") or {}).get("DNSName", "")).rstrip(".")
+    if not name:
+        return "", ("Tu Tailscale no tiene nombre público: activa «MagicDNS» y «HTTPS Certificates» en "
+                    "https://login.tailscale.com/admin/dns y vuelve a intentarlo.")
+    return name, ""
 
 
-class NgrokTunnel(Tunnel):
-    """The free static domain of an ngrok account: the address is known beforehand and never changes."""
+class TailscaleTunnel(Tunnel):
+    """Tailscale Funnel: a fixed public https address (`equipo.tailXXXX.ts.net`) with no warning page in front.
 
-    program = "ngrok"
-    attempts = ("url", "domain")      # the flag is `--url` in current versions and `--domain` in older ones
+    Needs Tailscale installed and signed in, with MagicDNS + HTTPS certificates on and Funnel allowed once. Nothing is
+    downloaded: Tailscale is a Windows service with its own installer. The Funnel is switched off again on `stop`."""
+
+    program = "tailscale"
     fixed = True
 
-    def __init__(self, port: int, *, token: str, domain: str, **options) -> None:
+    def __init__(self, port: int, *, command: Callable[[Path, list[str]], Sequence[str]] | None = None, **options) -> None:
         super().__init__(port, **options)
-        self.token = token.strip()
-        self.domain = re.sub(r"^https?://", "", domain.strip()).strip("/").lower()
+        self._cli = command or (lambda binary, args: [str(binary), *args])
+        self._exposed = False
 
-    def _default_command(self, binary: Path, port: int, flag: str) -> list[str]:
-        target = f"https://{self.domain}" if flag == "url" else self.domain
-        return [str(binary), "http", str(port), f"--{flag}", target, "--authtoken", self.token,
-                "--log", "stdout", "--log-format", "json"]
+    def find_binary(self) -> Path | None:
+        return find_tailscale()
 
-    def _url_in(self, line: str) -> str:
-        error = _ngrok_error(line)
-        if error:
-            self.last_error = error
+    async def _run(self, binary: Path, args: list[str]) -> tuple[int, str]:
+        flags = getattr(__import__("subprocess"), "CREATE_NO_WINDOW", 0)
+        proc = await asyncio.create_subprocess_exec(*self._cli(binary, args), stdout=asyncio.subprocess.PIPE,
+                                                    stderr=asyncio.subprocess.STDOUT, creationflags=flags)
         try:
-            data = json.loads(line)
-        except ValueError:
-            return ""
-        if data.get("msg") == "started tunnel" or data.get("url", "").endswith(self.domain):
-            return f"https://{self.domain}"
-        return ""
+            out, _ = await asyncio.wait_for(proc.communicate(), CLI_TIMEOUT)
+        except asyncio.TimeoutError:             # e.g. `funnel` waiting for somebody to approve it in the browser
+            proc.kill()
+            out, _ = await proc.communicate()
+            return -1, out.decode("utf-8", "replace")
+        return proc.returncode or 0, out.decode("utf-8", "replace")
 
-    def _failure(self) -> str:
-        return self.last_error or "ngrok no abrió el túnel. ¿Hay internet? ¿Un firewall lo bloquea?"
+    def _fail(self, message: str) -> TunnelError:
+        self.url = ""
+        self._set("error", message)
+        return TunnelError(message)
 
     async def start(self) -> str:
-        if not self.token or not self.domain:
-            self._set("error", "Faltan el authtoken o el dominio de ngrok en Configuración.")
-            raise TunnelError(self.detail)
-        return await super().start()
-
-    async def ensure_binary(self) -> Path:
+        await self.stop()
+        self._set("starting", "Comprobando Tailscale…")
         binary = self.find_binary()
-        if binary is not None:
-            return binary
-        if sys.platform != "win32" or self.tools_dir is None:
-            raise TunnelError("Instala ngrok (https://ngrok.com/download) y vuelve a intentarlo.")
-        self.tools_dir.mkdir(parents=True, exist_ok=True)
-        self._set("downloading", "Descargando ngrok (una sola vez)…")
-        problem = ""
-        for url in NGROK_DOWNLOADS:
-            try:
-                timeout = aiohttp.ClientTimeout(total=300)
-                async with aiohttp.ClientSession(timeout=timeout) as session, session.get(url) as response:
-                    if response.status != 200:
-                        problem = f"HTTP {response.status}"
-                        continue
-                    archive = zipfile.ZipFile(BytesIO(await response.read()))
-                    name = next((n for n in archive.namelist() if n.lower().endswith("ngrok.exe")), None)
-                    if name is None:
-                        problem = "el archivo no contiene ngrok.exe"
-                        continue
-                    target = self.tools_dir / "ngrok.exe"
-                    partial = self.tools_dir / "ngrok.exe.part"
-                    partial.write_bytes(archive.read(name))
-                    os.replace(partial, target)
-                    return target
-            except (aiohttp.ClientError, OSError, asyncio.TimeoutError, zipfile.BadZipFile) as exc:
-                problem = str(exc)
-        raise TunnelError(f"No se pudo descargar ngrok ({problem}). Descárgalo de https://ngrok.com/download y "
-                          f"copia ngrok.exe en {self.tools_dir}.")
+        if binary is None:
+            raise self._fail(f"Tailscale no está instalado. Descárgalo en {TAILSCALE_DOWNLOAD}, inicia sesión y vuelve a intentarlo.")
+        try:
+            code, out = await self._run(binary, ["status", "--json"])
+            address, problem = read_status(out)
+            if problem:
+                raise self._fail(problem)
+            self._set("starting", "Activando el Funnel…")
+            code, out = await self._run(binary, ["funnel", "--bg", "--https=443", f"http://127.0.0.1:{self.port}"])
+            link = _FUNNEL_LINK.search(out)
+            if link and (code != 0 or "not enabled" in out.lower() or "enable" in out.lower()):
+                raise self._fail(f"Funnel todavía no está permitido en tu Tailscale: abre {link.group(0)} una vez y apruébalo; "
+                                 f"luego reinicia la Actividad.")
+            if code != 0:
+                raise self._fail(f"Tailscale no pudo activar el Funnel: {out.strip()[:300] or 'sin mensaje'}")
+            self._exposed = True
+            code, out = await self._run(binary, ["funnel", "status"])
+            if address not in out:
+                raise self._fail("Tailscale no confirmó el Funnel. Ejecuta «tailscale funnel status» para ver qué pasa.")
+        except OSError as exc:
+            raise self._fail(f"No se pudo ejecutar Tailscale: {exc}") from exc
+        self.url = f"https://{address}"
+        self._set("up", self.url)
+        return self.url
+
+    async def stop(self) -> None:
+        was_up = self.state != "idle"
+        self.url = ""
+        if self._exposed:
+            self._exposed = False
+            binary = self.find_binary()
+            if binary is not None:
+                try:
+                    await self._run(binary, ["funnel", "--https=443", "off"])     # nothing stays public with the bot off
+                except OSError:
+                    pass
+        if was_up:
+            self._set("idle")
+
+
+def check_tailscale() -> tuple[bool, str]:
+    """Blocking check for the settings window (call it from a thread): is Tailscale ready, and what would the address be?"""
+    import subprocess
+
+    binary = find_tailscale()
+    if binary is None:
+        return False, f"Tailscale no está instalado. Descárgalo en {TAILSCALE_DOWNLOAD}."
+    try:
+        done = subprocess.run([str(binary), "status", "--json"], capture_output=True, text=True, timeout=CLI_TIMEOUT,
+                              creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        return False, f"No se pudo ejecutar Tailscale: {exc}"
+    address, problem = read_status(done.stdout or done.stderr)
+    return (False, problem) if problem else (True, f"Tailscale listo. Tu dirección será https://{address}")

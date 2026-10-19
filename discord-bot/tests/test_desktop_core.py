@@ -189,3 +189,10 @@ def test_ollama_errors_are_readable():
         ollama.list_models("http://127.0.0.1:9/api/generate", timeout=1)  # nothing listens on port 9
     with pytest.raises(ConnectionError, match="no válida"):
         ollama.list_models("not a url")
+
+
+def test_the_ngrok_settings_of_0_7_0_are_dropped_and_the_tunnel_defaults_to_cloudflare(tmp_path):
+    f = tmp_path / "settings.json"
+    f.write_text('{"discord_token": "t", "activity_ngrok_token": "x", "activity_ngrok_domain": "a.ngrok-free.dev"}', encoding="utf-8")
+    loaded = settings.load(f)
+    assert loaded.discord_token == "t" and loaded.activity_tunnel == "cloudflare" and not hasattr(loaded, "activity_ngrok_token")

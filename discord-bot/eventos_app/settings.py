@@ -38,9 +38,9 @@ class Settings:
     # Discord Activity (beta): a local web server + free tunnel; needs the application's OAuth2 Client Secret
     activity_enabled: bool = False
     activity_client_secret: str = ""
-    # optional: the free static domain of an ngrok account, so the address never changes (both set = used)
-    activity_ngrok_token: str = ""
-    activity_ngrok_domain: str = ""
+    # how Discord reaches the Activity: "cloudflare" (free quick tunnel, new address each start) or "tailscale"
+    # (Tailscale Funnel: a fixed address, pasted once in the Developer Portal)
+    activity_tunnel: str = "cloudflare"
     # names of the last event (ids + server/channel/role names), shown while the bot is off
     event_summary: dict = field(default_factory=dict)
     reset_on_start: bool = False

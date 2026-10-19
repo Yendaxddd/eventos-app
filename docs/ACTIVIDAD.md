@@ -54,15 +54,20 @@ En <https://discord.com/developers/applications> → tu aplicación (la del bot 
    servidores de **menos de 25 miembros**. Añade a cada jugador como tester (debe aceptar la invitación y activar el ajuste de
    pruebas de Actividades en su Discord).
 
-## Dirección fija con ngrok (opcional, recomendado)
+## Dirección fija con Tailscale Funnel (opcional, recomendado)
 El túnel de Cloudflare cambia de dirección cada vez, y Discord no tiene API para cambiar los URL Mappings, así que habría que
-pegarla a mano en cada inicio. Con una cuenta **gratuita** de ngrok tienes **un dominio fijo**: se pega una sola vez.
-1. Crea la cuenta en <https://ngrok.com>, copia tu **Authtoken** (Your Authtoken) y tu **dominio gratuito**
-   (Domains, algo como `nombre.ngrok-free.dev`).
-2. En la app: *Configuración → Actividad de Discord* → pega el authtoken y el dominio, guarda e inicia el bot.
-3. Pega `nombre.ngrok-free.dev` en URL Mappings `/` (solo esta vez). Si el authtoken o el dominio están vacíos se usa Cloudflare.
-La app descarga `ngrok.exe` a `tools\` la primera vez. **Sin comprobar contra el servicio real:** si ngrok muestra su página
-de aviso a los visitantes con navegador, o cambia el nombre de alguna bandera, dímelo; el túnel de Cloudflare sigue de respaldo.
+pegarla a mano en cada inicio. **Tailscale Funnel** (gratis para uso personal) da una dirección fija
+`equipo.tailXXXX.ts.net` **sin página de aviso** (ngrok gratis sí la pone, y deja la Actividad en blanco dentro de Discord).
+1. Instala Tailscale desde <https://tailscale.com/download> e inicia sesión.
+2. En <https://login.tailscale.com/admin/dns> activa **MagicDNS** y **HTTPS Certificates**.
+3. En la app: *Configuración → Actividad de Discord → Dirección → Tailscale Funnel*, y pulsa **Comprobar Tailscale**: te dice
+   si está listo y cuál será tu dirección. Guarda e inicia el bot.
+4. La primera vez, Tailscale pide permitir Funnel: la app muestra un enlace (`login.tailscale.com/f/funnel…`); ábrelo, aprueba
+   y reinicia la Actividad.
+5. Pega la dirección (`equipo.tailXXXX.ts.net`) en URL Mappings `/` **una sola vez**.
+Al detener el bot la app apaga el Funnel (nada queda público). Con Funnel, el servidor de la Actividad es accesible desde
+internet en esa dirección: entrar exige iniciar sesión con Discord y ser miembro del servidor, el acceso de prueba local
+está bloqueado fuera de tu PC y `/media` solo sirve imágenes de Discord. Sin Tailscale, deja «Túnel rápido de Cloudflare».
 
 ## Cada evento
 1. En la app: marca *Activar la Actividad*, guarda e inicia el bot. Espera a ver «● Túnel listo: …».

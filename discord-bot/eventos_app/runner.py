@@ -430,12 +430,10 @@ class BotRunner:
 
     @staticmethod
     def _make_tunnel(settings: Settings, port: int):
-        """A fixed ngrok address when its account is filled in, the free Cloudflare quick tunnel otherwise."""
-        tools = paths.app_home() / "tools"
-        if settings.activity_ngrok_token.strip() and settings.activity_ngrok_domain.strip():
-            return activity.NgrokTunnel(port, token=settings.activity_ngrok_token, domain=settings.activity_ngrok_domain,
-                                        tools_dir=tools)
-        return activity.Tunnel(port, tools_dir=tools)
+        """Tailscale Funnel (fixed address) when chosen, the free Cloudflare quick tunnel otherwise."""
+        if settings.activity_tunnel == "tailscale":
+            return activity.TailscaleTunnel(port)
+        return activity.Tunnel(port, tools_dir=paths.app_home() / "tools")
 
     async def _open_tunnel(self) -> dict:
         a, out = self._activity, console_bridge.console

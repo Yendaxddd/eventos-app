@@ -505,56 +505,109 @@ def test_the_runner_starts_and_stops_the_activity_and_reports_it_to_the_window(m
     assert "Servidor de la Actividad" in text and "quiet-lake-42.trycloudflare.com" in text and "URL Mappings" in text
 
 
-# ---- the fixed ngrok address -------------------------------------------------------------------------------------------------------
-def ngrok(tmp_path, body: str, name: str, **kwargs):
-    script = fake_cloudflared(tmp_path, body, name)
-    tunnel = tunnel_module.NgrokTunnel(8765, token="tok", domain="https://Mi-Sitio.ngrok-free.dev/", tools_dir=None,
-                                       command=lambda b, port, flag: [sys.executable, str(script), flag], **kwargs)
+# ---- the fixed Tailscale Funnel address ----------------------------------------------------------------------------------------------
+def tailscale(tmp_path, *, status: dict | str, funnel: str = "Available on the internet:\\nhttps://pc.tail1234.ts.net/\\n", funnel_code: int = 0,
+              listed: str = "https://pc.tail1234.ts.net (Funnel on)", name: str = "tailscale"):
+    """A fake `tailscale` that answers like the real CLI and writes down every command it was given."""
+    calls = tmp_path / f"{name}.calls"
+    script = fake_cloudflared(tmp_path, f"""
+        import json, sys
+        args = sys.argv[1:]
+        open({str(calls)!r}, "a").write(" ".join(args) + "\\n")
+        if args[:1] == ["status"]:
+            print({status if isinstance(status, str) else json.dumps(status)!r})
+        elif args[:2] == ["funnel", "status"]:
+            print({listed!r})
+        elif args[:1] == ["funnel"] and "off" not in args:
+            print({funnel!r}.replace("\\\\n", "\\n"))
+            sys.exit({funnel_code})
+    """, name)
+    tunnel = tunnel_module.TailscaleTunnel(8765, command=lambda binary, args: [sys.executable, str(script), *args])
     tunnel.find_binary = lambda: Path(sys.executable)
-    return tunnel
+    return tunnel, calls
 
 
-def test_the_ngrok_address_is_the_fixed_domain_and_an_old_ngrok_is_tried_with_the_other_flag(tmp_path):
-    tunnel = ngrok(tmp_path, """
-        import sys, time
-        if sys.argv[1] == "url":
-            print("unknown flag: --url", flush=True); sys.exit(2)
-        print('{"lvl":"info","msg":"starting web service"}', flush=True)
-        print('{"lvl":"info","msg":"started tunnel","url":"https://mi-sitio.ngrok-free.dev"}', flush=True)
-        time.sleep(30)
-    """, "ngrok_old")
+RUNNING = {"BackendState": "Running", "Self": {"DNSName": "pc.tail1234.ts.net."}}
+
+
+def test_the_tailscale_address_is_the_machines_public_name_and_the_funnel_is_turned_off_on_stop(tmp_path):
+    tunnel, calls = tailscale(tmp_path, status=RUNNING)
 
     async def scenario():
         url = await tunnel.start()
-        state, fixed = tunnel.state, tunnel.fixed
+        state = (tunnel.state, tunnel.fixed)
         await tunnel.stop()
-        return url, state, fixed
+        return url, state, tunnel.state
 
-    url, state, fixed = run(scenario())
-    assert url == "https://mi-sitio.ngrok-free.dev" and state == "up" and fixed      # scheme and slash of what was typed are cleaned
+    url, state, after = run(scenario())
+    assert url == "https://pc.tail1234.ts.net" and state == ("up", True) and after == "idle"
+    lines = calls.read_text().splitlines()
+    assert lines[0] == "status --json" and lines[1] == "funnel --bg --https=443 http://127.0.0.1:8765"
+    assert lines[-1] == "funnel --https=443 off"                      # nothing stays public with the bot off
 
 
-def test_ngrok_problems_are_explained_in_spanish(tmp_path):
-    bad_token = ngrok(tmp_path, """
-        print('{"lvl":"eror","msg":"command failed","err":"authentication failed: ERR_NGROK_105"}', flush=True)
-    """, "ngrok_token")
-    taken = ngrok(tmp_path, """
-        print('{"lvl":"eror","msg":"command failed","err":"failed to start tunnel: ERR_NGROK_334 endpoint is already online"}', flush=True)
-    """, "ngrok_taken")
-    empty = tunnel_module.NgrokTunnel(1, token="", domain="x.ngrok-free.dev")
+def test_tailscale_problems_say_what_to_do(tmp_path):
+    cases = {
+        "login": dict(status={"BackendState": "NeedsLogin"}),
+        "stopped": dict(status={"BackendState": "Stopped"}),
+        "nodns": dict(status={"BackendState": "Running", "Self": {"DNSName": ""}}),
+        "garbage": dict(status="not json"),
+        "unapproved": dict(status=RUNNING, funnel="Funnel is not enabled on your tailnet.\\nTo enable, visit:\\n https://login.tailscale.com/f/funnel?node=n123\\n",
+                           funnel_code=1),
+        "failed": dict(status=RUNNING, funnel="listener already exists for port 443", funnel_code=1),
+        "unconfirmed": dict(status=RUNNING, listed="No serve config"),
+    }
 
     async def scenario():
-        out = []
-        for t in (bad_token, taken, empty):
+        out = {}
+        for name, options in cases.items():
+            tunnel, _ = tailscale(tmp_path, name=f"ts_{name}", **options)
             try:
-                await t.start()
+                await tunnel.start()
+                out[name] = "started"
             except tunnel_module.TunnelError as exc:
-                out.append((str(exc), t.state))
+                out[name] = (str(exc), tunnel.state)
         return out
 
-    (token_msg, s1), (taken_msg, s2), (empty_msg, s3) = run(scenario())
-    assert "authtoken" in token_msg and "ya está en uso" in taken_msg and "Faltan" in empty_msg
-    assert s1 == s2 == s3 == "error"
+    out = run(scenario())
+    assert "inicia sesión" in out["login"][0] and "desconectado" in out["stopped"][0]
+    assert "MagicDNS" in out["nodns"][0] and "no respondió" in out["garbage"][0]
+    assert "https://login.tailscale.com/f/funnel?node=n123" in out["unapproved"][0] and "una vez" in out["unapproved"][0]
+    assert "listener already exists" in out["failed"][0] and "no confirmó" in out["unconfirmed"][0]
+    assert all(v[1] == "error" for v in out.values())
+
+
+def test_without_tailscale_installed_the_error_gives_the_download(tmp_path):
+    tunnel = tunnel_module.TailscaleTunnel(1)
+    tunnel.find_binary = lambda: None
+
+    async def scenario():
+        try:
+            await tunnel.start()
+        except tunnel_module.TunnelError as exc:
+            return str(exc)
+
+    assert "tailscale.com/download" in run(scenario())
+
+
+def test_the_settings_check_reads_tailscales_state(monkeypatch):
+    assert tunnel_module.read_status(json.dumps(RUNNING)) == ("pc.tail1234.ts.net", "")
+    monkeypatch.setattr(tunnel_module, "find_tailscale", lambda: None)
+    ok, message = tunnel_module.check_tailscale()
+    assert not ok and "no está instalado" in message
+
+
+def test_through_the_funnel_the_local_test_login_stays_refused():
+    async def scenario():
+        async with Rig() as rig:
+            # what a request arriving through Tailscale Funnel looks like: the public name as Host, forwarding headers
+            funnel = {"Host": "pc.tail1234.ts.net", "X-Forwarded-For": "203.0.113.9"}
+            _, via_funnel = await rig.hello({"t": "hello", "dev": "Ana"}, funnel)
+            _, host_only = await rig.hello({"t": "hello", "dev": "Ana"}, {"Host": "pc.tail1234.ts.net"})
+            return via_funnel, host_only
+
+    for refused in run(scenario()):
+        assert refused["t"] == "error" and "este mismo PC" in refused["reason"]
 
 
 # ---- pictures through our own server -------------------------------------------------------------------------------------------------

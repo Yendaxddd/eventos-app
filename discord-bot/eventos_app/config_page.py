@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import threading
 import tkinter as tk
 import webbrowser
 from tkinter import messagebox
@@ -13,6 +14,7 @@ import customtkinter as ctk
 import discord
 
 from . import multibot, ollama
+from .activity import tunnel as activity_tunnel
 from .runner import State
 from .settings import Settings
 from .theme import (ACCENT, AMBER, BUTTON_NEUTRAL, CARD_BORDER, GREEN, MUTED, RED, TEXT, card)
@@ -55,8 +57,7 @@ class ConfigPage(ctk.CTkFrame):
             "use_webhooks": tk.BooleanVar(value=s.use_webhooks),
             "activity_enabled": tk.BooleanVar(value=s.activity_enabled),
             "activity_client_secret": tk.StringVar(value=s.activity_client_secret),
-            "activity_ngrok_token": tk.StringVar(value=s.activity_ngrok_token),
-            "activity_ngrok_domain": tk.StringVar(value=s.activity_ngrok_domain),
+            "activity_tunnel": tk.StringVar(value=s.activity_tunnel),
             "auto_start": tk.BooleanVar(value=s.auto_start),
         }
         self._build_token(0)
@@ -532,17 +533,25 @@ class ConfigPage(ctk.CTkFrame):
         self._note(box, 1, "Una Actividad es una pantalla del juego dentro de Discord (PC y móvil) que muestra el canal del "
                            "evento, deja escribir y responder los QTE con botones midiendo los tiempos en la pantalla del jugador, "
                            "sin depender de los mensajes. Funciona desde este PC con un túnel gratuito: el de Cloudflare "
-                           "cambia de dirección en cada inicio; con un dominio fijo de ngrok (opcional, abajo) la pegas una sola "
+                           "cambia de dirección en cada inicio; con Tailscale Funnel (abajo) la dirección es fija y la pegas una sola "
                            "vez en el Developer Portal. Pasos en docs/ACTIVIDAD.md.")
         ctk.CTkCheckBox(box, text="Activar la Actividad al iniciar el bot", variable=self.vars["activity_enabled"],
                         fg_color=ACCENT, hover_color=ACCENT).grid(row=2, column=0, columnspan=4, padx=18, pady=(2, 6), sticky="w")
         self.activity_secret_entry = self._field(box, 3, "Client Secret", "activity_client_secret", show="•")
         self._note(box, 4, "Developer Portal → tu aplicación → OAuth2 → «Client Secret». Se guarda solo en este equipo.", pady=(0, 6))
-        self.activity_ngrok_token_entry = self._field(box, 5, "ngrok authtoken", "activity_ngrok_token", show="•")
-        self.activity_ngrok_domain_entry = self._field(box, 6, "ngrok dominio", "activity_ngrok_domain")
-        self._note(box, 7, "Opcional, para una dirección que no cambia: crea una cuenta gratis en ngrok.com, copia tu Authtoken y tu "
-                           "dominio gratuito (Domains, tipo algo.ngrok-free.dev). Si dejas esto vacío se usa el túnel de Cloudflare.",
-                   pady=(0, 6))
+        ctk.CTkLabel(box, text="Dirección", text_color=MUTED, anchor="w").grid(row=5, column=0, padx=(18, 12), pady=6, sticky="w")
+        labels = {"cloudflare": "Túnel rápido de Cloudflare (cambia en cada inicio)", "tailscale": "Tailscale Funnel (dirección fija)"}
+        by_label = {label: key for key, label in labels.items()}
+        self.activity_tunnel_menu = ctk.CTkOptionMenu(
+            box, values=list(labels.values()), height=34, fg_color=BUTTON_NEUTRAL, button_color=CARD_BORDER,
+            command=lambda label: self.vars["activity_tunnel"].set(by_label[label]))
+        self.activity_tunnel_menu.set(labels.get(self.vars["activity_tunnel"].get(), labels["cloudflare"]))
+        self.activity_tunnel_menu.grid(row=5, column=1, columnspan=2, padx=(0, 8), pady=6, sticky="ew")
+        ctk.CTkButton(box, text="Comprobar Tailscale", width=150, height=34, fg_color=BUTTON_NEUTRAL, hover_color=CARD_BORDER,
+                      command=self._check_tailscale).grid(row=5, column=3, padx=(0, 18), pady=6)
+        self._note(box, 7, "Tailscale Funnel: instala Tailscale (tailscale.com/download), inicia sesión, activa «MagicDNS» y «HTTPS "
+                           "Certificates» en login.tailscale.com/admin/dns y elige esta opción. La primera vez la app te dará un "
+                           "enlace para permitir Funnel. Sin cuentas, usa el túnel de Cloudflare.", pady=(0, 6))
         self.activity_status = ctk.CTkLabel(box, text="", text_color=MUTED, anchor="w", justify="left", wraplength=640)
         self.activity_status.grid(row=8, column=0, columnspan=4, padx=18, pady=(2, 6), sticky="w")
         buttons = ctk.CTkFrame(box, fg_color="transparent")
@@ -554,6 +563,16 @@ class ConfigPage(ctk.CTkFrame):
                                    command=command)
             button.pack(side="left", padx=4)
             self.activity_buttons[text] = button
+
+    def _check_tailscale(self) -> None:
+        self.activity_status.configure(text="Comprobando Tailscale…", text_color=MUTED)
+
+        def work() -> None:
+            ok, message = activity_tunnel.check_tailscale()
+            self.after(0, lambda: self.activity_status.configure(text=("✓ " if ok else "✗ ") + message,
+                                                                text_color=GREEN if ok else AMBER))
+
+        threading.Thread(target=work, daemon=True).start()
 
     def _activity_url(self) -> str:
         return self.app.runner.activity_info().get("url", "")
