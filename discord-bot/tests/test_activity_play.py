@@ -64,7 +64,7 @@ def test_a_qte_is_described_without_leaking_its_windows():
     target = NS(id=5, display_name="Ana", name="ana")
     out = describe(7, {"difficulty": "easy", "mode": "single", "target": target, "participants": {}}, TIMES, 123.0)
     assert out["id"] == "7" and out["target"] == {"id": "5", "name": "Ana"} and out["timeout"] == 7.0
-    assert out["tGo"] == 123.0 and out["commands"] == ["evade", "parry", "adapt"]
+    assert out["tGo"] == 123.0 and out["commands"] == ["evade", "parry", "save", "adapt"]
     assert "parry_window" not in str(out) and "evade_window" not in str(out)
     group = describe(8, {"difficulty": "easy", "mode": "group", "target": None, "participants": {1: {}, 2: {}}}, TIMES, 1)
     assert group["target"] is None and group["participants"] == ["1", "2"]
@@ -89,7 +89,7 @@ class Rig:
     def __init__(self, *, lanes: bool = True):
         self.fake = FakeDiscord()
         self.hub = Hub()
-        self.calls, self.on_message_calls, self.posted, self.channel_sends = [], [], [], []
+        self.calls, self.on_message_calls, self.posted, self.channel_sends, self.only = [], [], [], [], []
         self.lanes = lanes
         self.verdict = "✅"
         self.characters = {111: ["Kuro", "Shiro"]}
@@ -104,8 +104,9 @@ class Rig:
 
         self.channel = NS(id=10, name="qte", guild=NS(), send=send, permissions_for=lambda m: NS(view_channel=True, read_message_history=True))
 
-        async def handle(message, measured=None):
+        async def handle(message, measured=None, only=None):
             rig.calls.append((message.content, measured, message.activity_user_id))
+            rig.only.append(only)
             await message.add_reaction(rig.verdict)
 
         async def on_message(message):
@@ -392,6 +393,118 @@ def test_the_game_state_is_sent_when_it_changes_and_only_to_the_person_it_belong
     welcome, state, me, quiet = run(scenario())
     assert welcome["state"]["boss"] == {"name": "Sukuna", "hp": 700, "max": 1000} and welcome["state"]["fight"]
     assert [p["name"] for p in welcome["state"]["players"]] == ["Ana", "Luis"] and welcome["state"]["players"][0]["revenge"]
-    assert welcome["me"] == {"charges": {"power1": 45.0, "power2": 100.0}, "cost": 100, "streak": 3}
+    assert {k: welcome["me"][k] for k in ("charges", "cost", "streak")} == {"charges": {"power1": 45.0, "power2": 100.0}, "cost": 100, "streak": 3}
     assert state["s"]["boss"]["hp"] == 650 and me["me"]["streak"] == 4
     assert quiet["t"] == "pong"                                       # no repeated state frame
+
+
+# ---- several QTEs, combos, directions, saves, powers and cooldowns ----------------------------------------------------------
+def test_a_button_answers_exactly_the_qte_it_names_and_buttons_the_qte_does_not_offer_are_refused():
+    async def scenario():
+        async with Rig() as rig:
+            ws, _ = await rig.login()
+            rig.start_qte(7)
+            rig.start_qte(8)
+            first, second = (await frame(ws, "qte"))["q"], (await frame(ws, "qte"))["q"]
+            await asyncio.sleep(0.2)
+            await ws.send_json({"t": "press", "id": second["id"], "command": "evade", "dt": 150})
+            await frame(ws, "qte_result")
+            await ws.send_json({"t": "press", "id": first["id"], "command": "left", "dt": 150})       # a direction pad on a plain QTE
+            refused = await frame(ws, "error")
+            return rig.only, refused
+
+    only, refused = run(scenario())
+    assert only == [8] and "no sirve" in refused["reason"]
+
+
+def test_a_combo_shows_the_next_step_only_to_who_earned_it_and_a_save_goes_to_the_qte_of_somebody_else():
+    async def scenario():
+        async with Rig() as rig:
+            ws, _ = await rig.login()
+            steps = ["parry", "evade", "evade", "parry", "evade"]
+            rig.app.active_qtes[3] = {"difficulty": "easy", "mode": "combo", "target": NS(id=111, display_name="Ana", name="ana"),
+                                      "participants": {}, "responses": set(), "message": None, "combo_sequence": steps,
+                                      "combo_index": 0, "combo_length": 5}
+            opened = (await frame(ws, "qte"))["q"]
+            handled = rig.app.handle_qte_response
+
+            async def combo(message, measured=None, only=None):
+                await handled(message, measured, only)
+                rig.app.active_qtes[3]["combo_index"] += 1       # what the engine does for a right answer
+
+            rig.app.handle_qte_response = combo
+            await asyncio.sleep(0.2)
+            await ws.send_json({"t": "press", "id": "3", "command": "parry", "dt": 150})
+            step = await frame(ws, "qte_step")
+            # a QTE of somebody else: the save travels with the command `save`
+            rig.app.handle_qte_response = handled
+            rig.start_qte(4, target=NS(id=222, display_name="Luis", name="luis"))
+            other = (await frame(ws, "qte"))["q"]
+            await asyncio.sleep(0.2)
+            await ws.send_json({"t": "press", "id": "4", "command": "save", "dt": 150})
+            await frame(ws, "qte_result")
+            return opened, step, other, rig.calls
+
+    opened, step, other, calls = run(scenario())
+    assert opened["combo"] == {"length": 5, "index": 0, "step": "parry"} and opened["commands"] == ["evade", "parry"]
+    assert step == {"t": "qte_step", "id": "3", "index": 1, "step": "evade"}
+    assert other["commands"] == ["evade", "parry", "save", "adapt"] and calls[-1][0] == "*save*"
+
+
+def test_a_direction_qte_is_described_with_its_arrow_and_a_bf_chain_with_only_the_parry():
+    times = {"easy": {"evade_window": 6.0, "parry_window": (4.0, 7.0), "perfect_parry": 5.5, "timeout": 3.0}}
+    target = NS(id=5, display_name="Ana", name="ana")
+    arrow = describe(1, {"difficulty": "easy", "mode": "direction", "target": target, "shown_arrow": "⬆️"}, times, 0.0)
+    assert arrow["arrow"] == "⬆️" and arrow["commands"] == ["up", "down", "left", "right"] and arrow["timeout"] == 4.0
+    assert arrow["windows"] == {"evade": [0.0, 4.0], "bf": None}                     # the bot gives up after 4 s however wide the window is
+    chain = describe(2, {"difficulty": "easy", "mode": "bf_chain", "target": target, "chain_level": 3}, times, 0.0, chain_window=0.15)
+    assert chain["commands"] == ["parry"] and chain["timeout"] == 3.0 and chain["chain"] == 3
+    assert chain["windows"]["parry"] == [4.0, 7.0] and chain["windows"]["bf"] == [5.35, 5.65]
+
+
+def test_the_players_cooldowns_travel_as_moments_on_the_servers_clock_so_they_do_not_change_every_second():
+    async def scenario():
+        async with Rig() as rig:
+            app, now = rig.app, time.time()
+            app.save_time_window, app.save_limit = 60, 2
+            app.save_timestamps = {111: [now - 50, now - 5, now - 120]}        # two recent saves: none left until the older expires
+            app.player_parry_cooldown = {111: now + 12}
+            app.counter_enabled_players, app.counter_deadlines = {111: 4}, {111: now + 3}
+            app.fight_active = True
+            app.character_powers = {"Kuro": {"power1": {"name": "Rayo"}, "power2": {"name": "Escudo"}}}
+            app.power_cooldowns = {111: {"power2": now + 40}}
+            app.player_achievements = {"111": {"domains": ["d1"]}}
+            first = rig.bridge.me_of(111)
+            await asyncio.sleep(0.05)
+            second = rig.bridge.me_of(111)
+            app.fight_active = False                                           # between fights the cooldown waits
+            app.ultimate_fight_cooldowns = {111: {"power2": 25}}
+            paused = rig.bridge.me_of(111)
+            return first, second, paused, now
+
+    first, second, paused, now = run(scenario())
+    assert first == second                                                     # nothing to resend while time merely passes
+    assert first["saves"]["left"] == 0 and abs(first["saves"]["until"] - (now - 50 + 60) * 1000) < 2
+    assert first["parryUntil"] and first["counterUntil"] and first["domain"] is True
+    assert first["powers"]["Kuro"]["power1"] == {"name": "Rayo", "until": None, "paused": None}
+    assert first["powers"]["Kuro"]["power2"]["until"] and first["powers"]["Kuro"]["power2"]["paused"] is None
+    assert paused["powers"]["Kuro"]["power2"] == {"name": "Escudo", "until": None, "paused": 25}
+
+
+def test_a_combos_first_step_is_known_even_though_the_bot_fills_the_sequence_in_after_creating_the_qte():
+    async def scenario():
+        async with Rig() as rig:
+            ws, _ = await rig.login()
+            data = {"difficulty": "easy", "mode": "combo", "target": NS(id=111, display_name="Ana", name="ana"), "participants": {},
+                    "responses": set(), "message": None, "combo_sequence": [], "combo_index": 0, "combo_length": 5}
+            rig.app.active_qtes[3] = data
+            data["combo_sequence"] = ["evade", "parry", "parry", "evade", "evade"]      # as trigger_combo_qte does, right after
+            opened = (await frame(ws, "qte"))["q"]
+            data2 = {**data, "combo_sequence": []}
+            rig.app.active_qtes[4] = data2
+            rig.app.active_qtes.pop(4)                                                    # answered/ended before the frame went out
+            await asyncio.sleep(0.1)
+            return opened, list(rig.hub.qtes)
+
+    opened, running = run(scenario())
+    assert opened["combo"]["step"] == "evade" and running == ["3"]

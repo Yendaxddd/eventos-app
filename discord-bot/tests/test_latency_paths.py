@@ -247,3 +247,26 @@ def test_the_bots_active_qtes_tell_the_activity_when_they_start_and_end(tmp_path
     assert module.QteBook is QteBook
     source = Path(module.__file__).read_text(encoding="utf-8")
     assert "self.active_qtes = QteBook()" in source
+
+
+def test_a_button_can_answer_one_chosen_qte_while_the_chat_answers_the_first(tmp_path, monkeypatch):
+    from eventos_app.activity.qte import ActivityInput
+
+    bot, _ = bot_shell(tmp_path, monkeypatch)
+    bot.qte_channel_id = 5
+    bot.qte_times = {"easy": {"evade_window": 6.0, "parry_window": (4.0, 7.0), "perfect_parry": 5.5}}
+    channel = NS(id=5)
+    base = {"mode": "single", "difficulty": "easy", "target": NS(id=9), "participants": {}, "start": at(0), "message": NS(created_at=at(0))}
+    bot.active_qtes = {1: dict(base), 2: dict(base)}
+    seen = []
+
+    async def single(qte_id, qte_data, message, user_id, content, response_time, *windows):
+        seen.append(qte_id)
+        return True
+
+    bot.handle_single_qte_response = single
+    press = ActivityInput(NS(id=9, display_name="Ana"), channel, "*evade*", user_id=9)
+    asyncio.run(bot.handle_qte_response(press, measured=2.0, only=2))            # the second one, chosen with its own button
+    chat = NS(channel=channel, content="*evade*", author=NS(id=9, display_name="Luis"), created_at=at(1.0))
+    asyncio.run(bot.handle_qte_response(chat))                                    # the chat: the first that takes it
+    assert seen == [2, 1]

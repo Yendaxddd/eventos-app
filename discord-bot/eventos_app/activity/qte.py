@@ -9,7 +9,9 @@ from typing import Any, Callable
 
 log = logging.getLogger("eventos_app.activity")
 
-COMMANDS = ("evade", "parry", "adapt", "attack")      # the buttons of this version
+TIMED = ("evade", "parry", "save", "up", "down", "left", "right")   # answers to a QTE, measured on the player's screen
+UNTIMED = ("adapt", "attack", "power1", "power2", "domain")         # commands the bot reads as a normal message
+COMMANDS = TIMED + UNTIMED
 HUMAN_MIN_MS = 80.0                                    # nobody reacts faster than this: a smaller `dt` is a script
 GRACE_MS = 150.0                                       # how far a claimed `dt` may exceed the real elapsed time
 
@@ -113,14 +115,15 @@ class ActivityInput:
 
 
 def describe(qte_id, data: dict, times: dict, now_ms: float, *, timeouts: dict | None = None, bf_window: float = 0.0,
-             adjust: Callable[[str, int], tuple[float, float]] | None = None) -> dict:
-    """What a client needs to draw a QTE: who it is for, for how long, and the windows of the timing bar.
+             adjust: Callable[[str, int], tuple[float, float]] | None = None, chain_window: float = 0.0) -> dict:
+    """What a client needs to draw a QTE: who it is for, for how long, the windows of the timing bar and which buttons.
 
-    `times`: the bot's `qte_times`; `timeouts`: its `qte_timeout_durations`; `bf_window`: its Black Flash tolerance;
-    `adjust(difficulty, user_id)`: the parry window of a player (REVENGE mode moves and narrows it)."""
+    `times`: the bot's `qte_times`; `timeouts`: its `qte_timeout_durations`; `bf_window` / `chain_window`: its Black Flash
+    tolerances; `adjust(difficulty, user_id)`: the parry window of a player (REVENGE mode moves and narrows it)."""
     difficulty = data.get("difficulty")
+    mode = data.get("mode", "single")
     timing = times.get(difficulty, {})
-    target = None if data.get("mode") == "fake" else data.get("target")    # a fake QTE does not say who it is for
+    target = None if mode == "fake" else data.get("target")    # a fake QTE does not say who it is for
     evade = float(timing.get("evade_window", 5.0))
     parry = tuple(timing.get("parry_window") or (0.0, 0.0))
     if target is not None and adjust is not None:
@@ -130,14 +133,36 @@ def describe(qte_id, data: dict, times: dict, now_ms: float, *, timeouts: dict |
             pass
     center = (parry[0] + parry[1]) / 2
     timeout = float((timeouts or {}).get(difficulty) or max(evade, parry[1]))
-    windows = {"evade": [0.0, evade], "parry": [round(parry[0], 3), round(parry[1], 3)],
-               "bf": [round(max(0.0, center - bf_window), 3), round(center + bf_window, 3)] if bf_window else None}
+    window = bf_window
+    windows: dict | None = {"evade": [0.0, evade], "parry": [round(parry[0], 3), round(parry[1], 3)]}
+    commands = ["evade", "parry", "adapt"]
+    extra: dict = {}
+    if mode == "single":
+        commands = ["evade", "parry", "save", "adapt"]            # `save` is for a QTE that is somebody else's
+    elif mode == "group":
+        commands = ["evade", "parry"]
+    elif mode == "combo":
+        sequence = list(data.get("combo_sequence") or [])
+        index = int(data.get("combo_index", 0))
+        timeout, windows, commands = 15.0, None, ["evade", "parry"]
+        extra["combo"] = {"length": int(data.get("combo_length", len(sequence))), "index": index,
+                          "step": sequence[index] if index < len(sequence) else None}
+    elif mode == "direction":
+        limit = float(times.get(difficulty, {}).get("timeout", 3.0)) + 1.0     # the bot gives up after this long
+        timeout, windows, commands = limit, {"evade": [0.0, min(evade + 1.0, limit)]}, ["up", "down", "left", "right"]
+        extra["arrow"] = str(data.get("shown_arrow", ""))
+    elif mode == "bf_chain":
+        timeout, windows, commands, window = 3.0, {"parry": [round(parry[0], 3), round(parry[1], 3)]}, ["parry"], chain_window
+        extra["chain"] = int(data.get("chain_level", 1))
+    else:                                                          # fake, or one the Activity does not know
+        windows, commands = None, []
+    if windows is not None:
+        windows["bf"] = [round(max(0.0, center - window), 3), round(center + window, 3)] if window and "parry" in windows else None
     return {
-        "id": str(qte_id), "mode": data.get("mode", "single"), "difficulty": difficulty or "",
+        "id": str(qte_id), "mode": mode, "difficulty": difficulty or "",
         "target": {"id": str(target.id), "name": getattr(target, "display_name", None) or target.name} if target else None,
         "participants": [str(p) for p in (data.get("participants") or {})],
-        "tGo": now_ms, "timeout": timeout, "windows": windows if data.get("mode") in ("single", "group") else None,
-        "commands": [c for c in COMMANDS if c != "attack"],
+        "tGo": now_ms, "timeout": timeout, "windows": windows, "commands": commands, **extra,
     }
 
 

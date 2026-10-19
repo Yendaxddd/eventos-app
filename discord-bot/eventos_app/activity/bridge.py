@@ -16,7 +16,7 @@ import discord
 
 from .auth import AuthError
 from .hub import Conn, Hub
-from .qte import COMMANDS, ActivityInput, describe, response_seconds
+from .qte import COMMANDS, TIMED, ActivityInput, describe, response_seconds
 
 log = logging.getLogger("eventos_app.activity")
 
@@ -25,11 +25,11 @@ MAX_SAY = 2000
 SAY_INTERVAL = 0.4          # seconds between two messages of the same person
 MAX_EMBEDS = 3
 MAX_PRESSES = 3             # button presses accepted per person and QTE (the engine ignores repeats anyway)
+MAX_COMBO_PRESSES = 8       # a combo is a chain of answers to one QTE
 BACKLOG_FETCH = 40
 STATE_INTERVAL = 1.0         # seconds between looks at the game state (HP, boss, charges); only changes are sent
 MAX_PLAYERS_SHOWN = 30
 AVATAR_MEMORY = 200
-TIMED_COMMANDS = ("evade", "parry")                  # answered against the clock of the QTE
 _TYPED_TIMED = re.compile(r"\*(evade|parry)\*", re.IGNORECASE)
 
 
@@ -219,10 +219,16 @@ class ActivityBridge:
         return list(reversed(frames))
 
     def _qte_started(self, qte_id, data) -> None:
+        self._spawn(self._announce(qte_id, data, self.hub.now_ms()))
+
+    async def _announce(self, qte_id, data: dict, started_ms: float) -> None:
+        await asyncio.sleep(0)       # the bot fills in the rest of the QTE (a combo's sequence) right after creating it
         app = self.app
-        frame = describe(qte_id, data, app.qte_times, self.hub.now_ms(), timeouts=getattr(app, "qte_timeout_durations", None),
-                         bf_window=getattr(app, "bf_timing_window", 0.0), adjust=getattr(app, "get_adjusted_parry_window", None))
-        self._spawn(self.hub.qte_start(frame))
+        frame = describe(qte_id, data, app.qte_times, started_ms, timeouts=getattr(app, "qte_timeout_durations", None),
+                         bf_window=getattr(app, "bf_timing_window", 0.0), adjust=getattr(app, "get_adjusted_parry_window", None),
+                         chain_window=getattr(app, "bf_chain_timing_window", 0.0))
+        if str(qte_id) in {str(k) for k in app.active_qtes}:       # it may have been answered already
+            await self.hub.qte_start(frame)
 
     def _qte_ended(self, qte_id, data) -> None:
         self._spawn(self.hub.qte_end(str(qte_id)))
@@ -261,14 +267,42 @@ class ActivityBridge:
         return {"boss": boss_frame, "fight": bool(getattr(app, "fight_active", False)), "players": players}
 
     def me_of(self, user_id: int) -> dict:
-        """What only this player sees: their charges and streak."""
+        """What only this player sees: charges, streak, and every countdown (as moments on the server's clock)."""
         app = self.app
         if user_id <= 0:
             return {}
+        now = time.time()
+        ms = lambda t: int(t * 1000)       # noqa: E731
         charges = (getattr(app, "power_charges", {}) or {}).get(user_id, {})
         stats = (getattr(app, "player_stats", {}) or {}).get(user_id, {})
+        window, limit = float(getattr(app, "save_time_window", 60)), int(getattr(app, "save_limit", 2))
+        recent = sorted(t for t in (getattr(app, "save_timestamps", {}) or {}).get(user_id, []) if now - t < window)
+        parry_until = (getattr(app, "player_parry_cooldown", {}) or {}).get(user_id, 0)
+        counter_until = (getattr(app, "counter_deadlines", {}) or {}).get(user_id, 0) \
+            if user_id in (getattr(app, "counter_enabled_players", {}) or {}) else 0
+        fight = bool(getattr(app, "fight_active", False))
+        cooldowns = (getattr(app, "power_cooldowns", {}) or {}).get(user_id, {})
+        paused = (getattr(app, "ultimate_fight_cooldowns", {}) or {}).get(user_id, {})
+        powers: dict = {}
+        for name in self.characters_of(user_id):
+            known = (getattr(app, "character_powers", {}) or {}).get(name, {})
+            entry = {}
+            for key in ("power1", "power2"):
+                if key in known:
+                    end, rest = cooldowns.get(key, 0), paused.get(key, 0)
+                    entry[key] = {"name": str(known[key].get("name", key))[:40],
+                                  "until": ms(end) if fight and end > now else None,     # counting down (a fight is on)
+                                  "paused": round(rest) if not fight and rest > 0 else None}   # waiting for the next fight
+            if entry:
+                powers[name] = entry
+        domains = ((getattr(app, "player_achievements", {}) or {}).get(str(user_id), {}) or {}).get("domains")
         return {"charges": {"power1": self._num(charges.get("power1", 0)), "power2": self._num(charges.get("power2", 0))},
-                "cost": self._num(getattr(app, "ultimate_cost", 100), 0), "streak": int(stats.get("evade_streak", 0) or 0)}
+                "cost": self._num(getattr(app, "ultimate_cost", 100), 0), "streak": int(stats.get("evade_streak", 0) or 0),
+                "saves": {"left": max(0, limit - len(recent)), "limit": limit,
+                          "until": ms(recent[0] + window) if len(recent) >= limit else None},
+                "parryUntil": ms(parry_until) if parry_until > now else None,
+                "counterUntil": ms(counter_until) if counter_until > now else None,
+                "powers": powers, "domain": bool(domains)}
 
     async def push_state(self) -> None:
         """Send what changed since the last look (nothing at all when nothing did)."""
@@ -400,7 +434,7 @@ class ActivityBridge:
         message = ActivityInput(member, channel, f"*{command}*", user_id=conn.user_id,
                                 character=None if character == "me" else character)
 
-        if command not in TIMED_COMMANDS:       # adapt / attack: the bot's normal handler, no clock involved
+        if command not in TIMED:       # adapt, attack, powers, domain: the bot's normal handler, no clock involved
             await self.app.bot.on_message(message)
             await self._verdict(conn, str(frame.get("id") or ""), message, None)
             return None
@@ -409,7 +443,10 @@ class ActivityBridge:
         entry = self.hub.qtes.get(qte_id)
         if entry is None:
             return "Ese QTE ya terminó."
-        if conn.presses.get(qte_id, 0) >= MAX_PRESSES:
+        if command not in entry.get("commands", ()):
+            return "Ese botón no sirve en este QTE."
+        limit = MAX_COMBO_PRESSES if entry.get("mode") == "combo" else MAX_PRESSES
+        if conn.presses.get(qte_id, 0) >= limit:
             return None
         conn.presses[qte_id] = conn.presses.get(qte_id, 0) + 1
         try:
@@ -420,10 +457,17 @@ class ActivityBridge:
         seconds = response_seconds(dt, conn.rtt_ms or 0.0, elapsed)
         if seconds is None:
             return "Esa pulsación no es creíble."
-        data = next((v for k, v in self.app.active_qtes.items() if str(k) == qte_id), None)
+        key, data = next(((k, v) for k, v in self.app.active_qtes.items() if str(k) == qte_id), (None, None))
+        if key is None:
+            return "Ese QTE ya terminó."
         message.mirror_to = data.get("message") if data else None
-        await self.app.handle_qte_response(message, measured=seconds)
+        await self.app.handle_qte_response(message, measured=seconds, only=key)         # this QTE, not the first that takes it
         await self._verdict(conn, qte_id, message, seconds)
+        if entry.get("mode") == "combo" and key in self.app.active_qtes:               # the next step is shown only to who earned it
+            now = self.app.active_qtes[key]
+            sequence, index = now.get("combo_sequence") or [], int(now.get("combo_index", 0))
+            if index < len(sequence):
+                await self.hub.send(conn, {"t": "qte_step", "id": qte_id, "index": index, "step": sequence[index]})
         return None
 
     async def _verdict(self, conn: Conn, qte_id: str, message: ActivityInput, seconds: float | None) -> None:

@@ -379,6 +379,7 @@ class AdvancedQTEBot:
         
         # ========== COUNTER MECHANIC ==========
         self.counter_enabled_players = {}  # {user_id: qte_id}
+        self.counter_deadlines = {}  # {user_id: time.time() when the counter window closes} (shown by the Discord Activity)
         self.counter_context = {}  # {user_id: {"qte_id": qte_id, "difficulty": difficulty}}
         self.counter_window = 1.5  # LOWERED: 1.5 seconds from QTE start (was 2.0)
         self.enemy_stunned = False
@@ -7913,6 +7914,7 @@ Your response (1-2 sentences max):"""
     async def send_success_with_counter(self, channel, author_mention, response_time, user_id, qte_id, difficulty):
         """Send SUCCESS + COUNTER message merged into one - saves rate limit"""
         self.counter_enabled_players[user_id] = qte_id
+        self.counter_deadlines[user_id] = time.time() + 5.0
         # Store difficulty for accurate adaptation tracking during counter
         self.counter_context[user_id] = {"qte_id": qte_id, "difficulty": difficulty}
         
@@ -8832,11 +8834,12 @@ Your response (1-2 sentences max):"""
         except Exception as e:
             console.print(f"[red]✗ Error triggering group QTE: {e}[/red]")
 
-    async def handle_qte_response(self, message, measured=None):
+    async def handle_qte_response(self, message, measured=None, only=None):
         """Handle player responses to QTE events - OPTIMIZED
 
         measured: seconds the player took, when the Discord Activity timed it on the player's own screen;
         None = measure it from Discord's timestamps, as for a chat message.
+        only: answer just this QTE (the Activity's buttons say which one); None = the first that takes it, as in the chat.
         """
         profiler.start('handle_qte_response')
         try:
@@ -8885,6 +8888,8 @@ Your response (1-2 sentences max):"""
 
             # Iterate over copy of keys to allow safe deletion
             for qte_id in list(self.active_qtes.keys()):
+                if only is not None and qte_id != only:
+                    continue
                 qte_data = self.active_qtes.get(qte_id)
                 if not qte_data:
                     continue

@@ -1,6 +1,6 @@
 {
   "name": "eventos-activity-client",
-  "version": "0.7.3",
+  "version": "0.8.0",
   "private": true,
   "description": "Cliente web de la Actividad de Discord de Eventos App",
   "scripts": {

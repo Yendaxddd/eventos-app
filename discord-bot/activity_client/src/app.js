@@ -9,7 +9,7 @@ const base = inDiscord ? "/.proxy" : "";            // Discord forwards /.proxy/
 
 const $ = (id) => document.getElementById(id);
 const state = { you: null, users: [], rtt: null, offset: null, messages: new Map(), samples: [], ws: null, retry: 0,
-  canWrite: false, characters: [], qte: null, qteResult: null, game: null, me: null };
+  canWrite: false, characters: [], game: null, me: null };
 window.__eventos = state;                           // handy for tests and for debugging from the console
 
 // ---- telling the app how far we got ------------------------------------------------------------------------------
@@ -320,10 +320,10 @@ function setupComposer() {
   select.hidden = state.characters.length === 0;      // nothing to choose when there are no characters
   select.disabled = input.disabled = $("send").disabled = !state.canWrite;
   input.placeholder = state.canWrite ? "Escribe en el canal del evento…" : "Solo lectura: escribe en el chat de Discord";
-  paintActions();
+  renderActions();
 }
 
-$("as").onchange = () => store.set("eventos.as", $("as").value);
+$("as").onchange = () => { store.set("eventos.as", $("as").value); renderActions(); };
 $("composer").onsubmit = (event) => {
   event.preventDefault();
   const input = $("input");
@@ -334,115 +334,292 @@ $("composer").onsubmit = (event) => {
   input.focus();                                       // keep the keyboard up on a phone
 };
 
-// ---- QTE buttons ------------------------------------------------------------------------------------------------
-// The player's screen is the stopwatch: the clock starts the moment the QTE is painted, and the server gets the
-// elapsed time (it adds back half the round trip, and refuses what a human cannot do).
+// ---- QTE cards and buttons ---------------------------------------------------------------------------------------
+// The player's screen is the stopwatch: the clock starts the moment a QTE is painted, and the server gets the elapsed
+// time (it adds back half the round trip, and refuses what a human cannot do). Several QTEs can run at once: each has
+// its own card, bar and buttons, and a button answers exactly that QTE.
+const serverNow = () => Date.now() + (state.offset || 0);
+state.qtes = new Map();                                // id -> { q, seen, done, busy, el, step, ... }
+state.floatParry = store.get("eventos.floatParry") !== "0";
+const ARROWS = { up: "⬆️", down: "⬇️", left: "⬅️", right: "➡️" };
+const MODE_LABEL = { combo: "COMBO", direction: "DIRECCIÓN", bf_chain: "BLACK FLASH" };
+const LABELS = { evade: "Evade", parry: "Parry", save: "Salvar", adapt: "Adapt", attack: "Ataque", ...ARROWS };
+
 function involved(q) {
   if (!state.you) return false;
   return q.target ? q.target.id === state.you.id : (q.participants || []).includes(state.you.id);
 }
 
-function paintActions() {
-  const q = state.qte;
-  const open = state.canWrite && !!state.you;
-  for (const button of document.querySelectorAll(".act")) {
-    const timed = button.dataset.cmd === "evade" || button.dataset.cmd === "parry";
-    button.disabled = !open || (timed && !(q && q.q.windows && involved(q.q) && !q.pressed));   // only single and group QTEs have buttons
-  }
+// Does this QTE use the floating parry button (it appears somewhere random on the screen when the parry window opens)?
+const floats = (q) => state.floatParry && q.commands.includes("parry") && ["single", "group", "bf_chain"].includes(q.mode);
+
+function meNow() { return state.me || {}; }
+const secondsLeft = (until) => (until ? Math.max(0, (until - serverNow()) / 1000) : 0);
+
+function canPress(entry, cmd) {
+  const q = entry.q, me = meNow();
+  if (!state.canWrite || entry.seen === null || entry.done || entry.busy || !q.commands.includes(cmd)) return false;
+  if (cmd === "save") return !involved(q) && !!q.target && (me.saves ? me.saves.left > 0 || secondsLeft(me.saves.until) <= 0 : true);
+  if (!involved(q)) return false;
+  if (cmd === "parry" && secondsLeft(me.parryUntil) > 0) return false;
+  return true;
 }
 
-const MODE_LABEL = { combo: "COMBO", direction: "DIRECCIÓN", fake: "", bf_chain: "BLACK FLASH" };
+function cardButtons(entry) {
+  const q = entry.q, out = [];
+  if (q.mode === "direction") return involved(q) ? ["up", "left", "down", "right"] : [];
+  if (!involved(q)) return q.commands.includes("save") && q.target ? ["save"] : [];
+  for (const cmd of q.commands) {
+    if (cmd === "adapt" || cmd === "save") continue;
+    if (cmd === "parry" && floats(q)) continue;          // that one floats
+    out.push(cmd);
+  }
+  return out;
+}
 
-// The bar is the QTE's whole time; the coloured stretches are where each answer counts. The cursor starts where the
-// engine's clock really is (the server's start time on our synchronised clock), so a late frame does not skew it.
-function drawTrack(q) {
-  const track = $("qte-track"), w = q.windows;
-  track.hidden = !w;
-  $("qte-legend").hidden = !w;
-  if (!w) return;
-  const place = (id, range) => {
-    const el = $(id);
-    el.hidden = !range;
-    if (!range) return;
-    el.style.left = `${Math.min(100, range[0] / q.timeout * 100)}%`;
-    el.style.width = `${Math.max(0.5, Math.min(100, range[1] / q.timeout * 100) - range[0] / q.timeout * 100)}%`;
-  };
-  place("z-evade", w.evade); place("z-parry", w.parry); place("z-bf", w.bf);
+function buildCard(entry) {
+  const q = entry.q;
+  const el = document.createElement("div");
+  el.className = "qcard"; el.dataset.id = q.id; el.dataset.mode = q.mode;
+  const head = document.createElement("div");
+  head.className = "qhead";
+  const title = document.createElement("strong");
+  title.textContent = `⚡ ${MODE_LABEL[q.mode] ? MODE_LABEL[q.mode] + " " : ""}QTE ${String(q.difficulty).toUpperCase()}`;
+  const who = document.createElement("span");
+  who.className = "who";
+  who.textContent = q.target ? (involved(q) ? "¡Es para ti!" : `Para ${q.target.name}`)
+    : q.mode === "fake" ? "" : (involved(q) ? "¡Responde todo el grupo!" : "QTE de grupo");
+  const res = document.createElement("span");
+  res.className = "res";
+  head.append(title, who, res);
+  el.append(head);
+  if (q.windows) {
+    const track = document.createElement("div");
+    track.className = "track";
+    const place = (cls, range) => {
+      if (!range) return;
+      const i = document.createElement("i");
+      i.className = `zone ${cls}`;
+      i.style.left = `${Math.min(100, range[0] / q.timeout * 100)}%`;
+      i.style.width = `${Math.max(0.5, Math.min(100, range[1] / q.timeout * 100) - range[0] / q.timeout * 100)}%`;
+      track.append(i);
+    };
+    place("evade", q.windows.evade); place("parry", q.windows.parry); place("bf", q.windows.bf);
+    const cursor = document.createElement("b");
+    cursor.className = "cursor"; track.append(cursor);
+    el.append(track);
+  }
+  if (q.mode === "combo") {
+    const combo = document.createElement("div");
+    combo.className = "combo"; el.append(combo);
+  }
+  if (q.mode === "direction") {
+    const hint = document.createElement("div");
+    hint.className = "dirhint";
+    hint.textContent = `Flecha: ${q.arrow || "?"} — ¡pulsa la OPUESTA!`;
+    el.append(hint);
+  }
+  const buttons = document.createElement("div");
+  buttons.className = "qbtns";
+  for (const cmd of cardButtons(entry)) {
+    const b = actionButton(cmd, cmd === "save" ? `🛡 Salvar a ${q.target ? q.target.name : ""}` : LABELS[cmd]);
+    b.dataset.qte = q.id;
+    buttons.append(b);
+  }
+  if (buttons.children.length) el.append(buttons);
+  entry.el = el; entry.res = res;
+  return el;
+}
+
+function actionButton(cmd, label, hint = "") {
+  const b = document.createElement("button");
+  b.type = "button"; b.className = "act"; b.dataset.cmd = cmd;
+  const name = document.createElement("b"); name.textContent = label;
+  const small = document.createElement("small"); small.className = "cd"; small.textContent = hint;
+  b.append(name, small);
+  return b;
+}
+
+function paintCombo(entry) {
+  const box = entry.el && entry.el.querySelector(".combo");
+  if (!box) return;
+  const { length } = entry.q.combo || { length: 0 };
+  box.textContent = entry.step ? `${entry.index + 1}/${length} · ahora: ${LABELS[entry.step] || entry.step}` : "";
+  box.dataset.step = entry.step || "";
 }
 
 function startQte(q) {
-  endQte(true);
-  clearTimeout(resultTimer);
-  state.qte = { q, seen: null, pressed: false };
-  const box = $("qte");
-  box.dataset.active = "true"; box.dataset.result = "";
-  const label = q.mode in MODE_LABEL ? MODE_LABEL[q.mode] : "";
-  $("qte-title").textContent = `⚡ ${label ? label + " " : ""}QTE ${String(q.difficulty).toUpperCase()}`;
-  const manual = q.mode === "combo" || q.mode === "direction" || q.mode === "bf_chain";
-  $("qte-sub").textContent = manual ? "Este modo todavía se responde por el chat."
-    : q.target ? (involved(q) ? "¡Es para ti!" : `Debe responder ${q.target.name}`)
-    : q.mode === "fake" ? "" : (involved(q) ? "¡Responde todo el grupo!" : "QTE de grupo");
-  drawTrack(q);
-  const cursor = $("qte-cursor");
-  cursor.style.transition = "none"; cursor.style.left = "0%";
-  paintActions();
+  if (state.qtes.has(q.id)) return;
+  const entry = { q, seen: null, done: false, busy: false, el: null, step: q.combo ? q.combo.step : null,
+    index: q.combo ? q.combo.index : 0, floatEl: null, floatTimer: null, pressed: false };
+  state.qtes.set(q.id, entry);
+  $("qtes").append(buildCard(entry));
+  paintCombo(entry);
+  syncIdle(); paintAll();
   requestAnimationFrame(() => {                        // painted: from here on the player can see it
-    if (!state.qte || state.qte.q !== q) return;
-    state.qte.seen = performance.now();
-    const gone = Math.max(0, (Date.now() + (state.offset || 0) - q.tGo) / 1000);
-    cursor.style.left = `${Math.min(100, gone / q.timeout * 100)}%`;
-    void cursor.offsetWidth;                           // apply the start before animating
-    cursor.style.transition = `left ${Math.max(0, q.timeout - gone)}s linear`;
-    cursor.style.left = "100%";
+    if (!state.qtes.has(q.id)) return;
+    entry.seen = performance.now();
+    const gone = Math.max(0, (serverNow() - q.tGo) / 1000);
+    const cursor = entry.el.querySelector(".cursor");
+    if (cursor) {
+      cursor.style.left = `${Math.min(100, gone / q.timeout * 100)}%`;
+      void cursor.offsetWidth;                         // apply the start before animating
+      cursor.style.transition = `left ${Math.max(0, q.timeout - gone)}s linear`;
+      cursor.style.left = "100%";
+    }
     if (navigator.vibrate && involved(q)) navigator.vibrate(40);
+    if (involved(q) && floats(q)) scheduleFloat(entry);
+    paintAll();
   });
 }
 
-function idle() {
-  const box = $("qte");
-  box.dataset.active = "false"; box.dataset.result = "";
-  $("qte-cursor").style.transition = "none";
-  $("qte-title").textContent = "Sin QTE por ahora";
-  $("qte-sub").textContent = "Los botones se activan cuando te toque responder.";
+// The parry button appears at a random place of the screen when the parry window opens.
+function scheduleFloat(entry) {
+  const open = entry.q.windows && entry.q.windows.parry ? entry.q.windows.parry[0] : 0;
+  const wait = Math.max(0, entry.q.tGo + open * 1000 - serverNow());
+  entry.floatTimer = setTimeout(() => showFloat(entry), wait);
 }
 
-function endQte(replacing = false) {
-  state.qte = null;
-  $("qte").dataset.active = "false";
-  $("qte-cursor").style.transition = "none";
-  if (!replacing && !$("qte").dataset.result) idle();      // a verdict on screen stays a moment (see showResult)
-  paintActions();
+function showFloat(entry) {
+  if (!state.qtes.has(entry.q.id) || entry.done || entry.floatEl) return;
+  const area = $("feed").getBoundingClientRect();
+  const width = 110, height = 64;
+  const left = area.left + 8 + Math.random() * Math.max(0, area.width - width - 16);
+  const top = area.top + 8 + Math.random() * Math.max(0, area.height - height - 16);
+  const b = actionButton("parry", state.qtes.size > 1 ? `Parry #${entry.q.id}` : "Parry", "P");
+  b.classList.add("float-parry");
+  b.dataset.qte = entry.q.id;
+  b.style.left = `${left}px`; b.style.top = `${top}px`;
+  $("float").append(b);
+  entry.floatEl = b;
+  paintAll();
 }
 
-let resultTimer = null;
+function removeFloat(entry) {
+  clearTimeout(entry.floatTimer);
+  if (entry.floatEl) { entry.floatEl.remove(); entry.floatEl = null; }
+}
+
+function endQte(id) {
+  const entry = state.qtes.get(id);
+  if (!entry) return;
+  removeFloat(entry);
+  entry.ended = true;
+  const keep = entry.pressed ? 2500 : 400;              // a verdict stays on screen a moment
+  setTimeout(() => { if (entry.el) entry.el.remove(); state.qtes.delete(id); syncIdle(); paintAll(); }, keep);
+  paintAll();
+}
+
+function clearQtes() {
+  for (const entry of state.qtes.values()) { removeFloat(entry); if (entry.el) entry.el.remove(); }
+  state.qtes.clear(); syncIdle();
+}
+
+function syncIdle() { $("idle").hidden = state.qtes.size > 0; $("legend").hidden = ![...state.qtes.values()].some((e) => e.q.windows); }
+
 function showResult(frame) {
-  if (frame.ok === null || frame.ok === undefined) return;
-  const box = $("qte");
-  box.dataset.result = frame.ok ? "ok" : "bad";
-  $("qte-title").textContent = frame.ok ? "✅ ¡Bien!" : "❌ Fallaste";
-  $("qte-sub").textContent = frame.ms != null ? `${frame.ms} ms` : "";
-  clearTimeout(resultTimer);
-  resultTimer = setTimeout(() => { if (!state.qte) idle(); }, 3000);
+  const entry = state.qtes.get(frame.id);
+  if (!entry || frame.ok === null || frame.ok === undefined) return;
+  entry.res.textContent = `${frame.ok ? "✅" : "❌"}${frame.ms != null ? " " + frame.ms + " ms" : ""}`;
+  entry.el.dataset.result = frame.ok ? "ok" : "bad";
 }
 
-function press(cmd) {
-  const q = state.qte;
-  const timed = cmd === "evade" || cmd === "parry";
-  if (timed) {
-    if (!q || q.pressed || !involved(q.q) || q.seen === null) return;
-    q.pressed = true;
-    send({ t: "press", id: q.q.id, command: cmd, as: $("as").value, dt: Math.round(performance.now() - q.seen) });
-    paintActions();
-  } else {
-    send({ t: "press", id: q ? q.q.id : "", command: cmd, as: $("as").value });
+function onStep(frame) {
+  const entry = state.qtes.get(frame.id);
+  if (!entry) return;
+  entry.step = frame.step; entry.index = frame.index; entry.busy = false;
+  paintCombo(entry); paintAll();
+}
+
+function press(cmd, entry = null) {
+  const timed = ["evade", "parry", "save", "up", "down", "left", "right"].includes(cmd);
+  if (!timed) { send({ t: "press", id: "", command: cmd, as: $("as").value }); return; }
+  if (!entry || !canPress(entry, cmd)) return;
+  entry.pressed = true;
+  if (entry.q.mode === "combo") entry.busy = true;     // wait for the next step before answering again
+  else entry.done = true;                              // one answer per QTE
+  if (cmd === "parry") removeFloat(entry);
+  send({ t: "press", id: entry.q.id, command: cmd, as: $("as").value, dt: Math.round(performance.now() - entry.seen) });
+  paintAll();
+}
+
+// ---- global buttons (adapt, counter, powers, domain) and every countdown --------------------------------------------
+function renderActions() {
+  const box = $("actions"), me = meNow();
+  box.replaceChildren();
+  const chosen = $("as") ? $("as").value : "me";
+  const powers = (me.powers && me.powers[chosen]) || {};
+  const add = (cmd, label, hint, key) => { const b = actionButton(cmd, label, hint); b.dataset.key = key; box.append(b); return b; };
+  add("adapt", "Adapt", "A", "A");
+  add("attack", "Ataque", "Q", "Q").dataset.counter = "1";
+  for (const [i, slot] of [[1, "power1"], [2, "power2"]]) {
+    const info = powers[slot];
+    if (chosen !== "me" && !info) continue;            // that character has no such power
+    const b = add(slot, info ? info.name : `Poder ${i}`, String(i), String(i));
+    b.dataset.slot = slot;
+  }
+  if (me.domain) add("domain", "Dominio", "3", "3");
+  paintAll();
+}
+
+function paintAll() {
+  const me = meNow(), open = state.canWrite && !!state.you;
+  for (const b of document.querySelectorAll("#actions .act")) {
+    b.disabled = !open;
+    const cd = b.querySelector(".cd");
+    if (b.dataset.counter) {                           // the counter window: 5 s after an evade
+      const left = secondsLeft(me.counterUntil);
+      b.classList.toggle("hot", left > 0);
+      cd.textContent = left > 0 ? `${left.toFixed(1)} s` : "Q";
+    } else if (b.dataset.slot) {
+      const chargePct = me.charges ? me.charges[b.dataset.slot] : null;
+      const info = ((me.powers || {})[$("as").value] || {})[b.dataset.slot] || {};
+      const left = secondsLeft(info.until);
+      b.classList.toggle("ready", chargePct !== null && chargePct >= (me.cost || 100) && left <= 0 && !info.paused);
+      cd.textContent = left > 0 ? `⏱ ${Math.ceil(left)} s` : info.paused ? `⏸ ${info.paused} s` : chargePct !== null && chargePct !== undefined ? `${Math.round(chargePct)} %` : "";
+    }
+  }
+  for (const entry of state.qtes.values()) {
+    if (!entry.el) continue;
+    for (const b of [...entry.el.querySelectorAll(".qbtns .act"), ...(entry.floatEl ? [entry.floatEl] : [])]) {
+      const cmd = b.dataset.cmd;
+      b.disabled = !canPress(entry, cmd);
+      const cd = b.querySelector(".cd");
+      if (cmd === "parry" && secondsLeft(me.parryUntil) > 0) cd.textContent = `⏱ ${secondsLeft(me.parryUntil).toFixed(1)} s`;
+      else if (cmd === "save" && me.saves) {
+        const wait = secondsLeft(me.saves.until);
+        cd.textContent = me.saves.left > 0 ? `${me.saves.left}/${me.saves.limit}` : wait > 0 ? `⏱ ${Math.ceil(wait)} s` : "";
+      } else if (cmd === "parry") cd.textContent = "P";
+      else if (cmd === "evade") cd.textContent = "E";
+    }
   }
 }
+setInterval(paintAll, 250);                            // countdowns
 
-for (const button of document.querySelectorAll(".act")) {
-  button.addEventListener("pointerdown", (event) => { if (event.button === 0 || event.pointerType !== "mouse") { event.preventDefault(); if (!button.disabled) press(button.dataset.cmd); } });
-  button.addEventListener("keydown", (event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); if (!button.disabled) press(button.dataset.cmd); } });
-}
-const KEYS = { KeyE: "evade", KeyP: "parry", KeyA: "adapt", KeyQ: "attack" };
+document.addEventListener("pointerdown", (event) => {
+  const button = event.target.closest && event.target.closest(".act");
+  if (!button || button.disabled || (event.pointerType === "mouse" && event.button !== 0)) return;
+  event.preventDefault();
+  const entry = button.dataset.qte ? state.qtes.get(button.dataset.qte) : null;
+  press(button.dataset.cmd, entry);
+});
+document.addEventListener("keydown", (event) => {            // Enter / Space on a focused button
+  const button = event.target.closest && event.target.closest(".act");
+  if (button && (event.key === "Enter" || event.key === " ")) {
+    event.preventDefault();
+    if (!button.disabled) press(button.dataset.cmd, button.dataset.qte ? state.qtes.get(button.dataset.qte) : null);
+  }
+});
+
+$("float-parry").checked = state.floatParry;
+$("float-parry").onchange = () => {
+  state.floatParry = $("float-parry").checked;
+  store.set("eventos.floatParry", state.floatParry ? "1" : "0");
+};
+
+// Keyboard: the oldest QTE that can take the answer gets it. In the box, Alt+letter; Esc leaves the box.
+const KEYS = { KeyE: "evade", KeyP: "parry", KeyS: "save", KeyA: "adapt", KeyQ: "attack", Digit1: "power1", Digit2: "power2",
+  Digit3: "domain", ArrowUp: "up", ArrowDown: "down", ArrowLeft: "left", ArrowRight: "right" };
 document.addEventListener("keydown", (event) => {
   if (event.repeat || event.ctrlKey || event.metaKey) return;
   const tag = (event.target && event.target.tagName) || "";
@@ -450,8 +627,14 @@ document.addEventListener("keydown", (event) => {
   if (event.key === "Escape" && typing) { event.target.blur(); return; }
   if (typing && !event.altKey) return;                  // typing: the letters are letters (Alt+letter works even then)
   const cmd = KEYS[event.code];
-  const button = cmd && document.querySelector(`.act[data-cmd="${cmd}"]`);
-  if (button && !button.disabled) { event.preventDefault(); press(cmd); }
+  if (!cmd) return;
+  if (["evade", "parry", "save", "up", "down", "left", "right"].includes(cmd)) {
+    const entry = [...state.qtes.values()].sort((a, b) => a.q.tGo - b.q.tGo).find((e) => canPress(e, cmd) && (cmd !== "parry" || !floats(e.q) || e.floatEl));
+    if (entry) { event.preventDefault(); press(cmd, entry); }
+  } else {
+    const button = document.querySelector(`#actions .act[data-cmd="${cmd}"]`);
+    if (button && !button.disabled) { event.preventDefault(); press(cmd); }
+  }
 });
 
 // ---- connection ----------------------------------------------------------------------------------------------------
@@ -504,9 +687,9 @@ function connect(hello) {
         $("feed").scrollTop = $("feed").scrollHeight;
         startSync();
         state.game = frame.state && frame.state.players ? frame.state : null; state.me = frame.me && frame.me.charges ? frame.me : null;
-        paintGame();
-        const running = (frame.qtes || [])[0];
-        if (running) startQte(running); else endQte();
+        paintGame(); renderActions();
+        clearQtes();
+        for (const running of frame.qtes || []) startQte(running);
         break;
       case "users": renderUsers(frame.users); break;
       case "reset":
@@ -519,17 +702,21 @@ function connect(hello) {
       case "edit": addMessage(frame.m, { replace: true }); break;
       case "del": removeMessage(frame.id); break;
       case "state": state.game = frame.s; paintGame(); break;
-      case "me": state.me = frame.me; paintGame(); break;
+      case "me": state.me = frame.me; paintGame(); renderActions(); break;
       case "qte": startQte(frame.q); break;
-      case "qte_end": if (state.qte && state.qte.q.id === frame.id) endQte(); break;
+      case "qte_end": endQte(frame.id); break;
       case "qte_result": showResult(frame); break;
+      case "qte_step": onStep(frame); break;
       case "pong": onPong(frame); break;
       case "slow": banner("Vas demasiado rápido: espera un momento."); setTimeout(() => banner(""), 2000); break;
       case "error":
         if (frame.code === "auth") { setState("error", "No se pudo entrar"); banner(frame.reason); ws.close(); state.retry = -1; }
         else {
           banner(frame.reason); clearTimeout(bannerTimer); bannerTimer = setTimeout(() => banner(""), 3500);
-          if (frame.code === "press" && state.qte) { state.qte.pressed = false; paintActions(); }
+          if (frame.code === "press" && frame.id) {            // the answer was not taken: the buttons come back
+            const entry = state.qtes.get(String(frame.id));
+            if (entry) { entry.busy = false; entry.done = false; paintAll(); if (/terminó/.test(frame.reason || "")) endQte(entry.q.id); }
+          }
         }
         break;
     }

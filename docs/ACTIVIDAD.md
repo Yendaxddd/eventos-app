@@ -22,15 +22,25 @@ jefe y tus cargas**, y las imágenes salen por la propia app. Los QTE siguen fun
   menciones/pings). Si tienes personajes registrados aparece un selector para escribir como uno de ellos (con la foto con la
   que Tupperbox lo mostró por última vez). El bot trata lo escrito como cualquier mensaje del chat: `*attack*`, frases entre
   comillas, etc. funcionan igual. Sin permiso «Gestionar webhooks» el bot lo publica como `**Nombre:** texto`.
-- **QTE:** cuando aparece uno, el panel de abajo se enciende con una barra de tiempo. Si es para ti, **Evade** y **Parry** se
-  activan. Se miden desde que el QTE se pinta en tu pantalla; el servidor suma la mitad del ida y vuelta y rechaza tiempos
-  imposibles (menos de 80 ms) o más largos que el tiempo real. **Adapt** y **Ataque** (contraataque) funcionan siempre, igual
-  que escribir `*adapt*` / `*attack*`.
-- **Teclas (PC):** `E` evade, `P` parry, `A` adapt, `Q` ataque; mientras escribes en la caja, `Alt`+letra. `Esc` sale de la caja.
+- **QTE (varios a la vez):** cada QTE que te toca tiene **su tarjeta** con su barra de tiempo y sus botones; un botón responde
+  exactamente a *su* QTE, así que puedes contestar primero el segundo. Se miden desde que el QTE se pinta en tu pantalla; el
+  servidor suma la mitad del ida y vuelta y rechaza tiempos imposibles (menos de 80 ms) o más largos que el tiempo real.
+  - **Individual y grupo:** Evade y Parry. Si el QTE es de otra persona aparece **🛡 Salvar a …** (con su contador de salvaciones).
+  - **Combo:** la tarjeta dice el paso que toca (1/5 · ahora: Parry…); el siguiente solo lo ves tú cuando aciertas, como en el chat.
+  - **Dirección:** muestra la flecha y un pad de 4 flechas: pulsa la **opuesta**.
+  - **Cadena Black Flash:** solo Parry, con su ventana de 3 s.
+  - **Falso:** no tiene botones ni dice a quién va (igual que en el chat, donde no hay ping).
+- **Parry flotante:** el botón de Parry no está fijo: **aparece en un sitio al azar de la pantalla cuando se abre su ventana** y
+  desaparece al pulsarlo o al acabar el QTE (con varios QTE lleva el número). Se puede desmarcar con «Parry flotante»
+  (se recuerda); en el combo el Parry va fijo.
+- **Botones siempre disponibles:** Adapt, **Ataque** (se enciende con los segundos que le quedan a la ventana del contraataque),
+  **Poder 1 / Poder 2** del personaje activo (nombre, % de carga, brillo al estar listo, y ⏱ de enfriamiento o ⏸ si espera a la
+  próxima pelea) y **Dominio** si tienes uno. El Parry muestra su enfriamiento tras una cadena de Black Flash.
+- **Teclas (PC):** `E` evade, `P` parry, `S` salvar, `A` adapt, `Q` ataque, `1` / `2` poderes, `3` dominio, flechas para el pad;
+  responden al QTE más antiguo que pueda recibirlas. Mientras escribes en la caja, `Alt`+tecla. `Esc` sale de la caja.
 - En el canal, la respuesta aparece con ✅/❌ en el mensaje del QTE, como siempre, y los mensajes de resultado de siempre.
-- **Por ahora solo** los QTE normales (individual y de grupo). Combo, dirección, falso, Cadena BF, poderes y dominio siguen
-  por el chat (también puedes escribirlos en la caja: `*power1*`, etc. pasan por el mismo camino que el chat, pero sin la
-  medición del cliente).
+- **Aún por el chat:** Final Judgement, choque de dominios y juicios (puedes escribirlos en la caja: pasan por el mismo camino
+  que el chat, pero sin medición del cliente).
 - **Barra de tiempo:** muestra todo el QTE con sus zonas: verde = evade (hasta el límite), naranja = parry, oscuro = ventana de
   Black Flash (solo es la ventana: luego hay una tirada de suerte), y un cursor que arranca donde va el reloj del motor.
   Respeta el modo REVENGE (ventana de parry movida).
@@ -38,7 +48,6 @@ jefe y tus cargas**, y las imágenes salen por la propia app. Los QTE siguen fun
 - **Personajes:** el selector de abajo es tu *personaje activo*: lo que escribes y los botones actúan como ese personaje
   (poderes, registro, etc.), no solo cambia el nombre. La foto de cada personaje se recuerda entre sesiones, sin peticiones extra.
   Tupperbox sigue sirviendo para el chat normal; la Actividad no lo usa (publica con su webhook: un mensaje por mensaje).
-- Combo, dirección, falso y Cadena BF **muestran el panel pero se responden por el chat** (un aviso lo dice).
 - El espejo muestra ahora respuestas, reacciones, stickers y embeds completos (imagen, GIF de Tenor/Klipy como clip silencioso,
   campos, pie).
 
