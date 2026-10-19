@@ -53,15 +53,18 @@ class ConfigPage(ctk.CTkFrame):
             "reset_on_start": tk.BooleanVar(value=s.reset_on_start),
             "hotkeys_enabled": tk.BooleanVar(value=s.hotkeys_enabled),
             "use_webhooks": tk.BooleanVar(value=s.use_webhooks),
+            "activity_enabled": tk.BooleanVar(value=s.activity_enabled),
+            "activity_client_secret": tk.StringVar(value=s.activity_client_secret),
             "auto_start": tk.BooleanVar(value=s.auto_start),
         }
         self._build_token(0)
         self._build_event(1)
         self._build_helpers(2)
         self._build_webhooks(3)
-        self._build_performance(4)
-        self._build_startup(5)
-        self._build_ai(6)
+        self._build_activity(4)
+        self._build_performance(5)
+        self._build_startup(6)
+        self._build_ai(7)
 
         bar = ctk.CTkFrame(self, fg_color="transparent")
         bar.grid(row=1, column=0, sticky="ew", padx=20, pady=14)
@@ -521,6 +524,87 @@ class ConfigPage(ctk.CTkFrame):
         lines += [f"✗ {b['name'].rsplit('#', 1)[0]}: {b['lane_note']}" for b in bad[:6]]
         self.lanes_status.configure(text="\n".join(lines), text_color=GREEN if good and not bad else AMBER if good else MUTED)
 
+    # ---- Discord Activity ---------------------------------------------------------------
+    def _build_activity(self, row: int) -> None:
+        box = self._section("Actividad de Discord (beta)", row)
+        self._note(box, 1, "Una Actividad es una pantalla del juego dentro de Discord (PC y móvil) que muestra el canal del "
+                           "evento y mide los tiempos sin depender de los mensajes. Esta versión es un prototipo: espeja el "
+                           "canal en solo lectura y mide la conexión de cada jugador. Funciona desde este PC con un túnel "
+                           "gratuito de Cloudflare cuya dirección cambia cada vez. Pasos en docs/ACTIVIDAD.md.")
+        ctk.CTkCheckBox(box, text="Activar la Actividad al iniciar el bot", variable=self.vars["activity_enabled"],
+                        fg_color=ACCENT, hover_color=ACCENT).grid(row=2, column=0, columnspan=4, padx=18, pady=(2, 6), sticky="w")
+        self.activity_secret_entry = self._field(box, 3, "Client Secret", "activity_client_secret", show="•")
+        self._note(box, 4, "Developer Portal → tu aplicación → OAuth2 → «Client Secret». Se guarda solo en este equipo.", pady=(0, 6))
+        self.activity_status = ctk.CTkLabel(box, text="", text_color=MUTED, anchor="w", justify="left", wraplength=640)
+        self.activity_status.grid(row=5, column=0, columnspan=4, padx=18, pady=(2, 6), sticky="w")
+        buttons = ctk.CTkFrame(box, fg_color="transparent")
+        buttons.grid(row=6, column=0, columnspan=4, padx=14, pady=(0, 14), sticky="w")
+        self.activity_buttons = {}
+        for text, command in (("Copiar dirección", self._copy_activity_url), ("Nueva dirección", self._reopen_tunnel),
+                              ("Probar en este PC", self._test_activity), ("Abrir Developer Portal", self._open_portal)):
+            button = ctk.CTkButton(buttons, text=text, width=150, height=30, fg_color=BUTTON_NEUTRAL, hover_color=CARD_BORDER,
+                                   command=command)
+            button.pack(side="left", padx=4)
+            self.activity_buttons[text] = button
+
+    def _activity_url(self) -> str:
+        return self.app.runner.activity_info().get("url", "")
+
+    def _copy_activity_url(self) -> None:
+        url = self._activity_url()
+        if not url:
+            self.activity_status.configure(text="Todavía no hay dirección: el túnel se abre al iniciar el bot.", text_color=AMBER)
+            return
+        self.clipboard_clear()
+        self.clipboard_append(url.removeprefix("https://"))
+        self.activity_status.configure(text=f"Copiada: {url.removeprefix('https://')} (pégala en URL Mappings, raíz «/»).",
+                                       text_color=GREEN)
+
+    def _reopen_tunnel(self) -> None:
+        try:
+            future = self.app.runner.reopen_tunnel()
+        except RuntimeError as exc:
+            self.activity_status.configure(text=str(exc), text_color=AMBER)
+            return
+        self.activity_status.configure(text="Abriendo un túnel nuevo…", text_color=MUTED)
+        self.app.watch(future, lambda result: None, lambda exc: self.activity_status.configure(text=f"✗ {exc}", text_color=RED))
+
+    def _test_activity(self) -> None:
+        info = self.app.runner.activity_info()
+        if not info.get("running"):
+            self.activity_status.configure(text="La Actividad no está en marcha: actívala, guarda y inicia el bot.", text_color=AMBER)
+            return
+        webbrowser.open(f"http://127.0.0.1:{info['port']}/?dev=Admin")
+
+    def _open_portal(self) -> None:
+        webbrowser.open(DEVELOPER_PORTAL)
+
+    def _refresh_activity(self) -> None:
+        info = self.app.runner.activity_info()
+        if not info.get("running"):
+            enabled = bool(self.vars["activity_enabled"].get())
+            self.activity_status.configure(
+                text="Se activará al iniciar el bot." if enabled else "Desactivada.", text_color=MUTED)
+            return
+        lines = []
+        if info["tunnel"] == "up":
+            lines.append(f"● Túnel listo: {info['url'].removeprefix('https://')}")
+            lines.append("En el Developer Portal → Activities → URL Mappings pon esa dirección en la raíz «/» (cambia en cada inicio).")
+        elif info["tunnel"] == "error":
+            lines.append(f"✗ Túnel: {info['detail']}")
+        else:
+            lines.append(f"… {info['detail'] or 'Preparando el túnel'}")
+        if not info["secret_set"]:
+            lines.append("⚠ Falta el Client Secret: nadie podrá entrar desde Discord.")
+        users = info["users"]
+        if users:
+            lines.append(f"{len(users)} conexión(es): " + " · ".join(
+                f"{u['name']} {round(u['rtt_ms'])} ms" if u["rtt_ms"] is not None else u["name"] for u in users[:8]))
+        else:
+            lines.append("Nadie conectado todavía.")
+        color = RED if info["tunnel"] == "error" else GREEN if info["tunnel"] == "up" and info["secret_set"] else AMBER
+        self.activity_status.configure(text="\n".join(lines), text_color=color)
+
     # ---- startup ---------------------------------------------------------------------
     def _build_startup(self, row: int) -> None:
         box = self._section("Inicio", row)
@@ -579,6 +663,7 @@ class ConfigPage(ctk.CTkFrame):
             self._show_offline_event()
         self._refresh_helper_status()
         self._refresh_webhooks()
+        self._refresh_activity()
 
     def collect(self) -> Settings:
         """Settings as currently shown (helper bots and event names are kept up to date by the app)."""

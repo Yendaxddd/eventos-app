@@ -35,6 +35,8 @@ class FakeDiscord:
         self.reaction_jitter = reaction_jitter   # extra random network delay on reactions, like a real connection
         self._rng = random.Random(7)
         self.webhook_limit, self.webhook_window, self.max_webhooks = webhook_limit, webhook_window, max_webhooks
+        self.bearer: dict[str, dict] = {}                 # OAuth access token -> user (for the Activity)
+        self.codes: dict[str, str] = {}                   # OAuth code -> access token
         self.can_manage_webhooks: set[str] = set()        # tokens that may create / list webhooks
         self.webhooks: dict[int, dict] = {}                # id -> {id, token, channel, name, creator(user id)}
         self.webhook_requests: list[dict] = []             # every execute attempt, including 429s
@@ -79,6 +81,7 @@ class FakeDiscord:
     async def start(self) -> None:
         app = web.Application()
         app.router.add_get("/api/v10/users/@me", self._me)
+        app.router.add_post("/api/v10/oauth2/token", self._oauth_token)
         app.router.add_get("/api/v10/oauth2/applications/@me", self._application)
         app.router.add_get("/api/v10/gateway", self._gateway)
         app.router.add_put("/api/v10/channels/{cid}/messages/{mid}/reactions/{emoji}/@me", self._react)
@@ -121,7 +124,25 @@ class FakeDiscord:
         return [m for m in self.messages.values() if m["author_token"] == token]
 
     # ---- endpoints ------------------------------------------------------------------
+    def add_oauth_user(self, code: str, user_id: int, name: str = "player") -> str:
+        """An Activity player: trading `code` gives an access token that belongs to `user_id`."""
+        token = f"bearer-{code}"
+        self.codes[code] = token
+        self.bearer[token] = {"id": str(user_id), "username": name, "global_name": name.title(), "avatar": None}
+        return token
+
+    async def _oauth_token(self, request: web.Request) -> web.Response:
+        form = await request.post()
+        token = self.codes.get(str(form.get("code", "")))
+        if token is None or not form.get("client_secret"):
+            return _json({"error": "invalid_grant", "error_description": "Invalid code"}, status=400)
+        return _json({"access_token": token, "token_type": "Bearer", "expires_in": 604800, "scope": "identify"})
+
     async def _me(self, request: web.Request) -> web.Response:
+        auth = request.headers.get("Authorization", "")
+        if auth.startswith("Bearer "):
+            user = self.bearer.get(auth.removeprefix("Bearer ").strip())
+            return _json(user) if user else self._error(401, 0, "401: Unauthorized")
         token = self._token(request)
         if token is None:
             return self._error(401, 0, "401: Unauthorized")

@@ -1,0 +1,15 @@
+{
+  "name": "eventos-activity-client",
+  "version": "0.5.0",
+  "private": true,
+  "description": "Cliente web de la Actividad de Discord de Eventos App",
+  "scripts": {
+    "build": "node build.mjs"
+  },
+  "dependencies": {
+    "@discord/embedded-app-sdk": "2.5.0"
+  },
+  "devDependencies": {
+    "esbuild": "0.28.2"
+  }
+}

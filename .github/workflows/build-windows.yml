@@ -44,6 +44,18 @@ jobs:
             discord-bot/requirements.txt
             discord-bot/requirements-desktop.txt
 
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: discord-bot/activity_client/package-lock.json
+
+      - name: Build the Discord Activity web client
+        working-directory: discord-bot/activity_client
+        run: |
+          npm ci --no-audit --no-fund
+          npm run build
+
       - name: Read the app version (and check it matches the tag, if there is one)
         id: version
         working-directory: discord-bot

@@ -13,6 +13,22 @@ python -m pip install --upgrade pip
 python -m pip install -r requirements.txt -r requirements-desktop.txt
 if ($LASTEXITCODE -ne 0) { throw "pip install failed" }
 
+# The Discord Activity's web client needs Node 18+ once (CI builds it in its own step before this script).
+$web = Join-Path $root "eventos_app\activity\web\app.js"
+if (-not (Test-Path $web)) {
+    if (-not (Get-Command npm -ErrorAction SilentlyContinue)) {
+        throw "The Activity client is not built and Node.js (npm) was not found. Install Node 18+ from https://nodejs.org and run again."
+    }
+    Write-Host "==> Building the Activity web client"
+    Push-Location (Join-Path $root "activity_client")
+    try {
+        npm ci --no-audit --no-fund
+        if ($LASTEXITCODE -ne 0) { throw "npm ci failed" }
+        npm run build
+        if ($LASTEXITCODE -ne 0) { throw "npm run build failed" }
+    } finally { Pop-Location }
+}
+
 Write-Host "==> Building EventosApp.exe"
 python -m PyInstaller packaging\EventosApp.spec --noconfirm --clean
 if ($LASTEXITCODE -ne 0) { throw "PyInstaller failed" }

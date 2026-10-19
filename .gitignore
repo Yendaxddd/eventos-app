@@ -77,3 +77,7 @@ settings.json.bad
 settings.json.tmp
 discord-bot/data/webhook_lanes.json
 discord-bot/data/sender_owners.json
+
+# Activity client: build output (made by `npm run build` in discord-bot/activity_client) and dependencies
+discord-bot/eventos_app/activity/web/
+discord-bot/activity_client/node_modules/

@@ -39,6 +39,35 @@ def _setup_logging() -> None:
     sys.excepthook = excepthook
 
 
+def activity_check() -> dict:
+    """The Activity inside the build: the web client is bundled and the local server really serves it."""
+    import asyncio
+    import urllib.request
+
+    from . import activity
+
+    web = paths.resource_path("eventos_app", "activity", "web")
+    result = {"activity_client_bundled": all((web / name).is_file() for name in ("index.html", "app.js", "style.css"))}
+
+    async def serve() -> bool:
+        server = activity.ActivityServer(activity.Hub(), auth=activity.DiscordAuth(client_id=1, client_secret=""),
+                                         authorize=None, web_dir=web, client_id=1, port=0)
+        port = await server.start()
+        try:
+            def fetch() -> tuple[bool, bool]:
+                base = f"http://127.0.0.1:{port}"
+                with urllib.request.urlopen(f"{base}/healthz", timeout=5) as health, \
+                        urllib.request.urlopen(f"{base}/app.js", timeout=5) as script:
+                    return b'"ok"' in health.read(), len(script.read()) > 10_000
+            health, script = await asyncio.get_running_loop().run_in_executor(None, fetch)
+            return health and script
+        finally:
+            await server.stop()
+
+    result["activity_server"] = asyncio.run(serve())
+    return result
+
+
 def _smoke_test(out_path: str | None) -> int:
     """Open the window, import the whole bot and try a (bad-token) login, then exit.
 
@@ -71,6 +100,7 @@ def _smoke_test(out_path: str | None) -> int:
         checks["picker_popup"] = [row[1] for row in picker._visible] == ["@Staff"]
         picker.close()
         app.update()
+        checks.update(activity_check())
 
         # Starts the bot with an invalid token: it must get as far as talking to Discord
         # and be refused (or fail to connect), not crash while loading its own code.

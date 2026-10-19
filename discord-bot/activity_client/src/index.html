@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Eventos</title>
+  <link rel="stylesheet" href="./style.css">
+</head>
+<body data-state="starting">
+  <header>
+    <div class="title"><strong id="channel">Evento</strong><span id="status">Conectando…</span></div>
+    <div class="sync" id="sync" title="Ida y vuelta al servidor y desfase del reloj">—</div>
+  </header>
+  <main>
+    <section id="board" aria-label="Tablero">
+      <h2>Conectados</h2>
+      <ul id="users"></ul>
+      <p class="hint" id="hint"></p>
+    </section>
+    <section id="chat" aria-label="Canal del evento">
+      <div id="feed" role="log" aria-live="polite"></div>
+      <div id="composer">
+        <input id="input" type="text" placeholder="Solo lectura por ahora: escribe en el chat de Discord" disabled>
+      </div>
+    </section>
+  </main>
+  <div id="banner" hidden></div>
+  <script src="./app.js"></script>
+</body>
+</html>

@@ -38,6 +38,11 @@ if sys.platform == "win32":
 # customtkinter ships theme .json files and fonts that must travel with the app
 datas = collect_data_files("customtkinter")
 datas += [(str(ROOT / "eventos_app" / "resources"), "eventos_app/resources")]
+# the Discord Activity's web client (built by `npm run build` in activity_client/; the build fails without it)
+_web = ROOT / "eventos_app" / "activity" / "web"
+if not (_web / "app.js").is_file():
+    raise SystemExit("The Activity client is not built: run `npm ci && npm run build` in discord-bot/activity_client first.")
+datas += [(str(_web), "eventos_app/activity/web")]
 
 a = Analysis(
     [str(ROOT / "run_app.py")],

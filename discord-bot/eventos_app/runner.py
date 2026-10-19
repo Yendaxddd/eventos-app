@@ -12,12 +12,13 @@ import logging
 import os
 import threading
 import time
+import types
 from enum import Enum
 from typing import Awaitable, Callable
 
 import discord
 
-from . import benchmark, console_bridge, diagnostics, multibot, paths, webhooks
+from . import activity, benchmark, console_bridge, diagnostics, multibot, paths, webhooks
 from .settings import Settings
 
 log = logging.getLogger("eventos_app")
@@ -71,6 +72,8 @@ class BotRunner:
         self._pool: multibot.SenderPool | None = None
         self._bench_stop: asyncio.Event | None = None
         self._last_429: dict[tuple[str, str], float] = {}
+        self._activity = None                      # the running Discord Activity (see eventos_app/activity)
+        self._activity_task: asyncio.Task | None = None
         self._helper_errors: dict[str, str] = {}  # helper token -> why it could not be added
         self._base_interval = 0.15
         self._state = State.STOPPED
@@ -246,6 +249,8 @@ class BotRunner:
             self._pool.sticky_channels = {app.hp_bar_thread_id} if app.hp_bar_thread_id else set()
             await self._pool.check_access(channel_id)
             await self._sync_lanes()          # a new channel: every bot registers its one webhook there
+            if self._activity is not None:
+                await self._activity.bridge.announce_channel()
         return {"ok": True, "thread": result["thread"].name, "created": result["created"]}
 
     def apply_event(self, channel_id: int, player_role_id: int | None = None,
@@ -396,6 +401,69 @@ class BotRunner:
                 f"[green]✓ {online} bot{'s' if online != 1 else ''} auxiliar{'es' if online != 1 else ''} "
                 f"compartiendo el envío de mensajes[/green]")
         await self._sync_lanes()
+        await self._start_activity(settings)
+
+    # ---- Discord Activity (local server + free tunnel) --------------------------------
+    async def _start_activity(self, settings: Settings) -> None:
+        if not settings.activity_enabled or self._activity is not None:
+            return
+        app, out = self._app, console_bridge.console
+        client_id = app.bot.application_id or app.bot.user.id
+        hub = activity.Hub()
+        auth = activity.DiscordAuth(client_id=client_id, client_secret=settings.activity_client_secret.strip())
+        bridge = activity.ActivityBridge(hub, app)
+        server = activity.ActivityServer(hub, auth=auth, authorize=bridge.authorize, client_id=client_id,
+                                         web_dir=paths.resource_path("eventos_app", "activity", "web"))
+        try:
+            port = await server.start()
+        except OSError as exc:
+            out.print(f"[yellow]⚠ No se pudo abrir el servidor de la Actividad: {exc}[/yellow]")
+            await auth.close()
+            return
+        bridge.start()
+        tunnel = activity.Tunnel(port, tools_dir=paths.app_home() / "tools")
+        self._activity = types.SimpleNamespace(hub=hub, auth=auth, bridge=bridge, server=server, tunnel=tunnel)
+        out.print(f"[green]✓ Servidor de la Actividad en el puerto {port}. Abriendo el túnel…[/green]")
+        self._activity_task = asyncio.get_running_loop().create_task(self._open_tunnel())
+
+    async def _open_tunnel(self) -> dict:
+        a, out = self._activity, console_bridge.console
+        if a is None:
+            return {"ok": False, "error": "La Actividad no está activada."}
+        try:
+            url = await a.tunnel.start()
+        except activity.tunnel.TunnelError as exc:
+            out.print(f"[yellow]⚠ Túnel de la Actividad: {exc}[/yellow]")
+            return {"ok": False, "error": str(exc)}
+        out.print(f"[green]✓ Actividad lista. Pega esta dirección en el Developer Portal (Activities → URL Mappings → raíz «/»): "
+                  f"{url.removeprefix('https://')}[/green]")
+        return {"ok": True, "url": url}
+
+    async def _stop_activity(self) -> None:
+        a, self._activity = self._activity, None
+        task, self._activity_task = self._activity_task, None
+        if task is not None:
+            task.cancel()
+        if a is None:
+            return
+        for step in (a.tunnel.stop, a.server.stop, a.auth.close):
+            try:
+                await step()
+            except Exception:  # noqa: BLE001
+                log.exception("could not stop part of the Activity")
+        a.bridge.stop()
+
+    def activity_info(self) -> dict:
+        """What the window shows about the Activity (read from the UI thread)."""
+        a = self._activity
+        if a is None:
+            return {"running": False}
+        return {"running": True, "port": a.server.port, "tunnel": a.tunnel.state, "detail": a.tunnel.detail,
+                "url": a.tunnel.url, "users": a.hub.stats(), "secret_set": bool(a.auth.client_secret)}
+
+    def reopen_tunnel(self) -> concurrent.futures.Future:
+        """A fresh tunnel (and a fresh address) without restarting the bot."""
+        return self.submit(self._open_tunnel)
 
     # ---- webhook lanes (one webhook per bot in the event channel) ---------------------
     async def _sync_lanes(self, enabled: bool | None = None) -> dict:
@@ -491,6 +559,7 @@ class BotRunner:
             async with bot:
                 await bot.start(settings.discord_token.strip())
         finally:
+            await self._stop_activity()
             if self._pool is not None:
                 await self._pool.close()
             if not bot.is_closed():
