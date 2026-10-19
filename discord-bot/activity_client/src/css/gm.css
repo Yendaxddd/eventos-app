@@ -109,3 +109,22 @@
   .gm-sound { grid-template-columns: 1fr 1fr; }
   .gm-sound > input.input { grid-column: 1 / -1; }
 }
+
+/* ---- cinematics ---- */
+.cine-item { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding: 10px 0; border-bottom: 1px solid var(--line-soft); }
+.cine-item .info { flex: 1 1 200px; display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.cine-item.is-running { background: color-mix(in srgb, var(--ok) 8%, transparent); }
+.cine-step { padding: var(--sp-3); border-radius: var(--r-md); background: var(--surface); border: 1px solid var(--line-soft); border-left: 3px solid var(--step, var(--primary-2)); display: flex; flex-direction: column; gap: 10px; }
+.cine-step.t-text { --step: #7dd3fc; } .cine-step.t-audio { --step: #34d399; } .cine-step.t-image { --step: #fbbf24; }
+.cine-step.t-scene { --step: #c084fc; } .cine-step.t-effect { --step: #fb7185; } .cine-step.t-post { --step: #94a3b8; }
+.cine-step-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.cine-step-icon { color: var(--step); display: inline-flex; }
+.cine-at { display: inline-flex; align-items: center; gap: 6px; color: var(--text-dim); font-size: .8125rem; }
+.cine-thumb { width: 44px; height: 44px; border-radius: 8px; object-fit: cover; background: var(--bg-2); flex: none; }
+.cine-thumb.empty { display: inline-grid; place-items: center; color: var(--text-faint); border: 1px dashed var(--line); }
+.cine-timeline { padding: 6px 2px 0; }
+.cine-track { position: relative; height: 22px; border-radius: 6px; background: var(--surface); border: 1px solid var(--line-soft); overflow: hidden; }
+.cine-mark { position: absolute; top: 3px; bottom: 3px; min-width: 6px; border-radius: 3px; background: var(--step, var(--primary-2)); opacity: .85; }
+.cine-mark.t-text { --step: #7dd3fc; } .cine-mark.t-audio { --step: #34d399; } .cine-mark.t-image { --step: #fbbf24; }
+.cine-mark.t-scene { --step: #c084fc; } .cine-mark.t-effect { --step: #fb7185; } .cine-mark.t-post { --step: #94a3b8; }
+.cine-scale { display: flex; justify-content: space-between; font-size: .6875rem; margin-top: 2px; }

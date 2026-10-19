@@ -11,14 +11,16 @@ from pathlib import Path
 log = logging.getLogger("eventos_app.activity")
 
 DEFAULTS: dict = {
-    "theme": "dark", "palette": "default", "textScale": 100, "density": "comfortable", "motion": "full",
+    "theme": "dark", "accent": "violet", "corners": "round", "bg": "plain", "palette": "default", "textScale": 100, "density": "comfortable", "motion": "full",
     "buttonScale": 100, "buttonPlacement": "random", "keepEvade": False, "queueMode": False,
     "sound": True, "volume": 60, "haptics": True, "audio": True, "musicVolume": 70, "sfxVolume": 85,
+    "cinema": True,
     "showAvatars": True, "showMedia": True, "showTimestamps": True, "showPlayers": True, "compactHud": False,
     "messageLimit": 150, "tutorialDone": False,
 }
 CHOICES = {
-    "theme": ("dark", "oled", "contrast"), "palette": ("default", "cb"), "density": ("compact", "comfortable", "spacious"),
+    "theme": ("dark", "oled", "contrast", "midnight", "ember", "forest", "rose", "sepia"),
+    "accent": ("violet", "blue", "cyan", "green", "amber", "pink", "red"), "corners": ("round", "sharp", "soft"), "bg": ("plain", "grid", "aurora"), "palette": ("default", "cb"), "density": ("compact", "comfortable", "spacious"),
     "motion": ("full", "reduced"), "buttonPlacement": ("random", "bottom", "left", "right"),
 }
 RANGES = {"textScale": (85, 140), "buttonScale": (70, 160), "volume": (0, 100), "musicVolume": (0, 100), "sfxVolume": (0, 100), "messageLimit": (50, 400)}

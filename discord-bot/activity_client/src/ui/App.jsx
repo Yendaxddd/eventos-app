@@ -8,6 +8,7 @@ import { Composer } from "./Composer.jsx";
 import { BossCard, MeCard, MiniHud, PlayersPanel, RightPanel } from "./Hud.jsx";
 import { Actions } from "./Actions.jsx";
 import { QteLayer } from "./QteLayer.jsx";
+import { CinemaLayer } from "./CinemaLayer.jsx";
 import { MenuPage } from "../views/Menu.jsx";
 import { SettingsPage } from "../views/Settings.jsx";
 import { HelpPage } from "../views/Help.jsx";
@@ -81,7 +82,7 @@ function PipView() {
 export function App() {
   const layout = useLayout();
   if (conn.value.state !== "connected") return <Splash />;
-  if (pip.value) return <><PipView /><QteLayer /><Toasts /><FxLayer /></>;
+  if (pip.value) return <><PipView /><CinemaLayer /><QteLayer /><Toasts /><FxLayer /></>;
   const v = view.value;
   return (
     <>
@@ -90,6 +91,7 @@ export function App() {
         <Banner />
         {v === "event" ? <EventView layout={layout} /> : <Pages layout={layout} />}
       </div>
+      <CinemaLayer />
       <QteLayer />
       {sheet.value === "players" && (
         <Sheet title="Jugadores y tú" onClose={() => { sheet.value = null; }}>

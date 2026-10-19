@@ -387,3 +387,22 @@ def test_every_tab_fits_a_phone_without_sideways_scrolling():
             assert overflow["tab"][0] >= -2 and overflow["tab"][1] <= overflow["tab"][2] + 2, (tab, overflow)       # the chosen tab is in view
         assert page.errors == []
     run(scenario)
+
+
+def test_every_theme_accent_and_corner_style_really_changes_how_the_page_looks():
+    async def scenario(rig, browser, url, me):
+        page = await open_page(browser, url)
+        css = "(n) => getComputedStyle(document.documentElement).getPropertyValue(n).trim()"
+        seen = {}
+        for theme in ("dark", "oled", "contrast", "midnight", "ember", "forest", "rose", "sepia"):
+            await page.evaluate("(t) => window.__eventos.setPrefs({ theme: t })", theme)
+            await page.wait_for_function("(t) => document.documentElement.dataset.theme === t", arg=theme)
+            seen[theme] = await page.evaluate(css, "--surface")
+        assert len(set(seen.values())) == len(seen), seen                                  # no two themes look the same
+        await page.evaluate("window.__eventos.setPrefs({ accent: 'amber', corners: 'sharp', bg: 'grid' })")
+        await page.wait_for_function("document.documentElement.dataset.accent === 'amber'")
+        assert await page.evaluate(css, "--primary") == "#f59e0b"
+        assert await page.evaluate(css, "--r-md") == "5px"
+        assert await page.evaluate("getComputedStyle(document.body, '::before').position") == "fixed"
+        assert page.errors == []
+    run(scenario)

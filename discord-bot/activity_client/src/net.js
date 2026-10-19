@@ -15,6 +15,7 @@ import {
 import { clearPanelCache } from "./panel/cache.js";
 import { describeNotice } from "./notices.js";
 import { onAudioFrame, onWelcomeAudio } from "./audio.js";
+import { onCineFrame, startCine, stopCine } from "./cine.js";
 
 function showNotice(kind, data) {
   const notice = describeNotice(kind, data);
@@ -67,6 +68,20 @@ export async function uploadImage(file) {
   try { data = await reply.json(); } catch { /* the answer was not JSON */ }
   if (!reply.ok) throw new Error(data.error || "No se pudo subir la imagen.");
   return data.url;
+}
+
+// A picture for a cinematic (game masters only): it stays on the host's PC and the answer is its path («files/images/…»).
+export async function uploadCinemaImage(file) {
+  const headers = { "Content-Type": file.type || "application/octet-stream", "X-Filename": encodeURIComponent(file.name || "imagen") };
+  if (accessToken) headers.Authorization = `Bearer ${accessToken}`;
+  else if (devName) { headers["X-Dev"] = devName; if (devGm) headers["X-Gm"] = "1"; }
+  let reply;
+  try { reply = await fetch(`${base}/api/image`, { method: "POST", headers, body: file }); }
+  catch { throw new Error("No se pudo enviar la imagen. Revisa tu conexión."); }
+  let data = {};
+  try { data = await reply.json(); } catch { /* the answer was not JSON */ }
+  if (!reply.ok) throw new Error(data.error || "No se pudo subir la imagen.");
+  return data.path;
 }
 
 // A sound for the library (game masters only; the server checks the role again). `onProgress` gets 0–1 while it goes up.
@@ -177,6 +192,7 @@ function onFrame(frame, arrival) {
         if (saved && (frame.characters || []).includes(saved)) activeAs.value = saved;
         rules.value = frame.rules || null;
         onWelcomeAudio(frame.audio, arrival);
+        if (frame.cine) startCine(frame.cine, { arrival }); else stopCine();
         comp.value = { ...comp.value, ...(frame.comp || {}) };
         calib.value = frame.calib || null;
         if (frame.prefs) setPrefsFromServer(frame.prefs);
@@ -229,6 +245,7 @@ function onFrame(frame, arrival) {
     case "toast": toast(frame.text, frame.kind || "info"); break;
     case "notice": showNotice(frame.kind, frame.data); break;
     case "audio": onAudioFrame(frame, arrival); break;
+    case "cine": onCineFrame(frame, arrival); break;
     case "slow": toast("Vas demasiado rápido: espera un momento.", "warn", 2000); break;
     case "rpc_ok": case "rpc_err": {
       const job = pending.get(frame.id);

@@ -27,7 +27,16 @@ export function SettingsPage() {
     <Page title="Ajustes" icon={Palette} actions={<button class="btn btn-sm btn-ghost" type="button" onClick={resetPrefs}><RotateCcw size={14} /> Restablecer</button>}>
       <Section title="Pantalla">
         <Setting title="Tema" hint="Muy oscuro ahorra batería en pantallas OLED; alto contraste ayuda si cuesta leer." stack>
-          <Segmented label="Tema" value={p.theme} onChange={(v) => setPrefs({ theme: v })} options={[["dark", "Oscuro"], ["oled", "Muy oscuro"], ["contrast", "Alto contraste"]]} />
+          <Segmented label="Tema" value={p.theme} onChange={(v) => setPrefs({ theme: v })} options={[["dark", "Oscuro"], ["oled", "Muy oscuro"], ["contrast", "Alto contraste"], ["midnight", "Medianoche"], ["ember", "Brasa"], ["forest", "Bosque"], ["rose", "Rosa"], ["sepia", "Sepia"]]} />
+        </Setting>
+        <Setting title="Color de acento" hint="El color de los botones y los resaltados." stack>
+          <Segmented label="Acento" value={p.accent} onChange={(v) => setPrefs({ accent: v })} options={[["violet", "Violeta"], ["blue", "Azul"], ["cyan", "Cian"], ["green", "Verde"], ["amber", "Ámbar"], ["pink", "Rosa"], ["red", "Rojo"]]} />
+        </Setting>
+        <Setting title="Esquinas" hint="Qué tan redondeados son los botones y las tarjetas." stack>
+          <Segmented label="Esquinas" value={p.corners} onChange={(v) => setPrefs({ corners: v })} options={[["sharp", "Rectas"], ["round", "Redondas"], ["soft", "Muy redondas"]]} />
+        </Setting>
+        <Setting title="Fondo" hint="Un detalle detrás de la pantalla." stack>
+          <Segmented label="Fondo" value={p.bg} onChange={(v) => setPrefs({ bg: v })} options={[["plain", "Liso"], ["grid", "Cuadrícula"], ["aurora", "Aurora"]]} />
         </Setting>
         <Setting title="Colores del juego" hint="La opción para daltonismo cambia verde y amarillo por azul y naranja." stack>
           <Segmented label="Paleta" value={p.palette} onChange={(v) => setPrefs({ palette: v })} options={[["default", "Estándar"], ["cb", "Daltonismo"]]} />
@@ -63,6 +72,9 @@ export function SettingsPage() {
       <Section title="Sonido y vibración">
         <Setting title="Música y sonidos del evento" hint="Lo que pone el equipo de GM: música, avisos de Black Flash, dominios, el jefe que cae…">
           <Switch label="Música y sonidos del evento" checked={p.audio} onChange={(v) => setPrefs({ audio: v })} />
+        </Setting>
+        <Setting title="Mostrar las cinemáticas" hint="Las escenas con texto, imágenes y sonido que pone el equipo de GM. Apagadas, solo oyes su sonido.">
+          <Switch label="Mostrar las cinemáticas" checked={p.cinema} onChange={(v) => setPrefs({ cinema: v })} />
         </Setting>
         <Setting title="Volumen de la música" stack>
           <Range label="Volumen de la música" min={0} max={100} step={5} value={p.musicVolume} disabled={!p.audio} onChange={(v) => setPrefs({ musicVolume: v })} format={(v) => `${v} %`} />

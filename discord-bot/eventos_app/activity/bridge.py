@@ -23,6 +23,8 @@ from .media import MediaStore
 from .tupper_rpc import TupperRpc
 from .audio import AudioDirector, AudioLibrary
 from .audio_rpc import AudioRpc
+from .cinema import CinemaBook, CinemaDirector
+from .cinema_rpc import CinemaRpc
 from .latency import CAP_MS, LatencyBook, compensation
 from .prefs import PrefsStore
 from .qte import COMMANDS, TIMED, ActivityInput, describe, response_seconds
@@ -109,11 +111,11 @@ def serialize_message(message: Any, own_webhooks: set[int] | frozenset[int] = fr
     }
 
 
-class ActivityBridge(PanelRpc, GmRpc, TupperRpc, AudioRpc):
+class ActivityBridge(PanelRpc, GmRpc, TupperRpc, AudioRpc, CinemaRpc):
     def __init__(self, hub: Hub, app: Any, pool: Callable[[], Any] | None = None, avatar_file: Path | None = None,
                  prefs_file: Path | None = None, latency_file: Path | None = None, data_dir: Path | None = None,
                  gm_log_file: Path | None = None, values_file: Path | None = None, files: MediaStore | None = None,
-                 char_images_file: Path | None = None, audio_file: Path | None = None) -> None:
+                 char_images_file: Path | None = None, audio_file: Path | None = None, cinema_file: Path | None = None) -> None:
         self.hub, self.app = hub, app        # app: the AdvancedQTEBot instance
         self.pool = pool or (lambda: None)   # the SenderPool, for webhook sends
         self._listeners: list[tuple[Any, str]] = []
@@ -128,6 +130,7 @@ class ActivityBridge(PanelRpc, GmRpc, TupperRpc, AudioRpc):
         self._init_panel()                           # the player dashboards (panel_rpc.py)
         self._init_tupper(files, char_images_file)   # the pictures kept on this PC (tupper_rpc.py)
         self.audio = AudioDirector(hub, AudioLibrary(files, audio_file))      # the sounds, the music and the cues (audio.py)
+        self.cinema = CinemaDirector(hub, CinemaBook(cinema_file, self.audio.library), post=self._cinema_post)     # the scripts and their playing (cinema.py)
         self.gm = GmPanel(app, GmLog(gm_log_file), data_dir, values_file)       # the game-master panel (gm/, gm_rpc.py)
 
     # ---- wiring ---------------------------------------------------------------------------------
@@ -261,6 +264,7 @@ class ActivityBridge(PanelRpc, GmRpc, TupperRpc, AudioRpc):
     def on_event(self, event: str, data: dict | None = None) -> None:
         """The game says something happened (a Black Flash, the boss falls...): the cues bound to it play."""
         self._spawn(self.audio.dispatch(event, data or {}))
+        self._spawn(self.cinema.on_event(event, data or {}))
 
     # ---- notifications: what an answer led to, told to the player inside their Activity ----------------
     def has_player(self, user_id) -> bool:
@@ -421,7 +425,8 @@ class ActivityBridge(PanelRpc, GmRpc, TupperRpc, AudioRpc):
         # prefs is None when the server knows nothing about this person yet: the client then keeps (and sends) the ones it has
         return {"perms": {"gm": await self.is_gm(conn)}, "prefs": self.prefs.get(conn.user_id) if self.prefs.has(conn.user_id) else None,
                 "calib": self.latency.get(conn.user_id),
-                "comp": comp, "rules": self.rules(), "charAvatars": self.char_avatars(conn.user_id), "audio": self.audio.welcome()}
+                "comp": comp, "rules": self.rules(), "charAvatars": self.char_avatars(conn.user_id), "audio": self.audio.welcome(),
+                "cine": self.cinema.current()}
 
     async def save_prefs(self, conn: Conn, raw) -> dict:
         return self.prefs.set(conn.user_id, raw)
