@@ -19,7 +19,9 @@ export function median(values) {
 
 // Discord's own pictures come through the app's server (/media), so the Developer Portal needs no extra URL Mappings.
 export const MEDIA_HOST = /^https:\/\/(cdn\.discordapp\.com|media\.discordapp\.net|images-ext-\d+\.discordapp\.net)\//;
+// Files kept on the host's PC (an imported character's picture, a sound) are named «files/<kind>/<name>» and come from the Activity itself.
 export function cdn(url) {
+  if (url && /^files\/(images|audio)\/[0-9a-f]{24}\.[a-z0-9]{2,4}$/.test(url)) return `${base}/${url}`;
   return url && MEDIA_HOST.test(url) ? `${base}/media?u=${encodeURIComponent(url)}` : url;
 }
 

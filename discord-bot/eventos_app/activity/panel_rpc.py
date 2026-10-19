@@ -14,6 +14,7 @@ import time
 import discord
 
 from .hub import Conn, RpcError
+from .media import sniff_image  # noqa: F401 - the pictures' check lives in media.py; kept importable from here
 from .panel import LEADERBOARD_ROWS, PlayerPanel
 
 log = logging.getLogger("eventos_app.activity")
@@ -24,20 +25,6 @@ UPLOAD_MAX = 8 * 1024 * 1024
 UPLOAD_PER_MINUTE = 6
 STORAGE_NOTE = "📁 (Almacén de imágenes de la Actividad: ignorar)"
 _STORAGE_MARKS = ("📁 (Image storage", "📁 (Almacén de imágenes")
-
-_SIGNATURES = ((b"\x89PNG\r\n\x1a\n", "image/png", ".png"), (b"\xff\xd8\xff", "image/jpeg", ".jpg"),
-               (b"GIF87a", "image/gif", ".gif"), (b"GIF89a", "image/gif", ".gif"))
-
-
-def sniff_image(data: bytes) -> tuple[str, str] | None:
-    """(content type, extension) of a PNG, JPEG, GIF or WebP by its first bytes, whatever it is called; None for anything else."""
-    for magic, kind, ext in _SIGNATURES:
-        if data.startswith(magic):
-            return kind, ext
-    if data[:4] == b"RIFF" and data[8:12] == b"WEBP":
-        return "image/webp", ".webp"
-    return None
-
 
 def is_storage_message(message) -> bool:
     """The messages the bot (and the Activity) post only to get a lasting address for a picture."""

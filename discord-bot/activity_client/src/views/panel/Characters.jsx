@@ -1,11 +1,12 @@
 import { useRef, useState } from "preact/hooks";
-import { Drama, Pencil, Plus, Trash2, Upload, UserPlus, Zap } from "lucide-preact";
+import { Download, Drama, Pencil, Plus, Trash2, Upload, UserPlus, Zap } from "lucide-preact";
 import { charAvatars, toast } from "../../state.js";
 import { uploadImage } from "../../net.js";
 import { Avatar } from "../../ui/Avatar.jsx";
 import { Modal } from "../../ui/Overlays.jsx";
 import { Block, ConfirmButton, Empty, Field, Pill } from "../../ui/Common.jsx";
 import { act, usePanel } from "../../panel/data.js";
+import { TupperImport } from "./TupperImport.jsx";
 import { EFFECT_KINDS, POWER_TYPE, buildEffect, duration, effectLabel, parseEffect } from "../../panel/format.js";
 import { cdn, cx } from "../../util.js";
 
@@ -159,6 +160,7 @@ function Character({ c, types, replace }) {
 function Register({ d, replace }) {
   const [name, setName] = useState("");
   const [busy, setBusy] = useState(false);
+  const [importing, setImporting] = useState(false);
   const submit = async (value) => {
     const text = String(value === undefined ? name : value).trim();
     if (!text) return;
@@ -174,6 +176,10 @@ function Register({ d, replace }) {
         <input class="input" value={name} maxLength={80} placeholder="Nombre exacto, tal como sale en Tupperbox" onInput={(e) => setName(e.currentTarget.value)} data-testid="register-name" aria-label="Nombre del personaje" />
         <button class="btn btn-primary" type="submit" disabled={busy || !name.trim()} data-testid="register-submit"><Plus size={16} /> Registrar</button>
       </form>
+      <div style={{ marginTop: "var(--sp-2)" }}>
+        <button class="btn btn-sm" type="button" onClick={() => setImporting(true)} data-testid="tupper-open"><Download size={14} /> Importar de Tupperbox</button>
+      </div>
+      {importing && <TupperImport d={d} replace={replace} onClose={() => setImporting(false)} />}
       <p class="faint" style={{ fontSize: ".75rem", marginTop: "var(--sp-2)" }}>Debe escribirse igual que en Tupperbox (con sus mayúsculas, emojis y símbolos). Solo puedes registrar hasta {d.max} personajes.</p>
       {d.suggestions.length > 0 && (
         <div class="suggest" data-testid="suggestions">

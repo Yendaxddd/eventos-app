@@ -215,6 +215,58 @@ def test_characters_can_be_registered_given_powers_edited_and_dropped_and_every_
     run(scenario)
 
 
+def test_characters_come_in_from_a_tupperbox_export_with_their_pictures_kept_on_this_pc(tmp_path):
+    import json
+
+    from aiohttp import web
+    from eventos_app.activity import media
+
+    async def scenario(rig, browser, url, me):
+        async def avatar(request):
+            return web.Response(body=PIXEL, content_type="image/png")                       # a real picture, so the page can draw it
+
+        pictures = web.Application()
+        pictures.router.add_get("/kuro.png", avatar)
+        runner = web.AppRunner(pictures)
+        await runner.setup()
+        await web.TCPSite(runner, "127.0.0.1", 0).start()
+        origin = f"http://127.0.0.1:{runner.addresses[0][1]}"
+        try:
+            store = media.MediaStore(tmp_path / "media")
+            rig.server.files = rig.bridge.files = store
+            rig.bridge.images_file, rig.bridge.fetch_allow_private = tmp_path / "images.json", True
+            page = await open_page(browser, url)
+            await panel_at(page, "characters")
+            await page.click("[data-testid=tupper-open]")
+            export = {"tuppers": [{"name": "Zed", "avatar_url": origin + "/kuro.png"}, {"name": "Kuro", "avatar_url": None}, {"name": "Lia", "avatar_url": origin + "/kuro.png"}]}
+            await page.set_input_files("[data-testid=tupper-file]", files=[{"name": "no.json", "mimeType": "application/json", "buffer": b"esto no es json"}])
+            assert "no es JSON" in await page.locator("[data-testid=tupper-error]").inner_text()
+            await page.set_input_files("[data-testid=tupper-file]", files=[{"name": "tuppers.json", "mimeType": "application/json", "buffer": json.dumps(export).encode()}])
+            await page.wait_for_selector("[data-testid=tupper-list]")
+            assert await page.locator("[data-testid=tupper-Kuro]").inner_text() != ""
+            assert "ya es tuyo" in await page.locator("[data-testid=tupper-Kuro]").inner_text()      # Kuro is already registered to this player
+            await page.locator("[data-testid=tupper-Lia] input").uncheck()
+            await page.click("[data-testid=tupper-go]")
+            await page.wait_for_selector("[data-testid=tupper-summary]")
+            summary = await page.locator("[data-testid=tupper-summary]").inner_text()
+            results = await page.locator("[data-testid=tupper-results]").inner_text()
+            await page.click("[data-testid=tupper-close]")
+            await page.wait_for_selector("[data-testid=char-Zed]")
+            assert await page.locator("[data-testid=char-Lia]").count() == 0                  # not chosen: not registered
+            picture = await page.locator("[data-testid=char-Zed] img").first.get_attribute("src")
+            loaded = await page.evaluate("(src) => fetch(src).then((r) => [r.status, r.headers.get('content-type')])", picture)
+            assert page.errors == []
+            return summary, results, picture, loaded, store.usage(media.IMAGES), rig.panel_app.character_registry
+
+        finally:
+            await runner.cleanup()
+
+    summary, results, picture, loaded, usage, registry = run(scenario)
+    assert summary.startswith("2 personajes listos") and "Zed" in results and "imagen guardada" in results and "sin imagen" in results
+    assert picture.startswith("/files/images/") and loaded == [200, "image/png"] and usage[0] == 1
+    assert "Zed" in registry and "Lia" not in registry
+
+
 def test_the_skill_tree_shows_what_can_be_learned_and_spends_the_points():
     async def scenario(rig, browser, url, me):
         page = await open_page(browser, url)

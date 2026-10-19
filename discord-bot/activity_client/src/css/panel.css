@@ -118,6 +118,15 @@
 .power p { color: var(--text-dim); font-size: .8125rem; line-height: 1.4; white-space: pre-wrap; overflow-wrap: anywhere; }
 .power-preview { display: block; margin-top: 8px; max-height: 140px; max-width: 100%; border-radius: var(--r-md); object-fit: contain; background: var(--bg-2); }
 .suggest { display: flex; flex-direction: column; gap: 6px; margin-top: var(--sp-3); }
+.steps { margin: 0; padding-left: 1.2em; display: flex; flex-direction: column; gap: 4px; font-size: .8125rem; line-height: 1.45; }
+.tupper-error { display: flex; align-items: center; gap: 6px; color: var(--bad); font-size: .8125rem; }
+.tupper-search { display: flex; align-items: center; gap: 8px; }
+.tupper-search .input { flex: 1; }
+.tupper-list { display: flex; flex-direction: column; max-height: min(44vh, 360px); overflow: auto; border-radius: var(--r-md); border: 1px solid var(--line-soft); background: var(--surface); }
+.tupper-row { display: flex; align-items: center; gap: 10px; padding: 8px 12px; border-bottom: 1px solid var(--line-soft); min-height: 44px; cursor: pointer; }
+.tupper-row:last-child { border-bottom: 0; }
+.tupper-row input[type="checkbox"] { width: 18px; height: 18px; accent-color: var(--primary-2); flex: none; }
+.tupper-row input:disabled + * { opacity: .55; }
 
 /* ---- skill tree ---- */
 .branches { display: flex; flex-direction: column; gap: var(--sp-4); }

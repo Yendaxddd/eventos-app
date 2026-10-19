@@ -19,6 +19,8 @@ from .hub import Conn, Hub, RpcError
 from .gm import GmLog, GmPanel
 from .gm_rpc import GmRpc
 from .panel_rpc import PanelRpc, is_storage_message
+from .media import MediaStore
+from .tupper_rpc import TupperRpc
 from .latency import CAP_MS, LatencyBook, compensation
 from .prefs import PrefsStore
 from .qte import COMMANDS, TIMED, ActivityInput, describe, response_seconds
@@ -105,10 +107,11 @@ def serialize_message(message: Any, own_webhooks: set[int] | frozenset[int] = fr
     }
 
 
-class ActivityBridge(PanelRpc, GmRpc):
+class ActivityBridge(PanelRpc, GmRpc, TupperRpc):
     def __init__(self, hub: Hub, app: Any, pool: Callable[[], Any] | None = None, avatar_file: Path | None = None,
                  prefs_file: Path | None = None, latency_file: Path | None = None, data_dir: Path | None = None,
-                 gm_log_file: Path | None = None, values_file: Path | None = None) -> None:
+                 gm_log_file: Path | None = None, values_file: Path | None = None, files: MediaStore | None = None,
+                 char_images_file: Path | None = None) -> None:
         self.hub, self.app = hub, app        # app: the AdvancedQTEBot instance
         self.pool = pool or (lambda: None)   # the SenderPool, for webhook sends
         self._listeners: list[tuple[Any, str]] = []
@@ -121,6 +124,7 @@ class ActivityBridge(PanelRpc, GmRpc):
         self._warned_no_lane = False
         self._state_task = None
         self._init_panel()                           # the player dashboards (panel_rpc.py)
+        self._init_tupper(files, char_images_file)   # the pictures kept on this PC (tupper_rpc.py)
         self.gm = GmPanel(app, GmLog(gm_log_file), data_dir, values_file)       # the game-master panel (gm/, gm_rpc.py)
 
     # ---- wiring ---------------------------------------------------------------------------------
@@ -370,7 +374,13 @@ class ActivityBridge(PanelRpc, GmRpc):
         }
 
     def char_avatars(self, user_id: int) -> dict:
-        return {name: self.avatars[name] for name in self.characters_of(user_id) if self.avatars.get(name)}
+        """The picture of each of the player's characters: the one kept on this PC (imported), else the last one seen in the channel."""
+        found = {}
+        for name in self.characters_of(user_id):
+            picture = self.char_image(name) or self.avatars.get(name)
+            if picture:
+                found[name] = picture
+        return found
 
     def compensation_of(self, conn: Conn) -> dict:
         return compensation(conn.net_ms, self.latency.device_ms(conn.user_id), self.cap_ms)

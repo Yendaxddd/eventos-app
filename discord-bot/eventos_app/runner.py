@@ -459,6 +459,7 @@ class BotRunner:
         app, out = self._app, console_bridge.console
         client_id = app.bot.application_id or app.bot.user.id
         i18n.configure(overrides=paths.data_dir() / "i18n_es.json")       # the game masters' own Spanish for names and descriptions
+        files = activity.MediaStore(paths.app_home() / "activity_media")      # pictures and audio kept on this PC (not in the data copies: audio is big)
         hub = activity.Hub()
         auth = activity.DiscordAuth(client_id=client_id, client_secret=settings.activity_client_secret.strip())
         bridge = activity.ActivityBridge(hub, app, pool=lambda: self._pool,
@@ -466,10 +467,11 @@ class BotRunner:
                                          prefs_file=paths.data_dir() / "activity_prefs.json",
                                          latency_file=paths.data_dir() / "activity_latency.json",
                                          data_dir=self._bot_data_dir(app), gm_log_file=paths.data_dir() / "gm_log.jsonl",
-                                         values_file=paths.data_dir() / "gm_values.json")
+                                         values_file=paths.data_dir() / "gm_values.json", files=files,
+                                         char_images_file=paths.data_dir() / "character_images.json")
         server = activity.ActivityServer(hub, auth=auth, authorize=bridge.authorize, client_id=client_id,
                                          web_dir=paths.resource_path("eventos_app", "activity", "web"),
-                                         actions=bridge, media_dir=paths.app_home() / "cache" / "media",
+                                         actions=bridge, media_dir=paths.app_home() / "cache" / "media", files=files,
                                          on_event=lambda text: out.print(f"[dim]🌐 Actividad: {markup_escape(text)}[/dim]"))
         try:
             port = await server.start()

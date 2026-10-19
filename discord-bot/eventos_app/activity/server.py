@@ -27,6 +27,7 @@ from yarl import URL
 from .. import __version__
 from .auth import AuthError, DiscordAuth
 from .hub import Conn, Hub, RpcError
+from .media import CONTENT_TYPES, MediaStore
 
 log = logging.getLogger("eventos_app.activity")
 
@@ -69,7 +70,7 @@ def is_local_request(request: web.Request) -> bool:
 class ActivityServer:
     def __init__(self, hub: Hub, *, auth: DiscordAuth, authorize: Authorize, web_dir: Path, client_id: int,
                  host: str = "127.0.0.1", port: int = DEFAULT_PORT, allow_dev: bool = True, actions=None,
-                 media_dir: Path | None = None, media_fetch: Fetch | None = None,
+                 media_dir: Path | None = None, media_fetch: Fetch | None = None, files: MediaStore | None = None,
                  on_event: Callable[[str], None] | None = None) -> None:
         self.hub, self.auth, self.authorize = hub, auth, authorize
         self.actions = actions     # what the players can do (write, press a QTE button): see ActivityBridge.say / press
@@ -81,6 +82,7 @@ class ActivityServer:
         self.on_event = on_event       # one line of text per thing worth telling the person running the app (see `_note`)
         self._reports = 0
         self._reports_reset = 0.0
+        self.files = files        # the host's own library of pictures and audio, handed out at /files/<kind>/<name>
         self.media_dir = Path(media_dir) if media_dir else None
         self._media_fetch = media_fetch or self._download
         self._media_locks: dict[str, asyncio.Lock] = {}
@@ -115,6 +117,9 @@ class ActivityServer:
         """Files of the client are always re-checked (a cheap 304 when unchanged), so an update is seen at once."""
         response = await handler(request)
         if isinstance(response, web.FileResponse) and "Cache-Control" not in response.headers and not request.path.endswith("/media"):
+            if "/files/" in request.path:             # named by their content: they never change under their name
+                response.headers["Cache-Control"] = "public, max-age=31536000, immutable"
+                return response
             # fonts have a fingerprint in their name, so they never change under it: keep them; everything else is re-checked
             response.headers["Cache-Control"] = "public, max-age=31536000, immutable" if "/fonts/" in request.path else "no-cache"
         return response
@@ -151,6 +156,7 @@ class ActivityServer:
             app.router.add_get(f"{prefix}/ws", self._ws)
             app.router.add_get(f"{prefix}/healthz", self._health)
             app.router.add_get(f"{prefix}/media", self._media)
+            app.router.add_get(f"{prefix}/files/{{kind}}/{{name}}", self._file)
             app.router.add_get(f"{prefix}/", self._index)
         for prefix in ("/.proxy/", "/"):
             if self.web_dir.is_dir():
@@ -195,6 +201,14 @@ class ActivityServer:
     async def _config(self, request: web.Request) -> web.Response:
         return web.json_response({"clientId": str(self.client_id), "channel": self.hub.channel_name,
                                   "dev": self.allow_dev and is_local_request(request)})
+
+    # ---- the host's own library -----------------------------------------------------------------------------
+    async def _file(self, request: web.Request) -> web.StreamResponse:
+        path = self.files.path_of(request.match_info["kind"], request.match_info["name"]) if self.files is not None else None
+        if path is None:
+            raise web.HTTPNotFound()
+        return web.FileResponse(path, headers={"Content-Type": CONTENT_TYPES.get(path.suffix, "application/octet-stream"),
+                                               "X-Content-Type-Options": "nosniff"})
 
     # ---- pictures from Discord's CDN ---------------------------------------------------------------------
     @staticmethod

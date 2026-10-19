@@ -15,9 +15,10 @@ from .auth import AuthError, DiscordAuth, Identity
 from .bridge import ActivityBridge, serialize_message
 from .hub import Conn, Hub, RpcError
 from .latency import LatencyBook
+from .media import MediaStore
 from .prefs import PrefsStore
 from .server import ActivityServer
 from .tunnel import TailscaleTunnel, Tunnel
 
-__all__ = ["ActivityBridge", "ActivityServer", "AuthError", "Conn", "DiscordAuth", "Hub", "Identity", "LatencyBook", "PrefsStore", "RpcError",
+__all__ = ["ActivityBridge", "ActivityServer", "AuthError", "Conn", "DiscordAuth", "Hub", "Identity", "LatencyBook", "MediaStore", "PrefsStore", "RpcError",
            "TailscaleTunnel", "Tunnel", "serialize_message"]
