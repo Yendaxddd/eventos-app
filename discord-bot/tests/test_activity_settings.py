@@ -168,12 +168,13 @@ def test_the_server_measures_round_trips_itself_and_tells_the_player_when_their_
             await asyncio.wait_for(play(), 5)
             conn = next(iter(rig.hub.conns.values()))
             stats = rig.hub.stats()[0]
+            seen = {"rtts": len(conn.rtts), "net_ms": conn.net_ms}          # read now: the answers still on their way keep moving the live numbers
             await ws.close()
-            return comp, conn, stats
+            return comp, seen, stats
 
-    comp, conn, stats = run(scenario())
-    assert len(conn.rtts) >= 3 and 30 <= conn.net_ms * 2 <= 120
-    assert comp["comp"]["net"] >= 3 and stats["net_ms"] == round(conn.net_ms, 1)
+    comp, seen, stats = run(scenario())
+    assert seen["rtts"] >= 3 and 30 <= seen["net_ms"] * 2 <= 120
+    assert comp["comp"]["net"] >= 3 and stats["net_ms"] == round(seen["net_ms"], 1)
     assert stats["jitter_ms"] is not None
 
 
