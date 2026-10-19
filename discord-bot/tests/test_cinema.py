@@ -75,6 +75,18 @@ def test_what_is_wrong_in_a_script_is_said_in_spanish_with_the_step(tmp_path, ch
 
 
 # ---- keeping --------------------------------------------------------------------------------------------------------------
+def test_a_visual_effect_step_keeps_its_look_in_range_and_counts_in_the_length(tmp_path):
+    lib, raw = valid(tmp_path)
+    raw["steps"].append({"type": "vfx", "at": 10, "preset": "dominio", "color": "#FF0000", "intensity": 999, "speed": 1, "banner": "  ¡Ryōiki!  ", "duration": 2.5, "extra": "x"})
+    cinema = clean_cinema(raw, lib)
+    step = next(s for s in cinema["steps"] if s["type"] == "vfx")
+    assert step == {"type": "vfx", "at": 10.0, "preset": "dominio", "color": "#ff0000", "intensity": 200, "speed": 50, "banner": "¡Ryōiki!", "duration": 2.5}
+    assert cinema["duration"] >= 12.5
+    raw["steps"][-1] = {"type": "vfx", "at": 1, "preset": "nope"}
+    again = next(s for s in clean_cinema(raw, lib)["steps"] if s["type"] == "vfx")
+    assert again["preset"] == "impacto" and again["duration"] == 1.5                        # an unknown look falls back, a missing length is a second and a half
+
+
 def test_scripts_are_saved_duplicated_deleted_and_survive_a_restart_even_if_the_file_was_edited_badly(tmp_path):
     lib, raw = valid(tmp_path)
     book = CinemaBook(tmp_path / "cinematics.json", lib)

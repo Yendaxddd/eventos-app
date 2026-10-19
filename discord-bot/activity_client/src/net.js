@@ -16,6 +16,7 @@ import { clearPanelCache } from "./panel/cache.js";
 import { describeNotice } from "./notices.js";
 import { onAudioFrame, onWelcomeAudio } from "./audio.js";
 import { onCineFrame, startCine, stopCine } from "./cine.js";
+import { playBinding } from "./vfx.js";
 
 function showNotice(kind, data) {
   const notice = describeNotice(kind, data);
@@ -246,6 +247,7 @@ function onFrame(frame, arrival) {
     case "notice": showNotice(frame.kind, frame.data); break;
     case "audio": onAudioFrame(frame, arrival); break;
     case "cine": onCineFrame(frame, arrival); break;
+    case "fx": playBinding(frame.fx, frame.ctx || {}); break;
     case "slow": toast("Vas demasiado rápido: espera un momento.", "warn", 2000); break;
     case "rpc_ok": case "rpc_err": {
       const job = pending.get(frame.id);

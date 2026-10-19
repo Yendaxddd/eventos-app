@@ -11,6 +11,7 @@ export const DEFAULT_PREFS = {
   textScale: 100,           // 85 – 140 (%)
   density: "comfortable",   // compact | comfortable | spacious
   motion: "full",           // full | reduced
+  vfx: "full",              // visual effects of powers and events: full | soft (no shaking, gentle flashes) | off
   buttonScale: 100,         // size of the floating QTE buttons, 70 – 160 (%)
   buttonPlacement: "random",// random | bottom | left | right
   keepEvade: false,         // keep a small Evade button while the parry window is open
@@ -28,7 +29,7 @@ export const DEFAULT_PREFS = {
 const CHOICES = {
   theme: ["dark", "oled", "contrast", "midnight", "ember", "forest", "rose", "sepia"],
   accent: ["violet", "blue", "cyan", "green", "amber", "pink", "red"], corners: ["round", "sharp", "soft"], bg: ["plain", "grid", "aurora"], palette: ["default", "cb"], density: ["compact", "comfortable", "spacious"],
-  motion: ["full", "reduced"], buttonPlacement: ["random", "bottom", "left", "right"],
+  motion: ["full", "reduced"], vfx: ["full", "soft", "off"], buttonPlacement: ["random", "bottom", "left", "right"],
 };
 const RANGES = { textScale: [85, 140], buttonScale: [70, 160], volume: [0, 100], musicVolume: [0, 100], sfxVolume: [0, 100], messageLimit: [50, 400] };
 

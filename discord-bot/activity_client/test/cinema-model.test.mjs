@@ -71,3 +71,42 @@ test("the editor measures a script and starts new steps where the last one ends"
   assert.equal(newStep("post", []).type, "post");
   assert.equal(newStep("effect", []).duration, 0.6);
 });
+
+import { LANES, draggedTo, laneOf, orderOf, rulerTicks, validate } from "../src/cinema-model.js";
+
+test("every kind of step sits on one row of the timeline", () => {
+  for (const type of ["text", "audio", "image", "scene", "effect", "vfx", "post"]) assert.ok(LANES.some((l) => l[2].includes(type)), type);
+  assert.equal(laneOf("vfx"), "fx"); assert.equal(laneOf("effect"), "fx"); assert.equal(laneOf("audio"), "sound");
+});
+
+test("a draft says what stops it from being saved, naming the step by its place in time", () => {
+  const ok = { name: "Llegada", steps: [{ type: "text", at: 2, text: "Hola" }, { type: "audio", at: 0, mode: "play", sound: "ab" }] };
+  assert.equal(validate(ok), "");
+  assert.match(validate({ ...ok, name: "  " }), /nombre/);
+  assert.match(validate({ ...ok, steps: [] }), /al menos un paso/);
+  assert.match(validate({ ...ok, steps: [{ type: "text", at: 2, text: "Hola" }, { type: "audio", at: 0, mode: "play", sound: "" }] }), /Paso 1 \(Sonido, 0 s\): elige un sonido/);
+  assert.match(validate({ ...ok, steps: [{ type: "text", at: 3, text: "  " }] }), /Paso 1 \(Texto, 3 s\): escribe el texto/);
+  assert.equal(validate({ ...ok, steps: [{ type: "audio", at: 0, mode: "stop_music" }] }), "");               // stopping the music needs no sound
+  assert.match(validate({ ...ok, steps: [{ type: "image", at: 1, image: "" }] }), /elige una imagen/);
+  assert.match(validate({ ...ok, steps: [{ type: "post", at: 1, text: "" }] }), /escribe el mensaje/);
+  assert.match(validate({ ...ok, steps: [{ type: "text", at: "x", text: "a" }] }), /número de segundos/);
+});
+
+test("steps keep their order in time, and a tie keeps the order they were written in", () => {
+  const steps = [{ id: "a", at: 5 }, { id: "b", at: 1 }, { id: "c", at: 5 }, { id: "d", at: "0.5" }];
+  assert.deepEqual(orderOf(steps).map((s) => s.id), ["d", "b", "a", "c"]);
+});
+
+test("a dragged step lands on a snapped time inside the timeline", () => {
+  assert.equal(draggedTo(2, 100, 400, 20), 7);                  // a quarter of the row is five seconds
+  assert.equal(draggedTo(2, -900, 400, 20), 0);                 // never before the start
+  assert.equal(draggedTo(18, 900, 400, 20), 20);                // nor past the end
+  assert.equal(draggedTo(1, 2, 400, 20), 1.1);                  // snapped to a tenth
+  assert.equal(draggedTo(4, 50, 0, 20), 4);                     // a row with no width moves nothing
+});
+
+test("the ruler has about eight marks at round seconds", () => {
+  assert.deepEqual(rulerTicks(8), [0, 1, 2, 3, 4, 5, 6, 7, 8]);
+  assert.deepEqual(rulerTicks(22), [0, 5, 10, 15, 20]);
+  assert.deepEqual(rulerTicks(100), [0, 15, 30, 45, 60, 75, 90]);
+});

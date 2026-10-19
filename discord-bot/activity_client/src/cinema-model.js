@@ -54,7 +54,7 @@ export function elapsedSeconds(run, { arrival, now, transitMs = 0 }) {
 export const isOver = (cinema, t) => t >= cinema.duration;
 
 // The Spanish name of each kind of step, for the editor.
-export const STEP_LABELS = { text: "Texto", audio: "Sonido", image: "Imagen", scene: "Escena", effect: "Efecto", post: "Mensaje al canal" };
+export const STEP_LABELS = { text: "Texto", audio: "Sonido", image: "Imagen", scene: "Escena", effect: "Efecto", vfx: "Efecto visual", post: "Mensaje al canal" };
 
 // A fresh step for the editor, placed after the last one.
 export function newStep(type, steps) {
@@ -65,6 +65,47 @@ export function newStep(type, steps) {
     case "image": return { type, at, image: "", duration: 4, position: "center" };
     case "scene": return { type, at, color: "#000000", image: "", dim: 40 };
     case "effect": return { type, at, effect: "flash", color: "#ffffff", duration: 0.6 };
+    case "vfx": return { type, at, preset: "explosion", color: "", intensity: 100, speed: 100, banner: "", duration: 1.5 };
     default: return { type: "post", at, text: "" };
   }
+}
+
+// ---- the editor ----------------------------------------------------------------------------------------------------------
+// The timeline's rows: what each kind of step sits on.
+export const LANES = [["text", "Texto", ["text"]], ["sound", "Sonido", ["audio"]], ["picture", "Imagen y escena", ["image", "scene"]], ["fx", "Efectos", ["effect", "vfx"]], ["post", "Canal", ["post"]]];
+export const laneOf = (type) => (LANES.find((l) => l[2].includes(type)) || LANES[0])[0];
+
+const num = (v, fallback = 0) => { const n = Number(v); return Number.isFinite(n) ? n : fallback; };
+export const orderOf = (steps) => steps.map((s, i) => [s, i]).sort((a, b) => num(a[0].at) - num(b[0].at) || a[1] - b[1]).map((x) => x[0]);
+
+// Why a draft cannot be saved yet ("" when it can): the same things the server refuses, said before it is asked, naming the step as the editor numbers it.
+export function validate(draft) {
+  if (!String(draft.name || "").trim()) return "Ponle un nombre a la cinemática para que se guarde.";
+  if (!draft.steps.length) return "Añade al menos un paso.";
+  const steps = orderOf(draft.steps);
+  for (let i = 0; i < steps.length; i++) {
+    const s = steps[i], where = `Paso ${i + 1} (${STEP_LABELS[s.type]}, ${num(s.at)} s)`;
+    if (!Number.isFinite(Number(s.at)) || Number(s.at) < 0) return `${where}: el momento debe ser un número de segundos.`;
+    if (s.type === "text" && !String(s.text || "").trim()) return `${where}: escribe el texto.`;
+    if (s.type === "audio" && s.mode !== "stop_music" && !s.sound) return `${where}: elige un sonido.`;
+    if (s.type === "image" && !s.image) return `${where}: elige una imagen.`;
+    if (s.type === "post" && !String(s.text || "").trim()) return `${where}: escribe el mensaje.`;
+  }
+  return "";
+}
+
+// A step dragged on the timeline: where it lands, in seconds (snapped, never before 0 nor past the end of the timeline).
+export function draggedTo(at, dxPixels, lanePixels, totalSeconds, snap = 0.1) {
+  if (!(lanePixels > 0)) return at;
+  const moved = Math.max(0, Math.min(totalSeconds, at + (dxPixels / lanePixels) * totalSeconds));
+  return Math.round(Math.round(moved / snap) * snap * 100) / 100;
+}
+
+// The marks of the ruler: about eight, at a round number of seconds.
+export function rulerTicks(totalSeconds) {
+  const steps = [1, 2, 5, 10, 15, 30, 60, 120, 300];
+  const every = steps.find((s) => totalSeconds / s <= 9) || 600;
+  const out = [];
+  for (let t = 0; t <= totalSeconds + 1e-9; t += every) out.push(t);
+  return out;
 }

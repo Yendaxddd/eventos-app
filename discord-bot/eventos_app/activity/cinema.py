@@ -24,6 +24,7 @@ from pathlib import Path
 from typing import Any, Awaitable, Callable
 
 from .audio import EVENTS, AudioLibrary
+from .fx import sanitize as fx_sanitize
 from .hub import Hub, RpcError
 
 log = logging.getLogger("eventos_app.activity")
@@ -33,12 +34,13 @@ MAX_STEPS = 200
 MAX_TIME = 3600.0                      # an hour of timeline is already far more than anybody writes
 MAX_DURATION = 600.0
 MAX_TEXT = 600
-STEP_TYPES = ("text", "audio", "image", "scene", "effect", "post")
+STEP_TYPES = ("text", "audio", "image", "scene", "effect", "vfx", "post")
 TEXT_EFFECTS = ("type", "fade", "shake")
 AUDIO_MODES = ("play", "music", "stop_music")
 EFFECTS = ("flash", "shake", "blackout")
 SIZES = ("normal", "big")
-TRIGGER_EVENTS = tuple(e for e in EVENTS if not e.startswith("qte_"))        # cinematics start on what happens, not on every QTE
+_NOISY = {"evade_ok", "parry_ok", "counter", "rescue_ok", "combo_step", "player_hit", "heal", "boss_hit", "power_1", "power_2"}
+TRIGGER_EVENTS = tuple(e for e in EVENTS if not e.startswith("qte_") and e not in _NOISY)        # cinematics start on what happens, not on every QTE or blow
 _COLOR = re.compile(r"^#[0-9a-fA-F]{6}$")
 _IMAGE = re.compile(r"^files/images/[0-9a-f]{24}\.(png|jpg|gif|webp)$")
 
@@ -130,6 +132,10 @@ def clean_step(raw: Any, number: int, library: AudioLibrary | None) -> dict:
     elif kind == "effect":
         step.update(effect=raw.get("effect") if raw.get("effect") in EFFECTS else "flash", color=_color(raw.get("color"), f"{where}, color", "#ffffff"),
                     duration=_seconds(raw.get("duration"), f"{where}, duración", 0.1, 30.0, 0.6))
+    elif kind == "vfx":                      # a visual effect of the powers' kind (fx.py): a preset with its colour, strength and speed, and an optional banner
+        look = fx_sanitize({k: raw.get(k) for k in ("preset", "color", "intensity", "speed", "banner")})
+        step.update(preset=look["preset"], color=look["color"], intensity=look["intensity"], speed=look["speed"], banner=look["banner"],
+                    duration=_seconds(raw.get("duration"), f"{where}, duración", 0.1, 30.0, 1.5))
     else:                                    # post
         text = _body(raw.get("text"), 1500)
         if not text:

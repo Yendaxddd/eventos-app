@@ -154,3 +154,17 @@ def test_a_press_in_quiet_mode_does_not_put_the_reaction_on_the_qte_message():
 
     result, mirrored = run(scenario())
     assert result["ok"] is True and mirrored == []
+
+
+def test_what_happens_to_a_player_is_told_to_the_activity_as_a_sound_event(tmp_path, monkeypatch):
+    bot, sent, module = real_bot(tmp_path, monkeypatch)
+    heard = []
+    bot.activity_notify = NS(on_event=lambda event, data: heard.append((event, data.get("user"))), has_player=lambda uid: False, notify=lambda *a: None)
+
+    async def scenario():
+        for kind in ("evade_ok", "evade_slow", "timeout", "parry_mistimed", "save_ok", "combo_step", "combo_failed", "black_flash", "parry_cooldown"):
+            await bot.feedback(7, kind, "x")
+
+    asyncio.run(scenario())
+    assert heard == [("evade_ok", 7), ("qte_fail", 7), ("qte_fail", 7), ("qte_fail", 7), ("rescue_ok", 7), ("combo_step", 7), ("qte_fail", 7),
+                     ("black_flash", 7)]                                              # a parry on cooldown is not a sound of its own

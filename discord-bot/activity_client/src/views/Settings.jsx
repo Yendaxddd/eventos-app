@@ -47,6 +47,9 @@ export function SettingsPage() {
         <Setting title="Espaciado" hint="Cuánto aire hay entre los elementos." stack>
           <Segmented label="Espaciado" value={p.density} onChange={(v) => setPrefs({ density: v })} options={[["compact", "Compacto"], ["comfortable", "Cómodo"], ["spacious", "Amplio"]]} />
         </Setting>
+        <Setting title="Efectos visuales" hint="Los efectos de los poderes y de lo que pasa en el evento. «Suaves» quita temblores y destellos fuertes; «Apagados» los quita todos." stack>
+          <Segmented label="Efectos visuales" value={p.vfx} onChange={(v) => setPrefs({ vfx: v })} options={[["full", "Completos"], ["soft", "Suaves"], ["off", "Apagados"]]} />
+        </Setting>
         <Setting title="Animaciones" hint="Reducidas quita los efectos de movimiento. Los temporizadores de los QTE siguen funcionando." stack>
           <Segmented label="Animaciones" value={p.motion} onChange={(v) => setPrefs({ motion: v })} options={[["full", "Normales"], ["reduced", "Reducidas"]]} />
         </Setting>

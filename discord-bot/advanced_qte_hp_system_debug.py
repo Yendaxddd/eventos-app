@@ -2006,6 +2006,13 @@ Your response (1-2 sentences max):"""
         # For now, just return the filepath - in production, you'd host these or embed them
         return filepath
     
+    # what an answer's feedback kind sounds like in the Activity (the sounds the game masters bind in the Audio tab)
+    FEEDBACK_EVENTS = {
+        "evade_ok": "evade_ok", "save_ok": "rescue_ok", "combo_step": "combo_step",
+        "evade_slow": "qte_fail", "timeout": "qte_fail", "parry_mistimed": "qte_fail", "adapt_mistimed": "qte_fail",
+        "direction_slow": "qte_fail", "combo_failed": "qte_fail", "combo_broken": "qte_fail",
+    }
+
     def emit_event(self, event: str, /, **data) -> None:
         """Tell the Discord Activity that something happened in the game (it plays the sound cues and the cinematics bound to it).
         Never waits and never raises: the game does not depend on it."""
@@ -2048,6 +2055,8 @@ Your response (1-2 sentences max):"""
         (`kind` and `data` say what happened; the screen words it) and the channel stays quiet; everybody else gets the message as always."""
         if kind in ("black_flash", "chain_max", "fake_fail", "combo_done", "group_done"):
             self.emit_event(kind, user=user_id, **data)
+        elif kind in self.FEEDBACK_EVENTS:
+            self.emit_event(self.FEEDBACK_EVENTS[kind], user=user_id, **data)
         if self.feedback_quiet(user_id, users):
             try:
                 self.activity_notify.notify(users if users is not None else user_id, kind, data)
@@ -7583,6 +7592,10 @@ Your response (1-2 sentences max):"""
         actual_damage = old_hp - hp_data["current"]
 
         console.print(f"[red]💔 User {user_id} took {actual_damage} damage! HP: {hp_data['current']}/{hp_data['max']}[/red]")
+        if actual_damage > 0:
+            self.emit_event("player_hit", user=user_id, amount=actual_damage)
+            if hp_data["max"] and old_hp / hp_data["max"] > 0.25 >= hp_data["current"] / hp_data["max"] > 0:
+                self.emit_event("low_hp", user=user_id)
         
         # Reset counter streak on taking damage
         if user_id in self.counter_streaks:
@@ -7686,6 +7699,7 @@ Your response (1-2 sentences max):"""
         
         if actual_heal > 0:
             console.print(f"[green]💚 User {user_id} healed {actual_heal} HP! HP: {hp_data['current']}/{hp_data['max']}[/green]")
+            self.emit_event("heal", user=user_id, amount=actual_heal)
             await self.update_hp_bar_display(user_id)
             return True
         return False
@@ -8115,6 +8129,8 @@ Your response (1-2 sentences max):"""
             actual_damage = old_hp - boss['hp_current']
             
             console.print(f"[red]💥 Boss {boss_name} took {actual_damage} damage! HP: {boss['hp_current']}/{boss['hp_max']}[/red]")
+            if actual_damage > 0:
+                self.emit_event("boss_hit", name=boss_name, amount=actual_damage)
             
             # Update HP bar display
             await self.update_hp_bar_display(boss_name, is_boss=True)
@@ -9532,6 +9548,7 @@ Your response (1-2 sentences max):"""
                             return True
                         else:
                             # PARRY SUCCESS (no Black Flash) - Show visual with BF timing indicator
+                            self.emit_event("parry_ok", user=user_id, ms=round(response_time * 1000))
                             parry_indicator = self.get_parry_visual_indicator(response_time, difficulty, user_id)
                             timing_feedback = self.get_parry_timing_feedback(response_time, difficulty, user_id)
                             
@@ -10175,6 +10192,8 @@ Your response (1-2 sentences max):"""
             # ============================================
             
             # Apply power effect (will set cooldown internally based on damage)
+            self.emit_event("power_used", user=user_id, character=character_name, slot=power_slot, name=power.get("name", ""),
+                            type=power.get("type", ""), effect=str(power.get("effect", "")))
             await self.apply_power_effect(message.author, power, channel, power_key)
             
             console.print(f"[purple]⚡ {message.author.name} used {power['name']}[/purple]")
@@ -12738,6 +12757,7 @@ Responde SOLAMENTE con un numero del 1 al 10."""
             
             # Add charge from counter
             self.add_charge_from_damage_dealt(user_id, counter_damage)
+            self.emit_event("counter", user=user_id, damage=counter_damage)
             self.add_charge_from_counter(user_id)
             
             # Apply damage to boss if active

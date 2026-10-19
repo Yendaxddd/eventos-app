@@ -25,6 +25,8 @@ from .audio import AudioDirector, AudioLibrary
 from .audio_rpc import AudioRpc
 from .cinema import CinemaBook, CinemaDirector
 from .cinema_rpc import CinemaRpc
+from .fx import FxBook, FxDirector
+from .fx_rpc import FxRpc
 from .latency import CAP_MS, LatencyBook, compensation
 from .prefs import PrefsStore
 from .qte import COMMANDS, TIMED, ActivityInput, describe, response_seconds
@@ -111,11 +113,12 @@ def serialize_message(message: Any, own_webhooks: set[int] | frozenset[int] = fr
     }
 
 
-class ActivityBridge(PanelRpc, GmRpc, TupperRpc, AudioRpc, CinemaRpc):
+class ActivityBridge(PanelRpc, GmRpc, TupperRpc, AudioRpc, CinemaRpc, FxRpc):
     def __init__(self, hub: Hub, app: Any, pool: Callable[[], Any] | None = None, avatar_file: Path | None = None,
                  prefs_file: Path | None = None, latency_file: Path | None = None, data_dir: Path | None = None,
                  gm_log_file: Path | None = None, values_file: Path | None = None, files: MediaStore | None = None,
-                 char_images_file: Path | None = None, audio_file: Path | None = None, cinema_file: Path | None = None) -> None:
+                 char_images_file: Path | None = None, audio_file: Path | None = None, cinema_file: Path | None = None,
+                 fx_file: Path | None = None) -> None:
         self.hub, self.app = hub, app        # app: the AdvancedQTEBot instance
         self.pool = pool or (lambda: None)   # the SenderPool, for webhook sends
         self._listeners: list[tuple[Any, str]] = []
@@ -126,10 +129,12 @@ class ActivityBridge(PanelRpc, GmRpc, TupperRpc, AudioRpc, CinemaRpc):
         self.avatars: OrderedDict[str, str] = OrderedDict()   # the picture each character was last seen with
         self._load_avatars()
         self._warned_no_lane = False
+        self.public_url = ""                         # where the outside world reaches the Activity's server (the tunnel); set by the runner
         self._state_task = None
         self._init_panel()                           # the player dashboards (panel_rpc.py)
         self._init_tupper(files, char_images_file)   # the pictures kept on this PC (tupper_rpc.py)
         self.audio = AudioDirector(hub, AudioLibrary(files, audio_file))      # the sounds, the music and the cues (audio.py)
+        self.fx = FxDirector(hub, FxBook(fx_file), self.audio)                 # the looks of powers and events (fx.py)
         self.cinema = CinemaDirector(hub, CinemaBook(cinema_file, self.audio.library), post=self._cinema_post)     # the scripts and their playing (cinema.py)
         self.gm = GmPanel(app, GmLog(gm_log_file), data_dir, values_file)       # the game-master panel (gm/, gm_rpc.py)
 
@@ -265,6 +270,7 @@ class ActivityBridge(PanelRpc, GmRpc, TupperRpc, AudioRpc, CinemaRpc):
         """The game says something happened (a Black Flash, the boss falls...): the cues bound to it play."""
         self._spawn(self.audio.dispatch(event, data or {}))
         self._spawn(self.cinema.on_event(event, data or {}))
+        self._spawn(self.fx.dispatch(event, data or {}))
 
     # ---- notifications: what an answer led to, told to the player inside their Activity ----------------
     def has_player(self, user_id) -> bool:
@@ -493,6 +499,12 @@ class ActivityBridge(PanelRpc, GmRpc, TupperRpc, AudioRpc, CinemaRpc):
         except Exception:  # noqa: BLE001
             return []
 
+    def character_avatar_url(self, name: str) -> str | None:
+        """A web address Discord can fetch for the picture kept on this PC for a character (it goes out through the tunnel), or None."""
+        picture = self.char_image(name)
+        base = (self.public_url or "").rstrip("/")
+        return f"{base}/{picture}" if picture and base.startswith("https://") else None
+
     async def say(self, conn: Conn, frame: dict) -> str | None:
         """A message written in the Activity: it appears in the channel under the chosen name and the bot treats it
         like any chat message (so `*attack*`, trigger phrases... work from here). Returns why not, or None."""
@@ -512,7 +524,7 @@ class ActivityBridge(PanelRpc, GmRpc, TupperRpc, AudioRpc, CinemaRpc):
         if as_name != "me" and as_name not in self.characters_of(conn.user_id):
             return "Ese personaje no es tuyo."
         name = conn.name if as_name == "me" else as_name
-        avatar = conn.avatar if as_name == "me" else (self.avatars.get(as_name) or conn.avatar)
+        avatar = conn.avatar if as_name == "me" else (self.character_avatar_url(as_name) or self.avatars.get(as_name) or conn.avatar)
         member = await self.member_of(conn.user_id)
         if member is not None and as_name == "me":
             name = member.display_name

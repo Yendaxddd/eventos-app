@@ -36,6 +36,13 @@ EVENTS: dict[str, tuple[str, str]] = {
     "boss_domain": ("El jefe despliega su dominio", "all"), "boss_spawn": ("Aparece un jefe", "all"), "boss_defeated": ("El jefe cae", "all"),
     "fight_start": ("Empieza el combate", "all"), "fight_end": ("Termina el combate", "all"), "player_down": ("Cae un jugador", "all"),
     "checkpoint": ("Checkpoint (curación de todos)", "all"),
+    # what happens to each player in a fight: the answers, the blows and the powers
+    "evade_ok": ("Esquive logrado", "target"), "parry_ok": ("Parry logrado", "target"), "counter": ("Contraataque", "target"),
+    "rescue_ok": ("Rescate logrado", "target"), "qte_fail": ("Fallas un QTE (tarde o a destiempo)", "target"),
+    "combo_step": ("Paso de combo acertado", "target"),
+    "player_hit": ("Un jugador recibe daño", "target"), "low_hp": ("Vida baja (queda un cuarto)", "target"), "heal": ("Un jugador se cura", "target"),
+    "boss_hit": ("El jefe recibe daño", "all"),
+    "power_used": ("Alguien usa un poder (cualquiera)", "all"), "power_1": ("Se usa un Poder 1", "all"), "power_2": ("Se usa un Poder 2", "all"),
 }
 QTE_FALLBACK = ("qte_start",)          # a QTE with no cue of its own uses this one
 
@@ -196,6 +203,8 @@ class AudioLibrary:
     def cue_for(self, event: str, data: dict) -> tuple[str, dict] | None:
         """(event whose cue plays, the cue) for something that happened: a QTE looks for its own mode and difficulty first."""
         chain = [event]
+        if event == "power_used":                      # the slot's own cue first, then «any power»
+            chain = [f"power_{data.get('slot')}", "power_used"]
         if event == "qte":
             chain = [f"qte_{data.get('mode')}", f"qte_{data.get('difficulty')}", *QTE_FALLBACK]
         for name in chain:

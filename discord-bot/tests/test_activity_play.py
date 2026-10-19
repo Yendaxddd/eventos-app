@@ -521,3 +521,28 @@ def test_a_combos_first_step_is_known_even_though_the_bot_fills_the_sequence_in_
 
     opened, running = run(scenario())
     assert opened["combo"]["step"] == "evade" and running == ["3"]
+
+
+def test_a_character_with_an_imported_picture_speaks_with_it_through_the_tunnel_address(tmp_path):
+    from eventos_app.activity import media
+    from test_activity_browser import PIXEL
+
+    async def scenario():
+        async with Rig() as rig:
+            store = media.MediaStore(tmp_path / "media")
+            kept = store.save("images", PIXEL)
+            rig.bridge.files, rig.bridge.char_images = store, {"Kuro": kept.path}
+            ws, _ = await rig.login()
+            await ws.send_json({"t": "say", "text": "sin túnel", "as": "Kuro"})
+            await asyncio.sleep(0.4)
+            rig.bridge.public_url = "https://equipo.example.net/"
+            await ws.send_json({"t": "say", "text": "con túnel", "as": "Kuro"})
+            await asyncio.sleep(0.4)
+            await ws.send_json({"t": "say", "text": "yo mismo"})
+            await asyncio.sleep(0.4)
+            return rig.posted, kept
+
+    posted, kept = run(scenario())
+    assert posted[0][3] == "https://cdn/ana.png"                                        # no address to give Discord yet: the person's own picture
+    assert posted[1][3] == f"https://equipo.example.net/{kept.path}"                    # the character's picture, fetched by Discord from the Activity
+    assert posted[2][3] == "https://cdn/ana.png"                                        # speaking as oneself is unchanged

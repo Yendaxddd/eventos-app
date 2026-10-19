@@ -128,3 +128,47 @@
 .cine-mark.t-text { --step: #7dd3fc; } .cine-mark.t-audio { --step: #34d399; } .cine-mark.t-image { --step: #fbbf24; }
 .cine-mark.t-scene { --step: #c084fc; } .cine-mark.t-effect { --step: #fb7185; } .cine-mark.t-post { --step: #94a3b8; }
 .cine-scale { display: flex; justify-content: space-between; font-size: .6875rem; margin-top: 2px; }
+
+/* ---- effects tab ---- */
+.gm-fx-row { border-bottom: 1px solid var(--line-soft); padding: var(--sp-2) 0; }
+.gm-fx-row:last-child { border-bottom: 0; }
+.gm-fx-head { display: flex; align-items: center; gap: var(--sp-2); flex-wrap: wrap; }
+.gm-fx-head .info { flex: 1 1 180px; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.gm-fx-sum { display: inline-flex; align-items: center; gap: 6px; font-size: .8125rem; color: var(--text-dim); }
+.fx-dot { width: 10px; height: 10px; border-radius: 50%; flex: none; }
+.fx-editor { display: flex; flex-direction: column; gap: var(--sp-3); padding: var(--sp-3); margin-top: var(--sp-2); border-radius: var(--r-md); background: var(--surface); border: 1px solid var(--line-soft); }
+.fx-presets { display: flex; flex-wrap: wrap; gap: var(--sp-2); }
+.fx-preset { display: inline-flex; align-items: center; gap: 8px; padding: 8px 12px; border-radius: var(--r-md); border: 1px solid var(--line); background: var(--surface-2); color: var(--text-dim); font: 600 .8125rem/1 var(--font-ui); cursor: pointer; }
+.fx-preset i { width: 12px; height: 12px; border-radius: 50%; }
+.fx-preset[aria-pressed="true"] { border-color: var(--primary-2); background: color-mix(in srgb, var(--primary) 24%, var(--surface-2)); color: var(--text); }
+.fx-hint { margin: 0; }
+.fx-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: var(--sp-3); align-items: end; }
+.save-state { display: inline-flex; align-items: center; gap: 6px; font-size: .75rem; color: var(--text-faint); }
+.save-state.ok { color: var(--ok); } .save-state.warn { color: var(--warn); } .save-state.bad { color: var(--bad); }
+
+/* ---- cinematic editor: timeline with a row per kind of step ---- */
+.cine-timeline { display: flex; flex-direction: column; gap: 4px; padding: 0; }
+.tl-ruler { position: relative; height: 18px; margin-left: 112px; font-size: .6875rem; color: var(--text-faint); }
+.tl-ruler span { position: absolute; transform: translateX(-50%); }
+.tl-ruler span:first-child { transform: none; }
+.tl-lane { display: flex; align-items: stretch; gap: 8px; }
+.tl-label { flex: none; width: 104px; display: flex; align-items: center; font-size: .75rem; color: var(--text-dim); }
+.tl-track { position: relative; flex: 1; min-width: 0; height: 34px; border-radius: 6px; background: var(--surface); border: 1px solid var(--line-soft); overflow: hidden; cursor: crosshair; }
+.tl-block { position: absolute; top: 3px; bottom: 3px; min-width: 28px; max-width: 60%; display: inline-flex; align-items: center; gap: 5px; padding: 0 7px; border: 1px solid transparent; border-radius: 5px; background: color-mix(in srgb, var(--step) 70%, var(--surface)); color: #0b0b14; font: 600 .6875rem/1 var(--font-ui); cursor: grab; overflow: hidden; touch-action: none; user-select: none; }
+.tl-block span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tl-block.on { border-color: #fff; box-shadow: 0 0 0 2px var(--step); z-index: 2; }
+.tl-block:active { cursor: grabbing; }
+.tl-block.t-text { --step: #7dd3fc; } .tl-block.t-audio { --step: #34d399; } .tl-block.t-image { --step: #fbbf24; } .tl-block.t-scene { --step: #c084fc; }
+.tl-block.t-effect, .tl-block.t-vfx { --step: #fb7185; } .tl-block.t-post { --step: #94a3b8; }
+.tl-cursor { position: absolute; top: 0; bottom: 0; width: 2px; background: var(--primary-2); opacity: .8; pointer-events: none; }
+.cine-add { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: var(--sp-3); }
+.cine-row { display: flex; align-items: center; gap: 8px; width: 100%; padding: 8px 10px; border: 0; border-left: 3px solid var(--step, var(--primary-2)); border-radius: 6px; background: transparent; color: var(--text); font: inherit; text-align: left; cursor: pointer; }
+.cine-row:hover { background: var(--surface-2); }
+.cine-row.on { background: var(--surface-3); }
+.cine-row .ellipsis { min-width: 0; flex: 1; }
+.cine-row-at { min-width: 3.4em; color: var(--text-dim); }
+.cine-row.t-text { --step: #7dd3fc; } .cine-row.t-audio { --step: #34d399; } .cine-row.t-image { --step: #fbbf24; } .cine-row.t-scene { --step: #c084fc; }
+.cine-row.t-effect, .cine-row.t-vfx { --step: #fb7185; } .cine-row.t-post { --step: #94a3b8; }
+.cine-step.t-vfx { --step: #fb7185; }
+.cine-settings summary { cursor: pointer; color: var(--text-dim); font-size: .8125rem; }
+@media (max-width: 560px) { .tl-label { width: 64px; font-size: .6875rem; } .tl-ruler { margin-left: 72px; } }

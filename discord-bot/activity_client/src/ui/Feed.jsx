@@ -1,4 +1,5 @@
 import { useLayoutEffect, useRef, useState } from "preact/hooks";
+import { groupedWithPrevious } from "../feed-model.js";
 import { ArrowDown, MessagesSquare, Paperclip } from "lucide-preact";
 import { messages, prefs } from "../state.js";
 import { cdn, cx, timeLabel } from "../util.js";
@@ -84,13 +85,6 @@ function Message({ m, grouped }) {
       </div>
     </div>
   );
-}
-
-const GROUP_MS = 5 * 60 * 1000;
-function groupedWithPrevious(list, i) {
-  const m = list[i], prev = list[i - 1];
-  if (!prev || m.reply || prev.author.id !== m.author.id || prev.author.name !== m.author.name) return false;
-  return m.ts - prev.ts < GROUP_MS && m.ts >= prev.ts;
 }
 
 export function Feed() {

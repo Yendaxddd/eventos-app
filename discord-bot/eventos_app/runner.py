@@ -469,7 +469,8 @@ class BotRunner:
                                          data_dir=self._bot_data_dir(app), gm_log_file=paths.data_dir() / "gm_log.jsonl",
                                          values_file=paths.data_dir() / "gm_values.json", files=files,
                                          char_images_file=paths.data_dir() / "character_images.json",
-                                         audio_file=paths.data_dir() / "audio_library.json", cinema_file=paths.data_dir() / "cinematics.json")
+                                         audio_file=paths.data_dir() / "audio_library.json", cinema_file=paths.data_dir() / "cinematics.json",
+                                         fx_file=paths.data_dir() / "activity_fx.json")
         server = activity.ActivityServer(hub, auth=auth, authorize=bridge.authorize, client_id=client_id,
                                          web_dir=paths.resource_path("eventos_app", "activity", "web"),
                                          actions=bridge, media_dir=paths.app_home() / "cache" / "media", files=files,
@@ -509,6 +510,7 @@ class BotRunner:
         except activity.tunnel.TunnelError as exc:
             out.print(f"[yellow]⚠ Túnel de la Actividad: {exc}[/yellow]")
             return {"ok": False, "error": str(exc)}
+        a.bridge.public_url = url
         out.print(f"[green]✓ Actividad lista. Pega esta dirección en el Developer Portal (Activities → URL Mappings → raíz «/»): "
                   f"{url.removeprefix('https://')}[/green]")
         out.print(f"[cyan]🔎 Para comprobar el mapping sin abrir Discord, abre en el navegador: "
@@ -527,6 +529,7 @@ class BotRunner:
                 await step()
             except Exception:  # noqa: BLE001
                 log.exception("could not stop part of the Activity")
+        a.bridge.public_url = ""
         a.bridge.stop()
 
     def activity_info(self) -> dict:

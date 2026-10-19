@@ -22,6 +22,9 @@ export const MEDIA_HOST = /^https:\/\/(cdn\.discordapp\.com|media\.discordapp\.n
 // Files kept on the host's PC (an imported character's picture, a sound) are named «files/<kind>/<name>» and come from the Activity itself.
 export function cdn(url) {
   if (url && /^files\/(images|audio)\/[0-9a-f]{24}\.[a-z0-9]{2,4}$/.test(url)) return `${base}/${url}`;
+  // the host's own address of one of those files (a character's picture sent to Discord as the avatar of a message) is read from the Activity itself
+  const own = url && /^https:\/\/[^/]+\/(files\/images\/[0-9a-f]{24}\.(?:png|jpg|gif|webp))$/.exec(url);
+  if (own) return `${base}/${own[1]}`;
   return url && MEDIA_HOST.test(url) ? `${base}/media?u=${encodeURIComponent(url)}` : url;
 }
 

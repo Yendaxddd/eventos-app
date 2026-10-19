@@ -13,6 +13,9 @@ const SCOPE = [["all", "Todos"], ["target", "Solo quien lo vive"]];
 const GROUPS = [
   ["QTE", ["qte_start", "qte_easy", "qte_medium", "qte_hard", "qte_impossible", "qte_group", "qte_combo", "qte_direction", "qte_bf_chain", "qte_fake"]],
   ["Black Flash y combos", ["black_flash", "chain_max", "combo_done", "fake_fail", "group_done"]],
+  ["Tus respuestas", ["evade_ok", "parry_ok", "counter", "rescue_ok", "combo_step", "qte_fail"]],
+  ["Golpes y vida", ["player_hit", "low_hp", "heal", "boss_hit"]],
+  ["Poderes", ["power_used", "power_1", "power_2"]],
   ["Dominios", ["domain_cast", "domain", "boss_domain"]],
   ["Combate", ["boss_spawn", "boss_defeated", "fight_start", "fight_end", "player_down", "checkpoint"]],
 ];

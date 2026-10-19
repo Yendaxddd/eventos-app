@@ -48,30 +48,45 @@ def test_a_game_master_writes_a_cinematic_and_every_screen_plays_it_with_its_sou
         await player.mouse.click(5, 5)
         page = await gm_page(browser, url, tab="cinema")
 
-        # write it
+        # write it: the editor shows the selected step only, and saves by itself
         await page.click("[data-testid=cine-new]")
         await page.wait_for_selector("[data-testid=cine-editor]")
         await page.fill("[data-testid=cine-name]", "Llegada del Rey")
+        await page.click("[data-testid=cine-settings] summary")
         await page.click("[data-testid=cine-trigger-boss_defeated]")
-        await page.fill("[data-testid=cine-text-1]", "Así que habéis venido a morir.")
-        await page.fill("[data-testid=cine-speaker-1]", "Rey de las Maldiciones")
-        await page.fill("[data-testid=cine-at-1]", "0.3")
-        await page.fill("[data-testid=cine-at-0]", "0")
-        await page.click("[data-testid=cine-add-audio]")
-        await page.select_option("[data-testid=cine-sound-2]", sound["id"])
-        await page.fill("[data-testid=cine-at-2]", "0.1")
+        await page.click("[data-testid=cine-row-2]")
+        await page.fill("[data-testid=cine-text]", "Así que habéis venido a morir.")
+        await page.fill("[data-testid=cine-speaker]", "Rey de las Maldiciones")
+        await page.fill("[data-testid=cine-at]", "0.3")
+        await page.fill("[data-testid=cine-cursor]", "0.1")
+        await page.click("[data-testid=cine-add-audio]")                                    # a new step is the selected one
+        await page.select_option("[data-testid=cine-sound]", sound["id"])
+        await page.fill("[data-testid=cine-cursor]", "0.5")
         await page.click("[data-testid=cine-add-effect]")
-        await page.fill("[data-testid=cine-at-3]", "0.5")
+        await page.fill("[data-testid=cine-cursor]", "0.6")
         await page.click("[data-testid=cine-add-post]")
-        await page.fill("[data-testid=cine-post-4]", "⚔️ El rey desenvaina su espada.")
-        await page.fill("[data-testid=cine-at-4]", "0.6")
-        assert await page.locator("[data-testid=cine-timeline] .cine-mark").count() == 5
+        await page.fill("[data-testid=cine-post]", "⚔️ El rey desenvaina su espada.")
+        assert await page.locator("[data-testid=cine-timeline] .tl-block").count() == 5
+        assert await page.locator("[data-testid=cine-rows] .cine-row").count() == 5
+        assert await page.locator("[data-lane=text] .tl-block").count() == 1 and await page.locator("[data-lane=sound] .tl-block").count() == 1
 
-        # a bad script is refused with the step named
-        await page.fill("[data-testid=cine-text-1]", "")
-        await page.click("[data-testid=cine-save]")
-        await page.locator(".toast", has_text="texto está vacío").first.wait_for(timeout=4000)
-        await page.fill("[data-testid=cine-text-1]", "Así que habéis venido a morir.")
+        # an unfinished step is not saved, and the editor says which one and why
+        await page.click("[data-testid=cine-row-3]")                                        # in time order: scene, sound, text, effect, message
+        assert await page.locator("[data-testid=cine-step] [data-testid=cine-text]").count() == 1
+        await page.fill("[data-testid=cine-text]", "")
+        await page.wait_for_selector("[data-testid=cine-save-state][data-state=invalid]", timeout=3000)
+        assert "Paso 3 (Texto, 0.3 s): escribe el texto" in await page.locator("[data-testid=cine-save-state]").inner_text()
+        await page.fill("[data-testid=cine-text]", "Así que habéis venido a morir.")
+
+        # a block moves by dragging it along the timeline
+        block = page.locator("[data-lane=effect] .tl-block, [data-lane=fx] .tl-block").first
+        await block.scroll_into_view_if_needed()
+        box = await block.bounding_box()
+        await page.mouse.move(box["x"] + 6, box["y"] + box["height"] / 2)
+        await page.mouse.down()
+        await page.mouse.move(box["x"] + 160, box["y"] + box["height"] / 2, steps=6)
+        await page.mouse.up()
+        assert float(await page.input_value("[data-testid=cine-at]")) > 0.6
 
         # preview on the editor's own screen
         await page.click("[data-testid=cine-preview]")
@@ -81,10 +96,13 @@ def test_a_game_master_writes_a_cinematic_and_every_screen_plays_it_with_its_sou
         await page.wait_for_selector("[data-testid=cine]", state="detached")
         assert (await heard(player))["sources"] == 0 and posted == []                       # a preview is private: nobody else hears or reads it
 
-        await page.click("[data-testid=cine-save]")
-        await page.wait_for_selector("[data-testid=cine-list]")
+        await page.wait_for_selector("[data-testid=cine-save-state][data-state=saved]", timeout=5000)
+        await until(lambda: len(rig.bridge.cinema.book.listing()) == 1, "the first save")
         saved = rig.bridge.cinema.book.listing()
-        assert len(saved) == 1 and saved[0]["triggers"] == ["boss_defeated"] and [s["type"] for s in saved[0]["steps"]] == ["scene", "audio", "text", "effect", "post"]
+        assert saved[0]["triggers"] == ["boss_defeated"] and sorted(s["type"] for s in saved[0]["steps"]) == ["audio", "effect", "post", "scene", "text"]
+        assert saved[0]["name"] == "Llegada del Rey" and "morir" in next(s for s in saved[0]["steps"] if s["type"] == "text")["text"]
+        await page.click("[data-testid=cine-back]")
+        await page.wait_for_selector("[data-testid=cine-list]")
         cid = saved[0]["id"]
 
         # everybody plays it

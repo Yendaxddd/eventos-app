@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "preact/hooks";
 import { act, usePanel } from "../../panel/data.js";
 import { DraftMemory } from "./draft.js";
+import { Autosaver } from "../../autosave.js";
 
 // A request that asks again every few seconds while the page is open and visible: the event moves on its own.
 export function useLive(op, args, every = 3000) {
@@ -46,4 +47,21 @@ export function useDraft(server) {
     saved: (sent) => mem.current.saved(sent),
     reset: () => setDraft(mem.current.reset(server)),
   };
+}
+
+// Saves `value` by itself a moment after it stops changing (see autosave.js). `key` says which thing is open: changing it starts over from
+// `value` as what the server has. `save(value)` must resolve to false (or throw) when it did not work; `check(value)` gives "" or why it cannot be saved yet.
+export function useAutosave(value, { save, check = () => "", delay = 700, key = "" }) {
+  const [info, setInfo] = useState({ status: "saved", reason: "" });
+  const latest = useRef({ save, check });
+  latest.current = { save, check };
+  const saver = useRef(null);
+  if (saver.current === null) {
+    saver.current = new Autosaver((v) => latest.current.save(v), { delay, check: (v) => latest.current.check(v), onStatus: (status, reason) => setInfo({ status, reason }) });
+  }
+  const json = JSON.stringify(value);
+  useEffect(() => { saver.current.baseline(value); }, [key]);
+  useEffect(() => { saver.current.update(value); }, [json]);
+  useEffect(() => () => { saver.current.flush(); saver.current.dispose(); }, []);
+  return { ...info, flush: () => saver.current.flush(), baseline: (v) => saver.current.baseline(v) };
 }

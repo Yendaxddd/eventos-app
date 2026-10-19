@@ -5,6 +5,7 @@ import { perms, prefs } from "../state.js";
 import { playSound, setMusic, sounds } from "../audio.js";
 import { captionAt, crossed, elapsedSeconds, imageAt, isOver, musicStepBefore, sceneAt } from "../cinema-model.js";
 import { rpc } from "../net.js";
+import { playBinding } from "../vfx.js";
 import { useNow } from "../hooks.js";
 import { cdn, cx } from "../util.js";
 import { Avatar } from "./Avatar.jsx";
@@ -27,8 +28,9 @@ function useOneShots(state, t) {
     }
     from = -0.001;                                                      // a fresh start: what is at second 0 plays
   }
-  for (const step of crossed(cinema, from, t)) {
+  for (const step of crossed(cinema, from, t, ["audio", "effect", "vfx"])) {
     if (step.type === "audio") playStep(step);
+    else if (step.type === "vfx") playBinding(step, {}, { force: state.preview });
     else effect.current = { ...step, n: (effect.current ? effect.current.n : 0) + 1, started: t };
   }
   return effect.current;

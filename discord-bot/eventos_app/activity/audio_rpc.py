@@ -35,6 +35,7 @@ class AudioRpc:
     async def rpc_gm_audio_delete(self, conn: Conn, args: dict):
         actor = await self._gm(conn)
         sound = self.audio.library.delete(args.get("id"))
+        self.fx.book.forget_sound(sound["id"])
         if self.audio.music is not None and self.audio.music["sound"]["id"] == sound["id"]:
             await self.audio.stop_music()
         self.gm.log.add(actor, f"Borró el sonido «{sound['name']}» de la biblioteca")

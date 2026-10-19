@@ -130,6 +130,20 @@ def test_a_qte_uses_the_cue_of_its_mode_then_its_difficulty_then_the_general_one
     assert lib.cue_for("black_flash", {}) is None
 
 
+def test_the_combat_slots_exist_and_a_power_uses_its_slots_cue_before_the_general_one(tmp_path):
+    for event in ("evade_ok", "parry_ok", "counter", "rescue_ok", "qte_fail", "combo_step", "player_hit", "low_hp", "heal", "boss_hit", "power_used", "power_1", "power_2"):
+        assert event in EVENTS, event
+    lib = library(tmp_path)
+    any_power, first = (lib.add(f"{n}.mp3", MP3 + bytes([i]), "sfx")["id"] for i, n in enumerate(("cualquiera", "uno")))
+    assert lib.cue_for("power_used", {"slot": 1}) is None
+    lib.set_cue("power_used", any_power)
+    assert lib.cue_for("power_used", {"slot": 2})[1]["sound"] == any_power
+    lib.set_cue("power_1", first)
+    assert lib.cue_for("power_used", {"slot": 1})[1]["sound"] == first                          # the slot's own sound wins
+    assert lib.cue_for("power_used", {"slot": 2})[1]["sound"] == any_power
+    assert EVENTS["parry_ok"][1] == "target" and EVENTS["boss_hit"][1] == "all"                # who hears it
+
+
 # ---- playing ---------------------------------------------------------------------------------------------------------
 def test_a_cue_plays_for_who_it_is_about_or_for_everybody_and_the_music_is_the_same_for_all(tmp_path):
     async def scenario():
