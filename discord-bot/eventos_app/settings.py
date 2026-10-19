@@ -46,6 +46,10 @@ class Settings:
     reset_on_start: bool = False
     hotkeys_enabled: bool = True
     auto_start: bool = False
+    # a copy of the event's data every time the bot stops (if anything changed since the last one): see backups.py
+    backup_on_stop: bool = True
+    # ask GitHub (once, a few seconds after opening) whether there is a newer version: see updates.py
+    check_updates: bool = True
 
     def validate(self) -> list[str]:
         """Human-readable problems (Spanish, shown in the UI). Empty list = OK."""

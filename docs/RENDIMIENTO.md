@@ -1,7 +1,7 @@
 # Rendimiento: latencia y límites de Discord
 
 Qué se midió, qué se optimizó y cuántos jugadores aguanta el evento. Los números del modelo salen de
-`discord-bot/eventos_app/capacity.py`; la app los recalcula con tu latencia real en *Configuración → Rendimiento*.
+`discord-bot/eventos_app/capacity.py`; la app los recalcula con tu latencia real en *Configuración → Envío → Rendimiento*.
 
 ## Lo que no se puede evitar
 
@@ -87,7 +87,7 @@ Si el límite fueran solo las reacciones (respuestas sin mensaje ni edición): ~
 
 ## La prueba de rendimiento (con tus bots reales)
 
-*Configuración → Rendimiento → Prueba rápida (~30 s) o completa (~1 min)*. Hazla con el evento parado: manda decenas de
+*Configuración → Envío → Rendimiento → Prueba rápida (~30 s) o completa (~1 min)*. Hazla con el evento parado: manda decenas de
 mensajes y reacciones de prueba al canal del evento y los borra al terminar.
 
 1. **Latencia de cada bot** (mensaje y reacción por separado). Si uno destaca, ese bot tiene mala conexión o está lejos.
@@ -164,7 +164,7 @@ emisores extra de mensajes:
   pierde, lo reconoce por nombre). Un canal admite 15 webhooks en total, así que nunca se crean dos por bot. Los webhooks
   del canal anterior no se borran: si vuelves, se reutilizan.
 - **Permiso.** El bot necesita «Gestionar webhooks» en el canal (la invitación nueva ya lo incluye; a los ya invitados hay que
-  dárselo). Si falta, o el canal ya tiene 15, ese bot sigue enviando como siempre y la pestaña Configuración dice por qué.
+  dárselo). Si falta, o el canal ya tiene 15, ese bot sigue enviando como siempre y la pestaña Configuración → Envío dice por qué.
 - **Los bots van primero.** Un mensaje va al bot con hueco; los webhooks reciben lo que los bots ya no pueden mandar sin esperar
   turno. El webhook muestra el nombre y la imagen del bot que lo registró.
 - **Solo mensajes.** Los webhooks no pueden reaccionar, responder (reply), usar stickers ni botones: eso sigue en los bots.
@@ -176,7 +176,7 @@ emisores extra de mensajes:
   tampoco suma.
 - **Edición y borrado** van al webhook que escribió el mensaje. El token del webhook nunca se escribe en los registros.
 - El bot ignora los mensajes de sus propios webhooks (no los confunde con jugadores ni con Tupperbox).
-- Se puede desactivar en *Configuración → Webhooks de envío*.
+- Se puede desactivar en *Configuración → Envío → Webhooks de envío*.
 
 No se pudo comprobar contra el Discord real (solo contra el simulado): los números de arriba se confirman con la prueba de
 rendimiento, que ahora cuenta los webhooks (burst, ritmo y capacidad).

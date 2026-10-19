@@ -3,16 +3,23 @@ EVENTOS APP
 
 1. Abre Eventos App con su acceso directo (o EventosApp.exe, doble clic). No necesitas instalar nada más.
 2. La primera vez, ve a "Configuración", pega el token de tu bot de Discord y pulsa "Guardar cambios".
-3. Pulsa "Iniciar bot" en el Panel.
-4. Ya conectado, en "Configuración" -> "Evento" elige el servidor, el canal y los roles, y pulsa "Aplicar al evento".
+3. En "Inicio" pulsa "Iniciar bot". La lista "Antes de empezar" te dice qué falta en cada momento.
+4. Ya conectado, en "Configuración" -> "Bot y evento" elige el servidor, el canal y los roles, y pulsa "Aplicar al evento".
 
-Bots auxiliares: en "Configuración" puedes agregar más bots (otros tokens) para que los mensajes se repartan entre
+Actividad de Discord: en la página "Actividad" activa la Actividad, pega el Client Secret y sigue los pasos (solo la primera vez).
+"Inicio" -> "Abrir el panel del GM" lo abre en una ventana propia, sin pasar por Discord.
+
+Bots auxiliares: en "Configuración" -> "Envío" puedes agregar más bots (otros tokens) para que los mensajes se repartan entre
 todos y Discord no limite las ráfagas de QTE. Cada uno debe estar invitado a tu servidor ("Invitar" copia el enlace).
-En "Configuración" -> "Rendimiento" hay una prueba que mide la latencia y cuántos jugadores aguanta el canal.
+En "Configuración" -> "Envío" -> "Rendimiento" hay una prueba que mide la latencia y cuántos jugadores aguanta el canal.
+
+Copias de seguridad: la página "Datos" guarda copias de los datos del evento (también una cada vez que se detiene el bot) y
+restaura la que quieras con el bot detenido.
 
 Todo se guarda en esta misma carpeta:
   data\          datos de jugadores y configuración del juego
   assets\        GIFs e imágenes
+  backups\       copias de seguridad de data\
   logs\          registros (útiles si algo falla)
   settings.json  tu configuración (incluye el token: no lo compartas)
 
@@ -20,4 +27,4 @@ Si Windows SmartScreen avisa en el primer arranque ("Windows protegió su PC"),
 pulsa "Más información" -> "Ejecutar de todas formas". Pasa porque la app no está firmada.
 
 Para actualizar: ejecuta el instalador nuevo encima (o, en la versión zip, descomprime sobre esta carpeta).
-Se conservan settings.json, data\ y assets\.
+Se conservan settings.json, data\, backups\ y assets\. La app avisa sola cuando hay una versión nueva.

@@ -2,7 +2,7 @@
 // settings in step, and turn every frame into changes of the client's state.
 import { batch } from "@preact/signals";
 import { initSdk, afterAuth, sdk } from "./discord.js";
-import { inDiscord, devName, devGm, base, store } from "./util.js";
+import { inDiscord, devName, devGm, devHost, base, store } from "./util.js";
 import { SyncEstimator, qualityOf } from "./clock.js";
 import {
   conn, banner, you, perms, channelName, users, canWrite, version, messages, game, me, characters, charAvatars, activeAs,
@@ -262,7 +262,7 @@ async function login() {
     accessToken = data.access_token;
     return { t: "hello", token: data.access_token };
   }
-  if (devName && config.dev) return { t: "hello", dev: devName, gm: devGm };
+  if (devName && config.dev) return { t: "hello", dev: devName, gm: devGm, host: devHost };
   throw new Error("Esta página está pensada para abrirse desde Discord. Para probarla en este PC añade ?dev=TuNombre a la dirección.");
 }
 

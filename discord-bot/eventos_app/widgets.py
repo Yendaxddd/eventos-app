@@ -7,7 +7,7 @@ from typing import Callable
 
 import customtkinter as ctk
 
-from .theme import ACCENT, CARD, CARD_BORDER, INPUT_BG, MUTED, TEXT
+from .theme import ACCENT, BAD_TEXT, CARD, CARD_2, CARD_BORDER, FAINT, INPUT_BG, MUTED, OK_TEXT, TEXT, TONES, WARN_TEXT, font
 
 POPUP_HEIGHT = 330
 NONE_ID = 0
@@ -192,3 +192,84 @@ class PickerField(ctk.CTkFrame):
         self._render()
         if self.on_change is not None:
             self.on_change(ident)
+
+
+# ---- small display widgets of the pages -------------------------------------------------------------------------------------------
+class Pill(ctk.CTkLabel):
+    """A rounded status label («Conectado», «Listo», «Error»…) in one of the tones of theme.TONES."""
+
+    def __init__(self, master, text: str = "", tone: str = "idle", **kwargs) -> None:
+        color, background = TONES[tone]
+        super().__init__(master, text=text, text_color=color, fg_color=background, corner_radius=999, height=24, padx=12,
+                         font=font(12, "bold"), **kwargs)
+
+    def set(self, text: str, tone: str = "idle") -> None:
+        color, background = TONES[tone]
+        self.configure(text=text, text_color=color, fg_color=background)
+
+
+class StatTile(ctk.CTkFrame):
+    """A number with its caption underneath, for the live event panel."""
+
+    def __init__(self, master, caption: str) -> None:
+        super().__init__(master, fg_color=CARD_2, corner_radius=10)
+        self.grid_columnconfigure(0, weight=1)
+        self._caption = ctk.CTkLabel(self, text=caption.upper(), text_color=FAINT, font=font(10, "bold"), anchor="w")
+        self._caption.grid(row=0, column=0, padx=12, pady=(7, 0), sticky="w")
+        self._value = ctk.CTkLabel(self, text="—", text_color=TEXT, font=font(20, "bold"), anchor="w")
+        self._value.grid(row=1, column=0, padx=12, sticky="w")
+        self._sub = ctk.CTkLabel(self, text="", text_color=MUTED, font=font(11), anchor="w", justify="left", wraplength=170)
+        self._sub.grid(row=2, column=0, padx=12, pady=(0, 7), sticky="w")
+
+    def set(self, value: str, sub: str = "", tone: str | None = None) -> None:
+        color = {"ok": OK_TEXT, "bad": BAD_TEXT, "warn": WARN_TEXT}.get(tone or "", TEXT)
+        self._value.configure(text=value, text_color=color)
+        self._sub.configure(text=sub)
+
+
+class HpBar(ctk.CTkFrame):
+    """A name, a bar and «hp / max», for the players list and the boss."""
+
+    def __init__(self, master, *, name_width: int = 120, color: str = OK_TEXT) -> None:
+        super().__init__(master, fg_color="transparent")
+        self.grid_columnconfigure(1, weight=1)
+        self._color = color
+        self.name = ctk.CTkLabel(self, text="", text_color=TEXT, font=font(13), anchor="w", width=name_width)
+        self.name.grid(row=0, column=0, padx=(0, 10), sticky="w")
+        self.bar = ctk.CTkProgressBar(self, height=9, corner_radius=5, fg_color="#0a0a12", progress_color=color)
+        self.bar.grid(row=0, column=1, sticky="ew")
+        self.value = ctk.CTkLabel(self, text="", text_color=MUTED, font=font(12), width=74, anchor="e")
+        self.value.grid(row=0, column=2, padx=(10, 0), sticky="e")
+
+    def set(self, name: str, hp: float, maximum: float, *, tone: str | None = None, note: str = "") -> None:
+        ratio = 0.0 if maximum <= 0 else max(0.0, min(1.0, hp / maximum))
+        color = {"ok": OK_TEXT, "warn": WARN_TEXT, "bad": BAD_TEXT}.get(tone or "", None)
+        if color is None:
+            color = BAD_TEXT if ratio <= 0.25 else WARN_TEXT if ratio <= 0.55 else OK_TEXT
+        self.name.configure(text=name, text_color=FAINT if note == "caído" else TEXT)
+        self.bar.configure(progress_color=color)
+        self.bar.set(ratio)
+        self.value.configure(text=f"{int(hp)} / {int(maximum)}")
+
+
+class Toast(ctk.CTkLabel):
+    """A short message that appears at the bottom of the window and goes away by itself."""
+
+    KINDS = {"info": (TEXT, CARD_BORDER), "ok": (OK_TEXT, "#12382b"), "warn": (WARN_TEXT, "#3a2d10"), "bad": (BAD_TEXT, "#3d1620")}
+
+    def __init__(self, master) -> None:
+        super().__init__(master, text="", corner_radius=10, height=38, padx=18, font=font(13))
+        self._after = None
+
+    def show(self, text: str, kind: str = "info", ms: int = 4200) -> None:
+        color, background = self.KINDS.get(kind, self.KINDS["info"])
+        self.configure(text=text, text_color=color, fg_color=background)
+        self.place(relx=0.5, rely=1.0, anchor="s", y=-18)
+        self.lift()
+        if self._after is not None:
+            self.after_cancel(self._after)
+        self._after = self.after(ms, self.hide)
+
+    def hide(self) -> None:
+        self._after = None
+        self.place_forget()

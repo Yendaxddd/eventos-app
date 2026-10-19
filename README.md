@@ -4,43 +4,52 @@ A feature-rich Discord bot for real-time QTE (Quick Time Events) combat with rol
 
 ## 🖥️ App de escritorio (Windows)
 
-Eventos App es una aplicación de Windows con ventana propia (sin terminal): panel con estado del bot,
-botones de acciones rápidas (QTE individuales/grupales, checkpoint, sincronizar comandos), registro en vivo
-y una pantalla de configuración donde pegas el token.
+Eventos App es una aplicación de Windows con ventana propia (sin terminal), toda en español: **Inicio** (qué falta para empezar, el
+evento en vivo con la vida del jefe y de los jugadores, acciones rápidas), **Actividad** (la dirección pública, quién está conectado
+y cómo va su conexión, el panel del GM en una ventana propia), **Datos** (copias de seguridad y restaurar), **Registro** (con
+búsqueda), **Configuración** (el token, el evento, los bots auxiliares, la IA) y **Ayuda** (atajos, problemas habituales y un informe
+para pedir soporte sin secretos). Todo está explicado en [docs/APP.md](docs/APP.md).
 
 **Instalarla (recomendado)**
-1. Descarga `EventosApp-Setup-X.Y.Z.exe`: en la pestaña *Actions* de GitHub, último run de **Build Windows app**
-   → *Artifacts* → `EventosApp-Installer` (o en *Releases* si se publicó un tag `vX.Y.Z`).
+1. Descarga `EventosApp-Setup-X.Y.Z.exe` en [*Releases*](https://github.com/Yendaxddd/eventos-app/releases) (o en la pestaña *Actions*,
+   último run de **Build Windows app** → *Artifacts* → `EventosApp-Installer`).
 2. Ábrelo y sigue el asistente. Instala solo para tu usuario (no pide administrador) y crea acceso directo
    en el escritorio y en el menú Inicio.
-3. Abre *Eventos App* → *Configuración* → pega el token → *Guardar cambios* → *Panel* → *Iniciar bot*.
-4. Con el bot conectado, en *Configuración* → **Evento** elige el **servidor, el canal y los roles** de los
+3. Abre *Eventos App* → *Configuración* → pega el token → *Guardar cambios* → *Inicio* → *Iniciar bot*. La lista **«Antes de
+   empezar»** de Inicio te dice qué falta en cada momento.
+4. Con el bot conectado, en *Configuración* → **Bot y evento** elige el **servidor, el canal y los roles** de los
    desplegables (con búsqueda) y pulsa *Aplicar al evento*. Equivale a `/setchannel` y crea el hilo «📊 HP Bars».
+
+La app avisa en la barra lateral cuando hay una **versión nueva** (con el botón para descargar el instalador); se puede apagar en
+*Configuración → Inicio e IA*.
 
 **Bots auxiliares (evitar el rate limit).** Discord limita cuántos mensajes manda cada bot por canal (~5 cada 5 s).
 Con varios bots, el principal reparte los mensajes (QTE, respuestas, imágenes) entre todos y las ráfagas salen sin esperas:
 1. En el Developer Portal crea otra aplicación por cada auxiliar (*Bot* → *Reset Token*). No necesitan intents especiales.
-2. *Configuración* → **Bots auxiliares** → pega el token → *Agregar bot auxiliar*.
+2. *Configuración* → pestaña **Envío** → **Bots auxiliares** → pega el token → *Agregar bot auxiliar*.
 3. Pulsa *Invitar* (copia el enlace), ábrelo en el navegador y añádelo a tu servidor.
 4. Inicia el bot. *Probar* envía y borra un mensaje de prueba para confirmar que puede escribir en el canal.
 
 Las reacciones también se reparten entre los bots. Más detalle (latencias, límites, cuántos jugadores aguanta y la
 prueba de rendimiento de la app) en [docs/RENDIMIENTO.md](docs/RENDIMIENTO.md).
 
-Prototipo de **Actividad de Discord** (tablero y espejo del canal dentro de Discord, PC y móvil): [docs/ACTIVIDAD.md](docs/ACTIVIDAD.md).
+La **Actividad de Discord** (botones de QTE con temporizador, tus paneles de jugador y el panel del GM dentro de Discord, PC y móvil):
+[docs/ACTIVIDAD.md](docs/ACTIVIDAD.md).
 
 Los mensajes con botones siempre salen por el bot principal. Si un auxiliar no puede escribir en el canal, el mensaje
 sale por otro bot y ese auxiliar se aparta de ese canal. En una prueba contra un Discord simulado (5 mensajes/5 s por bot),
 una ráfaga de 12 mensajes tarda ~10 s con 1 bot, ~5 s con 2 y menos de 0.5 s con 3 o más.
 
 Para **actualizar**, ejecuta el instalador nuevo encima: se conservan tu `settings.json`, los datos de jugadores
-(`data\`) y los GIFs (`assets\`). Al **desinstalar** te pregunta si quieres borrar también esos datos; por defecto no.
+(`data\`), las copias de seguridad (`backups\`) y los GIFs (`assets\`). Al **desinstalar** te pregunta si quieres borrar también
+esos datos; por defecto no.
 
 **Versión portátil (zip):** `EventosApp-windows.zip` (artifact del mismo run). Descomprime en cualquier carpeta
 y abre `EventosApp.exe`, sin instalar nada.
 
-Todo (datos, assets, logs, `settings.json`) vive en la carpeta de la app; para respaldarla basta con copiarla
-(con el instalador: `%LOCALAPPDATA%\Programs\EventosApp`, o el botón *Carpeta de datos* de la app).
+Todo (datos, assets, logs, copias, `settings.json`) vive en la carpeta de la app; para pasarla a otro PC basta con copiarla
+(con el instalador: `%LOCALAPPDATA%\Programs\EventosApp`, o el botón *Carpeta de datos* de la app). Para respaldar solo los datos
+del evento, la página **Datos** hace copias en un clic (y una cada vez que se detiene el bot).
 Windows SmartScreen puede avisar la primera vez porque el instalador y el `.exe` no están firmados.
 
 **Construirla tú mismo** (Windows, Python 3.11+):

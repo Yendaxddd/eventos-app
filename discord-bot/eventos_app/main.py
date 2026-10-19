@@ -68,6 +68,23 @@ def activity_check() -> dict:
     return result
 
 
+def backups_check() -> bool:
+    """The copies of the event's data work inside the build: a zip is made, listed and restored."""
+    import tempfile
+    from pathlib import Path
+
+    from . import backups
+
+    with tempfile.TemporaryDirectory() as tmp:
+        home = Path(tmp)
+        (home / "data").mkdir()
+        (home / "data" / "player_stats.json").write_text('{"1": 1}', encoding="utf-8")
+        copy = backups.make_backup(home)
+        (home / "data" / "player_stats.json").write_text('{"1": 2}', encoding="utf-8")
+        backups.restore_backup(home, copy)
+        return len(backups.list_backups(home)) == 2 and (home / "data" / "player_stats.json").read_text(encoding="utf-8") == '{"1": 1}'
+
+
 def _smoke_test(out_path: str | None) -> int:
     """Open the window, import the whole bot and try a (bad-token) login, then exit.
 
@@ -79,6 +96,8 @@ def _smoke_test(out_path: str | None) -> int:
     from .settings import Settings
     from .ui import App
 
+    os.environ["EVENTOS_NO_UPDATE_CHECK"] = "1"          # a self-check must not depend on (or wait for) the internet
+
     report: dict = {"app": APP_NAME, "version": __version__, "frozen": paths.is_frozen(),
                     "home": str(paths.app_home()), "checks": {}}
     checks = report["checks"]
@@ -89,6 +108,13 @@ def _smoke_test(out_path: str | None) -> int:
         checks["icon"] = paths.resource_path("eventos_app", "resources", "icon.png").exists()
         checks["assets"] = any(paths.assets_dir().glob("*.gif"))
         checks["data"] = any(paths.data_dir().glob("*.json"))
+
+        for name in app.pages:                   # every page builds and can be shown
+            app.show_page(name)
+            app.update()
+        checks["pages"] = set(app.pages) == {"home", "activity", "data", "log", "config", "help"}
+        app.show_page("home")
+        checks["backups"] = backups_check()
 
         picker = app.config_page.player_picker  # the searchable dropdown used for servers, channels and roles
         picker.set_enabled(True)

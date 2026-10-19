@@ -4,9 +4,11 @@ Una **Actividad** es una pantalla web que Discord abre dentro de la app (PC y m�
 con el tiempo medido **en tu pantalla** (sin depender de mensajes ni reacciones), el canal del evento a la vista y una caja
 para escribir, para no cambiar de canal en pleno timing.
 
-**Versión 0.11.0:** además de lo anterior, el **panel del GM** (para quien tiene el rol de administrador): lanzar QTE, controlar al
-jefe, a los jugadores, los valores del juego y el contenido (logros, árboles, objetos, traducciones) sin tocar archivos ni comandos.
-En la 0.10.0 llegaron **tus paneles** (perfil, logros, personajes y poderes, habilidades, inventario, imágenes y ranking) y en la
+**Versión 1.0.0:** la **app de escritorio renovada** (ver [APP.md](APP.md)): el panel del GM se abre desde la app en una **ventana
+propia** sin pasar por Discord, y la página *Actividad* de la app muestra la dirección, el estado del túnel y quién está conectado.
+En la 0.11.0 llegó el **panel del GM** (para quien tiene el rol de administrador): lanzar QTE, controlar al
+jefe, a los jugadores, los valores del juego y el contenido (logros, árboles, objetos, traducciones) sin tocar archivos ni comandos;
+en la 0.10.0 llegaron **tus paneles** (perfil, logros, personajes y poderes, habilidades, inventario, imágenes y ranking) y en la
 0.9.0 la interfaz nueva (todo en español), el **botón flotante Esquivar → Parry con el temporizador encima**, varios QTE a la vez
 **por prioridad y sin solaparse**, **ajustes por jugador**, la **prueba de latencia** que ajusta tus tiempos y el **tutorial**.
 Los QTE siguen funcionando también por el chat de siempre.
@@ -134,6 +136,10 @@ explica en español y **no cambia nada**. Todo lo que se cambia queda firmado en
   bot sin reiniciarlo. Se pueden crear árboles y objetos nuevos desde las plantillas.
 - **Historial:** quién hizo qué y cuándo (también tras reiniciar).
 
+**Desde la app de escritorio:** *Inicio → Abrir el panel del GM* (o *Actividad → Panel del GM*) lo abre **como GM, sin Discord**, en
+una ventana de Edge o Chrome sin barras (si no hay, en tu navegador). Usa `http://127.0.0.1:PUERTO/?dev=Anfitrión&gm=1&host=1`: el
+servidor marca esa conexión como «anfitrión», así que **no cuenta como jugador** ni sale en la lista de conectados de la app.
+
 **Probarlo en este PC sin Discord:** `http://127.0.0.1:8765/?dev=Ana&gm=1` (solo funciona abriéndolo desde el propio PC; por el
 túnel público el modo de prueba está cerrado, y quien entra con Discord no puede pedir el panel diciéndolo en su saludo).
 
@@ -144,7 +150,7 @@ En <https://discord.com/developers/applications> → tu aplicación (la del bot 
 3. **Activities → URL Mappings**: en la raíz `/` pon la dirección del túnel **sin** `https://` (la app la muestra y tiene el
    botón «Copiar dirección»). **Ya no hace falta** añadir `/cdn` ni `/media`: las imágenes pasan por la propia app. Solo
    la aplicación del **bot principal** necesita la Actividad; los bots auxiliares no se tocan.
-4. **OAuth2 → Client Secret**: «Reset Secret», cópialo y pégalo en *Configuración → Actividad de Discord → Client Secret*.
+4. **OAuth2 → Client Secret**: «Reset Secret», cópialo y pégalo en *Actividad → Ajustes de la Actividad → Client Secret*.
 5. **App Testers**: mientras la app no esté verificada, solo la ven tú, tu equipo y los *testers* (hasta 100), y solo en
    servidores de **menos de 25 miembros**. Añade a cada jugador como tester (debe aceptar la invitación y activar el ajuste de
    pruebas de Actividades en su Discord).
@@ -155,7 +161,7 @@ pegarla a mano en cada inicio. **Tailscale Funnel** (gratis para uso personal) d
 `equipo.tailXXXX.ts.net` **sin página de aviso** (ngrok gratis sí la pone, y deja la Actividad en blanco dentro de Discord).
 1. Instala Tailscale desde <https://tailscale.com/download> e inicia sesión.
 2. En <https://login.tailscale.com/admin/dns> activa **MagicDNS** y **HTTPS Certificates**.
-3. En la app: *Configuración → Actividad de Discord → Dirección → Tailscale Funnel*, y pulsa **Comprobar Tailscale**: te dice
+3. En la app: *Actividad → Ajustes de la Actividad → Dirección → Tailscale Funnel*, y pulsa **Comprobar Tailscale**: te dice
    si está listo y cuál será tu dirección. Guarda e inicia el bot.
 4. La primera vez, Tailscale pide permitir Funnel: la app muestra un enlace (`login.tailscale.com/f/funnel…`); ábrelo, aprueba
    y reinicia la Actividad.
@@ -179,7 +185,7 @@ La app escribe en su registro (gris, con 🌐) todo lo que pasa con la Actividad
 2. Pega esa dirección en URL Mappings `/` (paso 3) y guarda.
 3. Los jugadores abren la Actividad desde Discord (en un canal de voz: icono de cohete; en un canal de texto: «+» → Apps) y
    eligen la aplicación.
-4. *Probar en este PC* abre la Actividad en tu navegador (solo desde este PC, no a través del túnel) para ver que carga.
+4. *Ver la Actividad como jugador* (página Actividad) la abre en tu navegador (solo desde este PC, no a través del túnel) para ver que carga.
 
 ## Qué falta comprobar (no se pudo probar sin Discord real)
 - Que los testers vean la Actividad y puedan lanzarla en tu servidor (límite de 25 miembros, ajuste de testers).
@@ -198,8 +204,9 @@ La app escribe en su registro (gris, con 🌐) todo lo que pasa con la Actividad
    cooldowns** (0.8.x).
 2. **Interfaz nueva, QTE flotante, menú, ajustes, latencia y tutorial** (0.9.0).
 3. **Paneles del jugador** (perfil, logros, personajes y poderes, habilidades, inventario, imágenes, ranking) (0.10.0).
-4. **Panel del GM** (evento, jefe, jugadores, valores, contenido, historial) (0.11.0). Siguen: app de escritorio renovada (1.0.0) y
-   mensajes del bot en español.
+4. **Panel del GM** (evento, jefe, jugadores, valores, contenido, historial) (0.11.0).
+5. **App de escritorio renovada** (inicio, Actividad, datos con copias, registro, ayuda, panel del GM en ventana propia, aviso de
+   versión nueva) (1.0.0). Sigue: los mensajes del bot en español.
 
 ## Desarrollo del cliente
 El cliente web está en `discord-bot/activity_client` (Preact + esbuild; `npm ci && npm run build` lo genera en
@@ -219,5 +226,7 @@ exista y se llame como el bot lo declara (`test_activity_gm_contract.py`).
 - La mini-ventana de Discord (el comportamiento de la «PiP interactiva» depende de la versión de Discord).
 - El **panel del GM con el rol real** del servidor (las pruebas usan un bot inventado con el mismo contrato que el real, y la
   prueba de contrato lo vigila, pero no hay un Discord de verdad detrás) y el uso de los formularios largos en el móvil.
+- La **ventana propia del panel del GM** con Edge o Chrome en tu Windows (la apertura con `--app` se prueba con navegadores falsos;
+  si algo falla, se abre en tu navegador) y la app de escritorio en un Windows real más allá de la prueba de arranque del instalador.
 - **Subir una imagen desde el móvil** dentro de Discord: el selector de archivos de la Actividad puede comportarse distinto según
   el sistema; el enlace https sirve siempre. Y que el canal del evento deje al bot publicar archivos (la imagen se guarda ahí).

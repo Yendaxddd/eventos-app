@@ -221,6 +221,28 @@ def test_everyone_connected_sees_new_edited_and_deleted_messages_and_who_is_onli
     assert backlog == [] and len(users) == 3 and remaining == 1      # Eva is still connected
 
 
+def test_the_hosts_own_window_is_not_listed_among_the_players_but_still_counts_as_a_connection():
+    async def scenario():
+        async with Rig() as rig:
+            ana, ana_welcome = await rig.hello({"t": "hello", "dev": "Ana"})
+            host, host_welcome = await rig.hello({"t": "hello", "dev": "Anfitrión", "gm": True, "host": True})
+            rig.discord.add_oauth_user("code222", 222, ALLOWED.get(222, "stranger"))           # a Discord player who says «host» in their hello
+            async with rig.http.post(rig.url("/api/token"), json={"code": "code222"}) as r:
+                token = (await r.json())["access_token"]
+            player, player_welcome = await rig.hello({"t": "hello", "token": token, "host": True, "gm": True})
+            listed = [u["name"] for u in rig.hub.participants()]
+            stats = {c["name"]: c["hidden"] for c in rig.hub.stats()}
+            return ana_welcome, host_welcome, player_welcome, listed, stats, [c.gm for c in rig.hub.conns.values()]
+
+    ana_welcome, host_welcome, player_welcome, listed, stats, gm_flags = run(scenario())
+    assert [u["name"] for u in ana_welcome["users"]] == ["Ana (prueba local)"]
+    assert [u["name"] for u in host_welcome["users"]] == ["Ana (prueba local)"]                        # it is not even in the list it is first shown
+    assert player_welcome["t"] == "welcome" and ALLOWED[222] in listed                                  # a Discord player can not hide (or take the panel) by saying so
+    assert "Anfitrión (prueba local)" not in listed and "Ana (prueba local)" in listed
+    assert stats["Anfitrión (prueba local)"] is True and stats["Ana (prueba local)"] is False and stats[ALLOWED[222]] is False
+    assert sorted(gm_flags) == [False, False, True]                                                     # only the host's window asked for the panel and got it
+
+
 def test_two_windows_of_the_same_person_count_once_and_the_backlog_is_capped():
     async def scenario():
         hub = Hub(backlog=3)

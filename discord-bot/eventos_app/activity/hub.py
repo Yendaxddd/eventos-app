@@ -42,6 +42,7 @@ class Conn:
     sp_sent: dict = field(default_factory=dict)   # server ping number -> when it was sent (monotonic)
     comp_sent: dict | None = None                 # the latency adjustment this connection was last told
     gm: bool = False                              # may use the game-master panel (checked again on every action)
+    hidden: bool = False                          # the host's own window (the desktop app): it is not listed among the people in the Activity
     _tokens: float = 2 * RATE_PER_SECOND
     _refilled: float = field(default_factory=time.monotonic)
 
@@ -74,7 +75,7 @@ class Conn:
         return sum(abs(r - middle) for r in self.rtts) / len(self.rtts)
 
     def stats(self) -> dict:
-        return {**self.public(), "rtt_ms": self.rtt_ms, "offset_ms": self.offset_ms,
+        return {**self.public(), "hidden": self.hidden, "rtt_ms": self.rtt_ms, "offset_ms": self.offset_ms,
                 "net_ms": round(self.net_ms, 1), "jitter_ms": None if self.jitter_ms is None else round(self.jitter_ms, 1),
                 "seconds": round(time.time() - self.joined)}
 
@@ -157,7 +158,8 @@ class Hub:
     def participants(self) -> list[dict]:
         seen: dict[int, dict] = {}
         for conn in self.conns.values():       # one entry per person, even with two windows open
-            seen.setdefault(conn.user_id, conn.public())
+            if not conn.hidden:
+                seen.setdefault(conn.user_id, conn.public())
         return list(seen.values())
 
     def stats(self) -> list[dict]:

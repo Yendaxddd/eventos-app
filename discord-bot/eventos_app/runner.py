@@ -20,7 +20,7 @@ import discord
 
 from rich.markup import escape as markup_escape
 
-from . import activity, benchmark, console_bridge, diagnostics, i18n, multibot, paths, webhooks
+from . import activity, backups, benchmark, browser, console_bridge, diagnostics, i18n, multibot, paths, snapshot, webhooks
 from .settings import Settings
 
 log = logging.getLogger("eventos_app")
@@ -133,6 +133,14 @@ class BotRunner:
             return app.bot.user.id if app is not None and app.bot.user else 0
         except Exception:
             return 0
+
+    def event_ready(self) -> bool:
+        """Is there an event channel the bot can see?"""
+        app = self._app
+        try:
+            return bool(app is not None and self._is_ready() and app.qte_channel_id and app.bot.get_channel(app.qte_channel_id) is not None)
+        except Exception:  # noqa: BLE001
+            return False
 
     def event_line(self) -> str:
         """One line about the configured event for the panel ('' when not connected)."""
@@ -331,7 +339,7 @@ class BotRunner:
     async def _run_benchmark(self, profile: str) -> dict:
         pool, app = self._pool, self._app
         if pool is None or not app.qte_channel_id:
-            return {"ok": False, "error": "Elige primero el canal del evento (Configuración → Evento)."}
+            return {"ok": False, "error": "Elige primero el canal del evento (Configuración → Bot y evento)."}
         out = console_bridge.console
         self._bench_stop = asyncio.Event()
         out.print("[bold cyan]▶ Prueba de rendimiento: manda mensajes de prueba al canal del evento y los borra[/bold cyan]")
@@ -404,6 +412,45 @@ class BotRunner:
                 f"compartiendo el envío de mensajes[/green]")
         await self._sync_lanes()
         await self._start_activity(settings)
+
+    def _backup_on_stop(self) -> None:
+        """Everything is on disk now: keep a copy of it if anything changed since the last one."""
+        try:
+            home = paths.app_home()
+            if backups.changed_since_last(home):
+                made = backups.make_backup(home, label=backups.AUTOMATIC)
+                console_bridge.console.print(f"[dim]💾 Copia de seguridad de los datos: {made.name}[/dim]")
+        except Exception as exc:  # noqa: BLE001 - never stop the bot from closing over a copy
+            log.warning("automatic backup failed", exc_info=True)
+            console_bridge.console.print(f"[yellow]⚠ No se pudo hacer la copia de seguridad automática: {markup_escape(str(exc))}[/yellow]")
+
+    # ---- what the window shows about the event, and the host's own window -----------------------------------
+    def event_snapshot(self) -> dict:
+        """The live state of the event for the Home page (read-only; {} until the bot is ready)."""
+        app = self._app
+        if app is None or not self._is_ready():
+            return {}
+        a = self._activity
+        online = {c.user_id for c in list(a.hub.conns.values())} if a is not None else set()
+        return snapshot.event_snapshot(app, online)
+
+    def host_url(self, *, gm: bool = True) -> str:
+        """Where this PC opens the Activity as the host («» while the Activity is not running)."""
+        info = self.activity_info()
+        return browser.host_url(info["port"], gm=gm) if info.get("running") else ""
+
+    def flush_data(self, timeout: float = 20.0) -> None:
+        """Make sure what the bot knows is on disk (before a copy). Blocks the caller, never the bot's own thread."""
+        app, loop = self._app, self._loop
+        if app is None or loop is None or loop.is_closed():
+            return
+        module = importlib.import_module(BOT_MODULE)
+
+        async def save() -> None:
+            app.save_all_data(force=True)
+            await asyncio.get_running_loop().run_in_executor(None, module.flush_saves)
+
+        asyncio.run_coroutine_threadsafe(save(), loop).result(timeout)
 
     # ---- Discord Activity (local server + free tunnel) --------------------------------
     async def _start_activity(self, settings: Settings) -> None:
@@ -486,7 +533,7 @@ class BotRunner:
             return {"running": False}
         return {"running": True, "port": a.server.port, "tunnel": a.tunnel.state, "detail": a.tunnel.detail,
                 "url": a.tunnel.url, "fixed": getattr(a.tunnel, "fixed", False), "users": a.hub.stats(),
-                "secret_set": bool(a.auth.client_secret)}
+                "secret_set": bool(a.auth.client_secret), "client_id": a.server.client_id}
 
     def reopen_tunnel(self) -> concurrent.futures.Future:
         """A fresh tunnel (and a fresh address) without restarting the bot."""
@@ -504,7 +551,7 @@ class BotRunner:
             await pool.ensure_lanes(0)
             return {"ok": True, "lanes": 0, "failed": [], "disabled": True}
         if not app.qte_channel_id:
-            return {"ok": False, "error": "Elige primero el canal del evento (Configuración → Evento)."}
+            return {"ok": False, "error": "Elige primero el canal del evento (Configuración → Bot y evento)."}
         results = await pool.ensure_lanes(app.qte_channel_id)
         good = [r for r in results if r["ok"]]
         bad = [r for r in results if not r["ok"]]
@@ -562,7 +609,7 @@ class BotRunner:
             log.exception("bot stopped with an error")
             console_bridge.console.print(f"[red]✗ {error}[/red]")
         finally:
-            self._cleanup(loop)
+            self._cleanup(loop, settings)
             self._app = None
             self._loop = None
             self._pool = None
@@ -592,7 +639,7 @@ class BotRunner:
             if not bot.is_closed():
                 await bot.close()
 
-    def _cleanup(self, loop: asyncio.AbstractEventLoop) -> None:
+    def _cleanup(self, loop: asyncio.AbstractEventLoop, settings: Settings | None = None) -> None:
         app = self._app
         if app is not None:
             module = importlib.import_module(BOT_MODULE)
@@ -601,6 +648,8 @@ class BotRunner:
                     step()
                 except Exception:
                     log.exception("cleanup step failed")
+            if settings is not None and settings.backup_on_stop:
+                self._backup_on_stop()
         try:
             pending = [t for t in asyncio.all_tasks(loop) if not t.done()]
             for task in pending:

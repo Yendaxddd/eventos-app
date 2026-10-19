@@ -17,12 +17,15 @@ from . import multibot, ollama
 from .activity import tunnel as activity_tunnel
 from .runner import State
 from .settings import Settings
-from .theme import (ACCENT, AMBER, BUTTON_NEUTRAL, CARD_BORDER, GREEN, MUTED, RED, TEXT, card)
+from .theme import (ACCENT, ACCENT_HOVER, BAD_TEXT, BUTTON_NEUTRAL, BUTTON_NEUTRAL_HOVER, CARD_BORDER, INPUT_BG, MUTED, OK_TEXT, TEXT, WARN_TEXT, card,
+                    font)
 from .widgets import PickerField
 
 log = logging.getLogger("eventos_app")
 
+GREEN, AMBER, RED = OK_TEXT, WARN_TEXT, BAD_TEXT        # the colours the messages of this page use, as text
 DEVELOPER_PORTAL = "https://discord.com/developers/applications"
+TABS = (("bot", "Bot y evento"), ("send", "Envío"), ("start", "Inicio e IA"))
 NO_ADMIN = "— Ninguno —"
 
 
@@ -41,10 +44,20 @@ class ConfigPage(ctk.CTkFrame):
         self._busy_event = False
 
         self.grid_columnconfigure(0, weight=1)
-        self.grid_rowconfigure(0, weight=1)
+        self.grid_rowconfigure(2, weight=1)
+        head = ctk.CTkFrame(self, fg_color="transparent")
+        head.grid(row=0, column=0, sticky="ew", padx=26, pady=(26, 6))
+        ctk.CTkLabel(head, text="Configuración", font=font(24, "bold"), text_color=TEXT, anchor="w").pack(anchor="w")
+        ctk.CTkLabel(head, text="El token, el evento, cómo se envían los mensajes y el arranque. Los cambios valen al pulsar «Guardar cambios».",
+                     text_color=MUTED, anchor="w").pack(anchor="w")
+        self.tabs = ctk.CTkSegmentedButton(self, values=[label for _key, label in TABS], command=self._on_tab, height=34, selected_color=ACCENT,
+                                           selected_hover_color=ACCENT_HOVER, unselected_color=INPUT_BG, unselected_hover_color=CARD_BORDER)
+        self.tabs.grid(row=1, column=0, sticky="w", padx=26, pady=(8, 4))
         self.scroll = ctk.CTkScrollableFrame(self, fg_color="transparent")
-        self.scroll.grid(row=0, column=0, sticky="nsew", padx=10, pady=(10, 0))
+        self.scroll.grid(row=2, column=0, sticky="nsew", padx=14, pady=(0, 0))
         self.scroll.grid_columnconfigure(0, weight=1)
+        self._tab_boxes: dict[str, list[ctk.CTkFrame]] = {key: [] for key, _label in TABS}
+        self._building = "bot"
 
         s = app.settings
         self.vars: dict[str, tk.Variable] = {
@@ -59,42 +72,65 @@ class ConfigPage(ctk.CTkFrame):
             "activity_client_secret": tk.StringVar(value=s.activity_client_secret),
             "activity_tunnel": tk.StringVar(value=s.activity_tunnel),
             "auto_start": tk.BooleanVar(value=s.auto_start),
+            "backup_on_stop": tk.BooleanVar(value=s.backup_on_stop),
+            "check_updates": tk.BooleanVar(value=s.check_updates),
         }
+        self._building = "bot"
         self._build_token(0)
         self._build_event(1)
+        self._building = "send"
         self._build_helpers(2)
         self._build_webhooks(3)
-        self._build_activity(4)
         self._build_performance(5)
+        self._building = "start"
         self._build_startup(6)
         self._build_ai(7)
+        self._show_tab("bot")
 
         bar = ctk.CTkFrame(self, fg_color="transparent")
-        bar.grid(row=1, column=0, sticky="ew", padx=20, pady=14)
-        ctk.CTkButton(bar, text="Guardar cambios", width=160, height=38, fg_color=ACCENT,
-                      command=app.save_from_page).pack(side="left")
+        bar.grid(row=3, column=0, sticky="ew", padx=26, pady=14)
+        ctk.CTkButton(bar, text="Guardar cambios", width=170, height=40, corner_radius=8, fg_color=ACCENT, hover_color=ACCENT_HOVER,
+                      font=font(14, "bold"), command=app.save_from_page).pack(side="left")
         self.save_msg = ctk.CTkLabel(bar, text="", text_color=MUTED)
         self.save_msg.pack(side="left", padx=14)
         self._show_offline_event()
+
+    # ---- tabs ---------------------------------------------------------------------------------------
+    def _on_tab(self, label: str) -> None:
+        self._show_tab(next(key for key, text in TABS if text == label))
+
+    def _show_tab(self, key: str) -> None:
+        for name, boxes in self._tab_boxes.items():
+            for box in boxes:
+                if name == key:
+                    box.grid()
+                else:
+                    box.grid_remove()
+        self.tabs.set(dict(TABS)[key])
+
+    def on_show(self, tab: str | None = None, **_options) -> None:
+        if tab in self._tab_boxes:
+            self._show_tab(tab)
 
     # ---- small helpers ----------------------------------------------------------
     def _section(self, title: str, row: int) -> ctk.CTkFrame:
         box = card(self.scroll)
         box.grid(row=row, column=0, sticky="ew", padx=10, pady=8)
         box.grid_columnconfigure(1, weight=1)
-        ctk.CTkLabel(box, text=title, font=ctk.CTkFont(size=15, weight="bold"), text_color=TEXT).grid(
+        ctk.CTkLabel(box, text=title, font=font(15, "bold"), text_color=TEXT).grid(
             row=0, column=0, columnspan=4, padx=18, pady=(14, 6), sticky="w")
+        self._tab_boxes[self._building].append(box)
         return box
 
     @staticmethod
     def _note(box, row: int, text: str, columnspan: int = 4, pady=(0, 10)) -> ctk.CTkLabel:
-        label = ctk.CTkLabel(box, text=text, text_color=MUTED, anchor="w", justify="left", wraplength=640)
+        label = ctk.CTkLabel(box, text=text, text_color=MUTED, anchor="w", justify="left", wraplength=760)
         label.grid(row=row, column=0, columnspan=columnspan, padx=18, pady=pady, sticky="w")
         return label
 
     def _field(self, box, row: int, label: str, key: str, show: str | None = None) -> ctk.CTkEntry:
         ctk.CTkLabel(box, text=label, text_color=MUTED, anchor="w").grid(row=row, column=0, padx=(18, 12), pady=6, sticky="w")
-        entry = ctk.CTkEntry(box, textvariable=self.vars[key], show=show, height=34)
+        entry = ctk.CTkEntry(box, textvariable=self.vars[key], show=show, height=34, fg_color=INPUT_BG, border_color=CARD_BORDER, border_width=1)
         entry.grid(row=row, column=1, columnspan=3, padx=(0, 18), pady=6, sticky="ew")
         return entry
 
@@ -451,7 +487,7 @@ class ConfigPage(ctk.CTkFrame):
         for button in (self.bench_quick, self.bench_full):
             button.configure(state="disabled")
         self.bench_stop.configure(state="normal")
-        self.bench_msg.configure(text="Midiendo… el avance sale en el registro del Panel.", text_color=MUTED)
+        self.bench_msg.configure(text="Midiendo… el avance sale en la página Registro.", text_color=MUTED)
 
         def finish() -> None:
             for button in (self.bench_quick, self.bench_full):
@@ -527,118 +563,47 @@ class ConfigPage(ctk.CTkFrame):
         lines += [f"✗ {b['name'].rsplit('#', 1)[0]}: {b['lane_note']}" for b in bad[:6]]
         self.lanes_status.configure(text="\n".join(lines), text_color=GREEN if good and not bad else AMBER if good else MUTED)
 
-    # ---- Discord Activity ---------------------------------------------------------------
-    def _build_activity(self, row: int) -> None:
-        box = self._section("Actividad de Discord (beta)", row)
-        self._note(box, 1, "Una Actividad es una pantalla del juego dentro de Discord (PC y móvil) que muestra el canal del "
-                           "evento, deja escribir y responder los QTE con botones midiendo los tiempos en la pantalla del jugador, "
-                           "sin depender de los mensajes. Funciona desde este PC con un túnel gratuito: el de Cloudflare "
-                           "cambia de dirección en cada inicio; con Tailscale Funnel (abajo) la dirección es fija y la pegas una sola "
-                           "vez en el Developer Portal. Pasos en docs/ACTIVIDAD.md.")
-        ctk.CTkCheckBox(box, text="Activar la Actividad al iniciar el bot", variable=self.vars["activity_enabled"],
-                        fg_color=ACCENT, hover_color=ACCENT).grid(row=2, column=0, columnspan=4, padx=18, pady=(2, 6), sticky="w")
-        self.activity_secret_entry = self._field(box, 3, "Client Secret", "activity_client_secret", show="•")
-        self._note(box, 4, "Developer Portal → tu aplicación → OAuth2 → «Client Secret». Se guarda solo en este equipo.", pady=(0, 6))
-        ctk.CTkLabel(box, text="Dirección", text_color=MUTED, anchor="w").grid(row=5, column=0, padx=(18, 12), pady=6, sticky="w")
+    # ---- Discord Activity: the settings (the Activity page puts them in its own card) ----------------------------------------
+    def build_activity_settings(self, box, first_row: int = 1) -> None:
+        r = first_row
+        ctk.CTkSwitch(box, text="Activar la Actividad al iniciar el bot", variable=self.vars["activity_enabled"], progress_color=ACCENT).grid(
+            row=r, column=0, columnspan=4, padx=20, pady=(2, 8), sticky="w")
+        self.activity_secret_entry = self._field(box, r + 1, "Client Secret", "activity_client_secret", show="•")
+        self._note(box, r + 2, "Developer Portal → tu aplicación → OAuth2 → «Client Secret». Se guarda solo en este equipo.", pady=(0, 6))
+        ctk.CTkLabel(box, text="Dirección", text_color=MUTED, anchor="w").grid(row=r + 3, column=0, padx=(18, 12), pady=6, sticky="w")
         labels = {"cloudflare": "Túnel rápido de Cloudflare (cambia en cada inicio)", "tailscale": "Tailscale Funnel (dirección fija)"}
         by_label = {label: key for key, label in labels.items()}
         self.activity_tunnel_menu = ctk.CTkOptionMenu(
-            box, values=list(labels.values()), height=34, fg_color=BUTTON_NEUTRAL, button_color=CARD_BORDER,
+            box, values=list(labels.values()), height=34, fg_color=BUTTON_NEUTRAL, button_color=CARD_BORDER, button_hover_color=BUTTON_NEUTRAL_HOVER,
             command=lambda label: self.vars["activity_tunnel"].set(by_label[label]))
         self.activity_tunnel_menu.set(labels.get(self.vars["activity_tunnel"].get(), labels["cloudflare"]))
-        self.activity_tunnel_menu.grid(row=5, column=1, columnspan=2, padx=(0, 8), pady=6, sticky="ew")
-        ctk.CTkButton(box, text="Comprobar Tailscale", width=150, height=34, fg_color=BUTTON_NEUTRAL, hover_color=CARD_BORDER,
-                      command=self._check_tailscale).grid(row=5, column=3, padx=(0, 18), pady=6)
-        self._note(box, 7, "Tailscale Funnel: instala Tailscale (tailscale.com/download), inicia sesión, activa «MagicDNS» y «HTTPS "
-                           "Certificates» en login.tailscale.com/admin/dns y elige esta opción. La primera vez la app te dará un "
-                           "enlace para permitir Funnel. Sin cuentas, usa el túnel de Cloudflare.", pady=(0, 6))
-        self.activity_status = ctk.CTkLabel(box, text="", text_color=MUTED, anchor="w", justify="left", wraplength=640)
-        self.activity_status.grid(row=8, column=0, columnspan=4, padx=18, pady=(2, 6), sticky="w")
-        buttons = ctk.CTkFrame(box, fg_color="transparent")
-        buttons.grid(row=9, column=0, columnspan=4, padx=14, pady=(0, 14), sticky="w")
-        self.activity_buttons = {}
-        for text, command in (("Copiar dirección", self._copy_activity_url), ("Nueva dirección", self._reopen_tunnel),
-                              ("Probar en este PC", self._test_activity), ("Abrir Developer Portal", self._open_portal)):
-            button = ctk.CTkButton(buttons, text=text, width=150, height=30, fg_color=BUTTON_NEUTRAL, hover_color=CARD_BORDER,
-                                   command=command)
-            button.pack(side="left", padx=4)
-            self.activity_buttons[text] = button
+        self.activity_tunnel_menu.grid(row=r + 3, column=1, columnspan=2, padx=(0, 8), pady=6, sticky="ew")
+        ctk.CTkButton(box, text="Comprobar Tailscale", width=150, height=34, corner_radius=8, fg_color=BUTTON_NEUTRAL, hover_color=BUTTON_NEUTRAL_HOVER,
+                      command=self._check_tailscale).grid(row=r + 3, column=3, padx=(0, 18), pady=6)
+        self._note(box, r + 4, "Tailscale Funnel: instala Tailscale (tailscale.com/download), inicia sesión, activa «MagicDNS» y «HTTPS "
+                               "Certificates» en login.tailscale.com/admin/dns y elige esta opción. La primera vez la app te dará un "
+                               "enlace para permitir Funnel. Sin cuentas, usa el túnel de Cloudflare.", pady=(0, 6))
+        self.tailscale_msg = ctk.CTkLabel(box, text="", text_color=MUTED, anchor="w", justify="left", wraplength=700)
+        self.tailscale_msg.grid(row=r + 5, column=0, columnspan=4, padx=18, pady=(0, 6), sticky="w")
+        ctk.CTkButton(box, text="Guardar cambios", width=150, height=34, corner_radius=8, fg_color=ACCENT, hover_color=ACCENT_HOVER,
+                      command=self.app.save_from_page).grid(row=r + 6, column=0, columnspan=2, padx=18, pady=(2, 16), sticky="w")
 
     def _check_tailscale(self) -> None:
-        self.activity_status.configure(text="Comprobando Tailscale…", text_color=MUTED)
+        self.tailscale_msg.configure(text="Comprobando Tailscale…", text_color=MUTED)
 
         def work() -> None:
             ok, message = activity_tunnel.check_tailscale()
-            self.after(0, lambda: self.activity_status.configure(text=("✓ " if ok else "✗ ") + message,
-                                                                text_color=GREEN if ok else AMBER))
+            self.after(0, lambda: self.tailscale_msg.configure(text=("✓ " if ok else "✗ ") + message, text_color=GREEN if ok else AMBER))
 
         threading.Thread(target=work, daemon=True).start()
-
-    def _activity_url(self) -> str:
-        return self.app.runner.activity_info().get("url", "")
-
-    def _copy_activity_url(self) -> None:
-        url = self._activity_url()
-        if not url:
-            self.activity_status.configure(text="Todavía no hay dirección: el túnel se abre al iniciar el bot.", text_color=AMBER)
-            return
-        self.clipboard_clear()
-        self.clipboard_append(url.removeprefix("https://"))
-        self.activity_status.configure(text=f"Copiada: {url.removeprefix('https://')} (pégala en URL Mappings, raíz «/»).",
-                                       text_color=GREEN)
-
-    def _reopen_tunnel(self) -> None:
-        try:
-            future = self.app.runner.reopen_tunnel()
-        except RuntimeError as exc:
-            self.activity_status.configure(text=str(exc), text_color=AMBER)
-            return
-        self.activity_status.configure(text="Abriendo un túnel nuevo…", text_color=MUTED)
-        self.app.watch(future, lambda result: None, lambda exc: self.activity_status.configure(text=f"✗ {exc}", text_color=RED))
-
-    def _test_activity(self) -> None:
-        info = self.app.runner.activity_info()
-        if not info.get("running"):
-            self.activity_status.configure(text="La Actividad no está en marcha: actívala, guarda y inicia el bot.", text_color=AMBER)
-            return
-        webbrowser.open(f"http://127.0.0.1:{info['port']}/?dev=Admin")
-
-    def _open_portal(self) -> None:
-        webbrowser.open(DEVELOPER_PORTAL)
-
-    def _refresh_activity(self) -> None:
-        info = self.app.runner.activity_info()
-        if not info.get("running"):
-            enabled = bool(self.vars["activity_enabled"].get())
-            self.activity_status.configure(
-                text="Se activará al iniciar el bot." if enabled else "Desactivada.", text_color=MUTED)
-            return
-        lines = []
-        if info["tunnel"] == "up":
-            lines.append(f"● Túnel listo: {info['url'].removeprefix('https://')}")
-            lines.append("En el Developer Portal → Activities → URL Mappings pon esa dirección en la raíz «/» " +
-                         ("(es fija: solo la primera vez)." if info.get("fixed") else "(cambia en cada inicio)."))
-        elif info["tunnel"] == "error":
-            lines.append(f"✗ Túnel: {info['detail']}")
-        else:
-            lines.append(f"… {info['detail'] or 'Preparando el túnel'}")
-        if not info["secret_set"]:
-            lines.append("⚠ Falta el Client Secret: nadie podrá entrar desde Discord.")
-        users = info["users"]
-        if users:
-            lines.append(f"{len(users)} conexión(es): " + " · ".join(
-                f"{u['name']} {round(u['rtt_ms'])} ms" if u["rtt_ms"] is not None else u["name"] for u in users[:8]))
-        else:
-            lines.append("Nadie conectado todavía.")
-        color = RED if info["tunnel"] == "error" else GREEN if info["tunnel"] == "up" and info["secret_set"] else AMBER
-        self.activity_status.configure(text="\n".join(lines), text_color=color)
 
     # ---- startup ---------------------------------------------------------------------
     def _build_startup(self, row: int) -> None:
         box = self._section("Inicio", row)
         checks = (("auto_start", "Iniciar el bot automáticamente al abrir la app"),
                   ("reset_on_start", "Reiniciar HP, cargas y buffs cada vez que se inicia el bot"),
-                  ("hotkeys_enabled", "Atajos de teclado globales (F9–F12, F8…) — funcionan aunque la app esté en segundo plano"))
+                  ("hotkeys_enabled", "Atajos de teclado globales (F9–F12, F8…) — funcionan aunque la app esté en segundo plano"),
+                  ("check_updates", "Avisar cuando haya una versión nueva de la app (consulta GitHub al abrir)"))
         for i, (key, text) in enumerate(checks, start=1):
             ctk.CTkCheckBox(box, text=text, variable=self.vars[key], fg_color=ACCENT, hover_color=ACCENT).grid(
                 row=i, column=0, columnspan=4, padx=18, pady=(6, 14 if i == len(checks) else 6), sticky="w")
@@ -691,7 +656,6 @@ class ConfigPage(ctk.CTkFrame):
             self._show_offline_event()
         self._refresh_helper_status()
         self._refresh_webhooks()
-        self._refresh_activity()
 
     def collect(self) -> Settings:
         """Settings as currently shown (helper bots and event names are kept up to date by the app)."""

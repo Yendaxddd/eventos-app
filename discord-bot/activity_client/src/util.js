@@ -3,6 +3,7 @@ export const params = new URLSearchParams(typeof location !== "undefined" ? loca
 export const inDiscord = params.has("frame_id");          // Discord adds frame_id when it loads the Activity
 export const devName = params.get("dev");                  // ?dev=Ana: a test window opened from this very PC (no Discord)
 export const devGm = params.get("gm") === "1";             // ...and ?gm=1 asks for the game-master panel in that test window
+export const devHost = params.get("host") === "1";         // ...and ?host=1 says it is the host's own window (the desktop app): not listed among the players
 export const base = inDiscord ? "/.proxy" : "";            // Discord forwards /.proxy/* to the mapped server
 
 export const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));

@@ -372,11 +372,12 @@ class ActivityServer:
                 return ws
             conn = Conn(self.hub.new_id(), user_id, name, avatar, ws, dev=dev)
             conn.gm = bool(dev and hello.get("gm"))           # a test window on this PC may ask for the GM panel; Discord users never do
+            conn.hidden = bool(dev and hello.get("host"))     # ...and, being the host's own window (the desktop app), not to be listed among the players
             backlog = await self.hub.load_backlog()
             if self.actions is not None and hasattr(self.actions, "push_state"):
                 await self.actions.push_state()                  # so the welcome carries the game as it is right now
             users = self.hub.participants()
-            if not any(u["id"] == str(user_id) for u in users):
+            if not conn.hidden and not any(u["id"] == str(user_id) for u in users):
                 users.append(conn.public())          # you are in the list you are first shown
             characters = self.actions.characters_of(user_id) if self.actions is not None else []
             extras = {}

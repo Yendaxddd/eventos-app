@@ -48,7 +48,7 @@ class DiscordAuth:
     async def exchange_code(self, code: str) -> str:
         """The Activity authorised itself and got a one-time `code`; Discord gives us the access token for it."""
         if not self.client_secret:
-            raise AuthError("Falta el «Client Secret» de la aplicación (Configuración → Actividad).")
+            raise AuthError("Falta el «Client Secret» de la aplicación (página Actividad → Ajustes de la Actividad).")
         session = await self._http()
         form = {"client_id": str(self.client_id), "client_secret": self.client_secret,
                 "grant_type": "authorization_code", "code": code}

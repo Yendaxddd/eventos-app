@@ -1,4 +1,4 @@
-"""Main window of the desktop app (CustomTkinter)."""
+"""Main window of the desktop app (CustomTkinter): the sidebar, the pages and the services they share (the bot, the log, background work)."""
 
 from __future__ import annotations
 
@@ -6,106 +6,87 @@ import collections
 import datetime
 import logging
 import os
-import subprocess
 import sys
 import threading
 import tkinter as tk
+import webbrowser
 from tkinter import messagebox
 
 import customtkinter as ctk
 from PIL import Image
 
-from . import APP_NAME, __version__, paths, settings as settings_store
-from .console_bridge import Segment
+from . import APP_NAME, __version__, browser, paths, settings as settings_store, theme, updates
 from .config_page import ConfigPage
+from .console_bridge import Segment
+from .logview import Line, LogHub
+from .pages import Page
+from .pages.activity import ActivityPage
+from .pages.data import DataPage
+from .pages.help import HelpPage
+from .pages.home import STATUS, HomePage
+from .pages.log import LogPage
 from .runner import STOP_TIMEOUT_SECONDS, BotRunner, State
-from .theme import (ACCENT, AMBER, BG, BUTTON_NEUTRAL, CARD, CARD_BORDER, GRAY, GREEN, GREEN_HOVER, INACTIVE,
-                    LOG_MONO, MUTED, RED, RED_HOVER, TEXT, card)
+from .theme import ACCENT, ACCENT_SOFT, BG, BAD_TEXT, FAINT, MUTED, OK_TEXT, SIDEBAR, TEXT, WARN_TEXT, button, font
+from .widgets import Pill, Toast
 
 log = logging.getLogger("eventos_app")
 
-MAX_LOG_LINES = 4000
 LINES_PER_TICK = 300
-
-# (action id, caption, colour). Action ids match bot.quick_actions.
-DIFFICULTIES = [
-    ("easy", "Fácil", "#2e9e5b"),
-    ("medium", "Media", "#c9a227"),
-    ("hard", "Difícil", "#d1495b"),
-    ("impossible", "Imposible", "#8f5bd6"),
-]
-DEFAULT_KEYS = {
-    "single_easy": "F9", "single_medium": "F10", "single_hard": "F11", "single_impossible": "F12",
-    "group_easy": "Shift+F9", "group_medium": "Shift+F10", "group_hard": "Shift+F11",
-    "group_impossible": "Shift+F12", "checkpoint": "F8", "sync_commands": "F7", "batch_toggle": "Alt+F9",
-}
-
-STATUS_STYLE = {
-    State.STOPPED: (GRAY, "Detenido"),
-    State.STARTING: (AMBER, "Conectando…"),
-    State.CONNECTED: (GREEN, "Conectado"),
-    State.STOPPING: (AMBER, "Deteniendo…"),
-    State.ERROR: (RED, "Error"),
-}
-
-
-def _readable(color: str | None) -> str:
-    """Lift dark console colours so they stay legible on the dark background."""
-    if not color:
-        return TEXT
-    r, g, b = (int(color[i:i + 2], 16) for i in (1, 3, 5))
-    luminance = 0.299 * r + 0.587 * g + 0.114 * b
-    if luminance >= 135:
-        return color
-    t = (160 - luminance) / (255 - luminance)
-    return "#%02x%02x%02x" % tuple(round(c + (255 - c) * t) for c in (r, g, b))
-
-
-def open_folder(path) -> None:
-    try:
-        if sys.platform == "win32":
-            os.startfile(str(path))  # noqa: S606 - opening a folder we own
-        elif sys.platform == "darwin":
-            subprocess.Popen(["open", str(path)])
-        else:
-            subprocess.Popen(["xdg-open", str(path)])
-    except Exception:
-        log.exception("could not open %s", path)
+UPDATE_CHECK_DELAY_MS = 4000                      # after the window is up and the bot (if it starts by itself) is already connecting
+NAV = (("home", "🏠", "Inicio"), ("activity", "🌐", "Actividad"), ("data", "💾", "Datos"), ("log", "📜", "Registro"),
+       ("config", "⚙", "Configuración"), ("help", "❓", "Ayuda"))
 
 
 class App(ctk.CTk):
     def __init__(self) -> None:
         ctk.set_appearance_mode("dark")
         ctk.set_default_color_theme("blue")
+        theme.apply()
         super().__init__(fg_color=BG)
 
         self.title(APP_NAME)
-        self.geometry("1040x720")
-        self.minsize(900, 620)
+        self.geometry("1120x780")
+        self.minsize(1000, 700)
         self._set_icon()
 
         self.settings = settings_store.load()
+        self.hub = LogHub()
         self._log_queue: collections.deque[list[Segment]] = collections.deque(maxlen=20000)
-        self._tags: set[str] = set()
-        self._last_state: State | None = None
         self._bg_results: collections.deque = collections.deque()
         self._futures: list = []
         self.runner = BotRunner(sink=self._log_queue.append)
+        self.current = ""
+        self.update_info: updates.Update | None = None                 # the newer release the sidebar is announcing, if any
+        self._checking_updates = False
 
         self.grid_columnconfigure(1, weight=1)
         self.grid_rowconfigure(0, weight=1)
         self._build_sidebar()
-        self.config_page = ConfigPage(self, self)
-        self.pages = {"panel": self._build_panel(), "config": self.config_page}
-        self._show("panel" if self.settings.discord_token.strip() else "config")
+        self.content = ctk.CTkFrame(self, fg_color="transparent")
+        self.content.grid(row=0, column=1, sticky="nsew")
+        self.content.grid_columnconfigure(0, weight=1)
+        self.content.grid_rowconfigure(0, weight=1)
+        self.toast_bar = Toast(self.content)
+
+        self.home = HomePage(self.content, self)
+        self.config_page = ConfigPage(self.content, self)
+        self.pages: dict[str, Page | ConfigPage] = {
+            "home": self.home, "activity": ActivityPage(self.content, self), "data": DataPage(self.content, self),
+            "log": LogPage(self.content, self), "config": self.config_page, "help": HelpPage(self.content, self)}
+        self.home.refresh_captions()
+        self.show_page("home")
 
         self.protocol("WM_DELETE_WINDOW", self._on_close)
+        for index, (key, _icon, _label) in enumerate(NAV, start=1):
+            self.bind_all(f"<Control-Key-{index}>", lambda _e, k=key: self.show_page(k))
         self.after(100, self._drain_log)
         self.after(300, self._refresh)
         if self.settings.auto_start and self.settings.discord_token.strip():
             self.after(800, self._start)
+        if self.settings.check_updates and os.environ.get("EVENTOS_NO_UPDATE_CHECK") != "1":
+            self.after(UPDATE_CHECK_DELAY_MS, self.check_for_updates)
 
-    # ---- construction -------------------------------------------------------
+    # ---- construction -------------------------------------------------------------------------------------------------------
     def _set_icon(self) -> None:
         ico = paths.resource_path("eventos_app", "resources", "icon.ico")
         png = paths.resource_path("eventos_app", "resources", "icon.png")
@@ -119,145 +100,92 @@ class App(ctk.CTk):
             log.warning("could not set window icon", exc_info=True)
 
     def _build_sidebar(self) -> None:
-        side = ctk.CTkFrame(self, width=210, corner_radius=0, fg_color=CARD)
+        side = ctk.CTkFrame(self, width=236, corner_radius=0, fg_color=SIDEBAR)
         side.grid(row=0, column=0, sticky="nsw")
         side.grid_propagate(False)
-        side.grid_rowconfigure(10, weight=1)
+        side.grid_columnconfigure(0, weight=1)
+        side.grid_rowconfigure(20, weight=1)
 
+        head = ctk.CTkFrame(side, fg_color="transparent")
+        head.grid(row=0, column=0, sticky="ew", padx=20, pady=(24, 22))
         png = paths.resource_path("eventos_app", "resources", "icon.png")
         if png.exists():
             try:
-                img = ctk.CTkImage(Image.open(png), size=(56, 56))
-                ctk.CTkLabel(side, image=img, text="").grid(row=0, column=0, padx=20, pady=(24, 6), sticky="w")
+                ctk.CTkLabel(head, image=ctk.CTkImage(Image.open(png), size=(44, 44)), text="").pack(side="left")
             except Exception:
                 log.warning("could not load logo", exc_info=True)
-        ctk.CTkLabel(side, text=APP_NAME, font=ctk.CTkFont(size=20, weight="bold"), text_color=TEXT).grid(
-            row=1, column=0, padx=20, sticky="w")
-        ctk.CTkLabel(side, text=f"v{__version__}", text_color=MUTED).grid(row=2, column=0, padx=20, pady=(0, 18), sticky="w")
+        title = ctk.CTkFrame(head, fg_color="transparent")
+        title.pack(side="left", padx=12)
+        ctk.CTkLabel(title, text=APP_NAME, font=font(18, "bold"), text_color=TEXT, anchor="w").pack(anchor="w")
+        ctk.CTkLabel(title, text=f"v{__version__}", text_color=FAINT, font=font(12), anchor="w").pack(anchor="w")
 
-        self.nav_buttons = {}
-        for row, (key, text) in enumerate((("panel", "🎮  Panel"), ("config", "⚙  Configuración")), start=3):
-            btn = ctk.CTkButton(
-                side, text=text, anchor="w", height=38, corner_radius=8, fg_color="transparent",
-                hover_color=CARD_BORDER, text_color=TEXT, command=lambda k=key: self._show(k))
-            btn.grid(row=row, column=0, padx=12, pady=2, sticky="ew")
+        self.nav_buttons: dict[str, ctk.CTkButton] = {}
+        for row, (key, icon, label) in enumerate(NAV, start=1):
+            btn = ctk.CTkButton(side, text=f"{icon}   {label}", anchor="w", height=42, corner_radius=10, fg_color="transparent", hover_color="#1a1a2e",
+                                text_color=MUTED, font=font(14), command=lambda k=key: self.show_page(k))
+            btn.grid(row=row, column=0, padx=14, pady=2, sticky="ew")
             self.nav_buttons[key] = btn
 
-        for row, (text, target) in enumerate((("📁  Carpeta de datos", paths.app_home),
-                                              ("📄  Carpeta de logs", paths.logs_dir)), start=11):
-            ctk.CTkButton(side, text=text, anchor="w", height=32, fg_color="transparent", hover_color=CARD_BORDER,
-                          text_color=MUTED, command=lambda t=target: open_folder(t())).grid(
-                row=row, column=0, padx=12, pady=2, sticky="ew")
-        ctk.CTkLabel(side, text="", height=10).grid(row=13, column=0)
+        self.update_card = ctk.CTkFrame(side, fg_color="#1d1840", border_color=ACCENT, border_width=1, corner_radius=14)
+        self.update_card.grid(row=21, column=0, sticky="ew", padx=14, pady=(8, 0))
+        self.update_card.grid_columnconfigure(0, weight=1)
+        self.update_title = ctk.CTkLabel(self.update_card, text="", font=font(13, "bold"), text_color="#c9b8ff", anchor="w")
+        self.update_title.grid(row=0, column=0, padx=14, pady=(12, 0), sticky="w")
+        self.update_notes = ctk.CTkLabel(self.update_card, text="", font=font(12), text_color=MUTED, anchor="w", justify="left", wraplength=176)
+        self.update_notes.grid(row=1, column=0, padx=14, pady=(2, 6), sticky="w")
+        self.update_download = button(self.update_card, "⬇  Descargar e instalar", self.open_update, kind="primary", height=32, font=font(12, "bold"))
+        self.update_download.grid(row=2, column=0, padx=12, pady=(0, 4), sticky="ew")
+        self.update_news = button(self.update_card, "Ver novedades", lambda: self.open_update(notes=True), kind="ghost", height=28, font=font(12))
+        self.update_news.grid(row=3, column=0, padx=12, pady=(0, 12), sticky="ew")
+        self.update_card.grid_remove()
 
-    def _build_panel(self) -> ctk.CTkFrame:
-        page = ctk.CTkFrame(self, fg_color="transparent")
-        page.grid_columnconfigure(0, weight=1)
-        page.grid_rowconfigure(3, weight=1)
+        foot = ctk.CTkFrame(side, fg_color="#141426", corner_radius=14)
+        foot.grid(row=22, column=0, sticky="ew", padx=14, pady=(8, 8))
+        foot.grid_columnconfigure(0, weight=1)
+        self.side_pill = Pill(foot, "Detenido", "idle")
+        self.side_pill.grid(row=0, column=0, padx=14, pady=(14, 8), sticky="w")
+        self.side_toggle = button(foot, "▶  Iniciar bot", self.toggle_bot, kind="good", height=36, font=font(13, "bold"))
+        self.side_toggle.grid(row=1, column=0, padx=14, pady=(0, 14), sticky="ew")
+        for row, (text, target) in enumerate((("📁  Carpeta de datos", paths.app_home), ("📄  Carpeta de logs", paths.logs_dir)), start=23):
+            ctk.CTkButton(side, text=text, anchor="w", height=30, fg_color="transparent", hover_color="#1a1a2e", text_color=FAINT, font=font(12),
+                          command=lambda t=target: browser.open_folder(t())).grid(row=row, column=0, padx=14, pady=1, sticky="ew")
+        ctk.CTkLabel(side, text="", height=8).grid(row=25, column=0)
 
-        # status + start/stop
-        status = card(page)
-        status.grid(row=0, column=0, sticky="ew", padx=20, pady=(20, 10))
-        status.grid_columnconfigure(1, weight=1)
-        self.status_dot = ctk.CTkLabel(status, text="●", font=ctk.CTkFont(size=26), text_color=GRAY)
-        self.status_dot.grid(row=0, column=0, rowspan=3, padx=(18, 10), pady=14)
-        self.status_title = ctk.CTkLabel(status, text="Detenido", font=ctk.CTkFont(size=18, weight="bold"),
-                                         text_color=TEXT, anchor="w")
-        self.status_title.grid(row=0, column=1, sticky="ew", pady=(14, 0))
-        self.status_detail = ctk.CTkLabel(status, text="", text_color=MUTED, anchor="w", justify="left", wraplength=520)
-        self.status_detail.grid(row=1, column=1, sticky="ew")
-        self.status_event = ctk.CTkLabel(status, text="", text_color=MUTED, anchor="w", justify="left", wraplength=520)
-        self.status_event.grid(row=2, column=1, sticky="ew", pady=(0, 12))
-        self.toggle_btn = ctk.CTkButton(status, text="▶  Iniciar bot", width=170, height=42, font=ctk.CTkFont(size=14, weight="bold"),
-                                        fg_color=GREEN, hover_color=GREEN_HOVER, command=self._toggle)
-        self.toggle_btn.grid(row=0, column=2, rowspan=3, padx=18)
-
-        # first-run hint
-        self.hint = card(page)
-        self.hint.grid_columnconfigure(0, weight=1)
-        ctk.CTkLabel(self.hint, text="👋  Para empezar, pega el token de tu bot de Discord en Configuración.",
-                     text_color=TEXT, anchor="w").grid(row=0, column=0, padx=16, pady=12, sticky="w")
-        ctk.CTkButton(self.hint, text="Ir a Configuración", width=150, fg_color=ACCENT,
-                      command=lambda: self._show("config")).grid(row=0, column=1, padx=16)
-
-        # quick actions
-        actions = card(page)
-        actions.grid(row=2, column=0, sticky="ew", padx=20, pady=10)
-        ctk.CTkLabel(actions, text="Acciones rápidas", font=ctk.CTkFont(size=14, weight="bold"),
-                     text_color=TEXT).grid(row=0, column=0, columnspan=6, padx=18, pady=(12, 4), sticky="w")
-        self.action_buttons: dict[str, ctk.CTkButton] = {}
-        for row, (prefix, title) in enumerate((("single", "Individual"), ("group", "Grupal")), start=1):
-            ctk.CTkLabel(actions, text=title, text_color=MUTED, width=80, anchor="w").grid(
-                row=row, column=0, padx=(18, 4), pady=4, sticky="w")
-            for col, (diff, label, color) in enumerate(DIFFICULTIES, start=1):
-                self._action_button(actions, f"{prefix}_{diff}", label, color).grid(
-                    row=row, column=col, padx=(4, 18 if col == len(DIFFICULTIES) else 4), pady=4, sticky="ew")
-        extras = ctk.CTkFrame(actions, fg_color="transparent")
-        extras.grid(row=3, column=0, columnspan=6, padx=14, pady=(2, 12), sticky="w")
-        for name, label in (("checkpoint", "💚 Checkpoint (curar)"), ("batch_toggle", "📦 Modo lote"),
-                            ("sync_commands", "🔄 Sincronizar comandos")):
-            self._action_button(extras, name, label, BUTTON_NEUTRAL, width=190).pack(side="left", padx=4)
-        for col in range(1, 5):
-            actions.grid_columnconfigure(col, weight=1)
-
-        # live log
-        logcard = card(page)
-        logcard.grid(row=3, column=0, sticky="nsew", padx=20, pady=(10, 20))
-        logcard.grid_columnconfigure(0, weight=1)
-        logcard.grid_rowconfigure(1, weight=1)
-        head = ctk.CTkFrame(logcard, fg_color="transparent")
-        head.grid(row=0, column=0, sticky="ew", padx=14, pady=(10, 0))
-        ctk.CTkLabel(head, text="Registro en vivo", font=ctk.CTkFont(size=14, weight="bold"), text_color=TEXT).pack(side="left")
-        ctk.CTkButton(head, text="Limpiar", width=70, height=26, fg_color=BUTTON_NEUTRAL, command=self._clear_log).pack(side="right")
-        ctk.CTkButton(head, text="Copiar", width=70, height=26, fg_color=BUTTON_NEUTRAL, command=self._copy_log).pack(side="right", padx=6)
-        self.log_box = ctk.CTkTextbox(logcard, fg_color="#121316", text_color=TEXT, font=(LOG_MONO, 12), wrap="word",
-                                      border_width=0, corner_radius=8)
-        self.log_box.grid(row=1, column=0, sticky="nsew", padx=10, pady=10)
-        self.log_box.configure(state="disabled")
-        return page
-
-    def _action_button(self, parent, name: str, label: str, color: str, width: int | None = None) -> ctk.CTkButton:
-        kwargs = {"width": width} if width else {}
-        btn = ctk.CTkButton(parent, text=self._action_caption(name, label), height=44, fg_color=INACTIVE,
-                            hover_color=color, text_color_disabled="#7d818b", state="disabled",
-                            command=lambda n=name: self._run_action(n), **kwargs)
-        btn._base_label = label  # type: ignore[attr-defined]
-        btn._color = color  # type: ignore[attr-defined]
-        self.action_buttons[name] = btn
-        return btn
-
-    def _action_caption(self, name: str, label: str) -> str:
-        key = self.runner.action_label(name).upper() or DEFAULT_KEYS.get(name, "")
-        if not (self.settings.hotkeys_enabled and key):
-            return label
-        return f"{label}\n{key}" if name.startswith(("single_", "group_")) else f"{label}  ({key})"
-
-    # ---- navigation ---------------------------------------------------------
-    def _show(self, key: str) -> None:
+    # ---- navigation ---------------------------------------------------------------------------------------------------------
+    def show_page(self, key: str, **options) -> None:
         for name, frame in self.pages.items():
             if name == key:
-                frame.grid(row=0, column=1, sticky="nsew")
+                frame.grid(row=0, column=0, sticky="nsew")
             else:
                 frame.grid_remove()
         for name, btn in self.nav_buttons.items():
-            btn.configure(fg_color=CARD_BORDER if name == key else "transparent")
+            btn.configure(fg_color=ACCENT_SOFT if name == key else "transparent", text_color=TEXT if name == key else MUTED)
+        self.current = key
+        page = self.pages[key]
+        if hasattr(page, "on_show"):
+            page.on_show(**options)
+        self.toast_bar.lift()
 
-    # ---- settings -----------------------------------------------------------
+    def toast(self, text: str, kind: str = "info", ms: int = 4200) -> None:
+        self.toast_bar.show(text, kind, ms)
+
+    # ---- settings -----------------------------------------------------------------------------------------------------------
     def save_from_page(self) -> None:
         new = self.config_page.collect()
         problems = new.validate()
         if problems:
-            self.config_page.flash("⚠ " + " ".join(problems), RED)
+            self.toast("⚠ " + " ".join(problems), "bad", 6500)
             return
         try:
             settings_store.save(new)
         except OSError as exc:
-            self.config_page.flash(f"⚠ No se pudo guardar: {exc}", RED)
+            self.toast(f"⚠ No se pudo guardar: {exc}", "bad", 6500)
             return
         self.settings = new
         note = "✓ Guardado." + (" Reinicia el bot para aplicar los cambios de token, IA y atajos." if self.runner.is_active() else "")
-        self.config_page.flash(note, GREEN)
-        self._refresh_actions_captions()
+        self.toast(note, "ok", 5200)
+        self.config_page.flash(note, OK_TEXT)
+        self.home.refresh_captions()
 
     def persist_quietly(self) -> None:
         """Save self.settings as they are (used after adding a helper bot etc.)."""
@@ -266,7 +194,7 @@ class App(ctk.CTk):
         except OSError:
             log.exception("could not save settings")
 
-    # ---- background work ---------------------------------------------------------
+    # ---- background work --------------------------------------------------------------------------------------------------------
     def bg(self, work, done, failed=None) -> None:
         """Run `work()` on a thread; call done(result) / failed(exc) back on the UI thread."""
         def run() -> None:
@@ -307,10 +235,10 @@ class App(ctk.CTk):
     def report_callback_exception(self, exc, val, tb) -> None:
         """Tk calls this when a UI callback raises. Without a console the traceback would vanish."""
         log.error("UI error", exc_info=(exc, val, tb))
-        self._log_queue.append([Segment(f"✗ Error de la interfaz: {val}", RED)])
+        self._log_queue.append([Segment(f"✗ Error de la interfaz: {val}", BAD_TEXT)])
 
-    # ---- bot control --------------------------------------------------------
-    def _toggle(self) -> None:
+    # ---- bot control ---------------------------------------------------------------------------------------------------------
+    def toggle_bot(self) -> None:
         if self.runner.is_active():
             self.runner.stop()
         else:
@@ -318,105 +246,98 @@ class App(ctk.CTk):
 
     def _start(self) -> None:
         if not self.settings.discord_token.strip():
-            self._show("config")
+            self.show_page("config", tab="bot")
             self.config_page.focus_token()
+            self.toast("Pega primero el token de tu bot de Discord.", "warn")
             return
         self.runner.start(self.settings)
 
-    def _run_action(self, name: str) -> None:
+    def run_action(self, name: str) -> None:
         if not self.runner.run_action(name):
-            self._log_queue.append([Segment("El bot todavía no está listo para esa acción.", AMBER)])
+            self._log_queue.append([Segment("El bot todavía no está listo para esa acción.", WARN_TEXT)])
 
-    def _refresh_actions_captions(self) -> None:
-        for name, btn in self.action_buttons.items():
-            btn.configure(text=self._action_caption(name, btn._base_label))  # type: ignore[attr-defined]
+    # ---- the Activity in a window of its own -----------------------------------------------------------------------------------------
+    def open_gm_panel(self) -> None:
+        url = self.runner.host_url(gm=True)
+        if not url:
+            self.toast("La Actividad no está en marcha: actívala en la página Actividad y inicia el bot.", "warn", 6000)
+            self.show_page("activity")
+            return
+        if browser.open_app_window(url) == "browser":
+            self.toast("Se abrió en tu navegador (no se encontró Edge ni Chrome para una ventana propia).", "info", 5000)
 
+    def open_player_window(self) -> None:
+        url = self.runner.host_url(gm=False)
+        if not url:
+            self.toast("La Actividad no está en marcha: actívala en la página Actividad y inicia el bot.", "warn", 6000)
+            self.show_page("activity")
+            return
+        webbrowser.open(url)
+
+    # ---- new versions ----------------------------------------------------------------------------------------------------------------
+    def check_for_updates(self, manual: bool = False) -> None:
+        """Ask GitHub for the latest release. On its own it only speaks up if there is a newer one; when asked for (the Help page) it also says
+        «estás al día» or why it could not find out."""
+        if self._checking_updates:
+            return
+        self._checking_updates = True
+
+        def done(update: updates.Update | None) -> None:
+            self._checking_updates = False
+            self.show_update(update)
+            if manual:
+                self.toast(f"Hay una versión nueva: {update.version}." if update else f"Estás al día: la {__version__} es la última.", "info" if update else "ok")
+
+        def failed(exc: BaseException) -> None:
+            self._checking_updates = False
+            if manual:
+                self.toast(str(exc) if isinstance(exc, updates.UpdateCheckError) else f"No se pudo buscar actualizaciones: {exc}", "warn", 6000)
+
+        self.bg(lambda: updates.check(quiet=not manual), done, failed)
+
+    def show_update(self, update: updates.Update | None) -> None:
+        self.update_info = update
+        if update is None:
+            self.update_card.grid_remove()
+            return
+        self.update_title.configure(text=f"⬆  Versión {update.version}")
+        self.update_notes.configure(text=update.notes or "Hay una versión nueva de la app.")
+        self.update_card.grid()
+
+    def open_update(self, notes: bool = False) -> None:
+        """«Descargar» takes the installer (running it over the installed app updates it, keeping the data); «Novedades» the release page."""
+        update = self.update_info
+        if update is not None:
+            webbrowser.open(update.url if notes or not update.installer else update.installer)
+
+    # ---- every ~400 ms ---------------------------------------------------------------------------------------------------------------
     def _refresh(self) -> None:
         state = self.runner.state
-        color, title = STATUS_STYLE[state]
-        detail = ""
-        if state is State.CONNECTED:
-            detail = self.runner.describe_connection()
-        elif state is State.ERROR:
-            detail = self.runner.error
-        elif state is State.STOPPED and not self.settings.discord_token.strip():
-            detail = "Falta el token del bot."
-        elif state is State.STARTING:
-            detail = "Iniciando sesión en Discord…"
-
-        self.status_dot.configure(text_color=color)
-        self.status_title.configure(text=title)
-        self.status_detail.configure(text=detail)
-        event = self.runner.event_line()
-        self.status_event.configure(text=event, text_color=AMBER if event.startswith("⚠") else MUTED)
-
-        active = self.runner.is_active()
+        tone, text = STATUS[state]
+        self.side_pill.set(text, tone)
         if state is State.STOPPING:
-            self.toggle_btn.configure(text="Deteniendo…", state="disabled")
-        elif active:
-            self.toggle_btn.configure(text="■  Detener bot", state="normal", fg_color=RED, hover_color=RED_HOVER)
+            self.side_toggle.configure(text="Deteniendo…", state="disabled")
+        elif self.runner.is_active():
+            self.side_toggle.configure(text="■  Detener bot", state="normal", fg_color="#d6455d", hover_color="#b8374d")
         else:
-            self.toggle_btn.configure(text="▶  Iniciar bot", state="normal", fg_color=GREEN, hover_color=GREEN_HOVER)
-
-        ready = state is State.CONNECTED
-        for btn in self.action_buttons.values():
-            btn.configure(state="normal" if ready else "disabled", fg_color=btn._color if ready else INACTIVE)  # type: ignore[attr-defined]
-        if state is not self._last_state and ready:
-            self._refresh_actions_captions()
-        self._last_state = state
-        self.config_page.tick(state)
-
-        if self.settings.discord_token.strip():
-            self.hint.grid_remove()
-        else:
-            self.hint.grid(row=1, column=0, sticky="ew", padx=20, pady=(0, 10))
+            self.side_toggle.configure(text="▶  Iniciar bot", state="normal", fg_color="#1f9d6c", hover_color="#188358")
+        for page in self.pages.values():
+            page.tick(state)
         self.after(400, self._refresh)
 
-    # ---- log panel ----------------------------------------------------------
-    def _tag_for(self, color: str | None) -> str:
-        color = _readable(color)
-        tag = "c" + color[1:]
-        if tag not in self._tags:
-            self.log_box.tag_config(tag, foreground=color)
-            self._tags.add(tag)
-        return tag
-
-    def _insert(self, text: str, tag: str) -> None:
-        try:
-            self.log_box.insert("end", text, tag)
-        except tk.TclError:  # some Tk builds can't draw characters outside the BMP
-            safe = "".join(ch if ord(ch) <= 0xFFFF else "?" for ch in text)
-            self.log_box.insert("end", safe, tag)
-
+    # ---- the log ------------------------------------------------------------------------------------------------------------------------
     def _drain_log(self) -> None:
         self._drain_background()
         if self._log_queue:
-            at_bottom = self.log_box.yview()[1] >= 0.99
-            self.log_box.configure(state="normal")
+            stamp = datetime.datetime.now().strftime("%H:%M:%S  ")
+            lines = []
             for _ in range(min(LINES_PER_TICK, len(self._log_queue))):
                 segments = self._log_queue.popleft()
-                self._insert(datetime.datetime.now().strftime("%H:%M:%S  "), self._tag_for("#6b7280"))
-                for seg in segments:
-                    self._insert(seg.text, self._tag_for("#8b8f98" if seg.dim and not seg.color else seg.color))
-                self._insert("\n", self._tag_for(None))
-            lines = int(self.log_box.index("end-1c").split(".")[0])
-            if lines > MAX_LOG_LINES:
-                self.log_box.delete("1.0", f"{lines - MAX_LOG_LINES + 500}.0")
-            self.log_box.configure(state="disabled")
-            if at_bottom:
-                self.log_box.see("end")
+                lines.append(Line(stamp, tuple((seg.text, "dim" if seg.dim and not seg.color else seg.color) for seg in segments)))
+            self.hub.add(lines)
         self.after(100, self._drain_log)
 
-    def _clear_log(self) -> None:
-        self.log_box.configure(state="normal")
-        self.log_box.delete("1.0", "end")
-        self.log_box.configure(state="disabled")
-
-    def _copy_log(self) -> None:
-        self.clipboard_clear()
-        self.clipboard_append(self.log_box.get("1.0", "end-1c"))
-
-    # ---- closing ------------------------------------------------------------
+    # ---- closing ---------------------------------------------------------------------------------------------------------------------------
     def _on_close(self) -> None:
         if self.runner.is_active():
             if not messagebox.askyesno(
