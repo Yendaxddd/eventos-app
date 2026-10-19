@@ -104,6 +104,7 @@ class Rig:
         self.verdict = "✅"
         self.characters = {111: ["Kuro", "Shiro"]}
         self.web_dir = Path("/nonexistent")           # the browser tests point it at the built client
+        self.bridge_args = {}                         # more arguments for the bridge (the game-master tests give it folders to keep things in)
 
     async def __aenter__(self):
         await self.fake.start()
@@ -135,7 +136,7 @@ class Rig:
             rig.posted.append((channel_id, content, username, avatar_url))
             return {"id": "1"}
 
-        self.bridge = ActivityBridge(self.hub, self.app, pool=lambda: NS(send_as=send_as))
+        self.bridge = ActivityBridge(self.hub, self.app, pool=lambda: NS(send_as=send_as), **self.bridge_args)
         self.bridge.start()
         self.auth = DiscordAuth(client_id=42, client_secret="s", api_base=f"http://127.0.0.1:{self.fake.port}/api/v10")
         self.server = ActivityServer(self.hub, auth=self.auth, authorize=self.bridge.authorize, web_dir=self.web_dir,

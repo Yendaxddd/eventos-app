@@ -4,10 +4,12 @@ Una **Actividad** es una pantalla web que Discord abre dentro de la app (PC y m�
 con el tiempo medido **en tu pantalla** (sin depender de mensajes ni reacciones), el canal del evento a la vista y una caja
 para escribir, para no cambiar de canal en pleno timing.
 
-**Versión 0.9.0:** interfaz nueva (diseño propio, todo en español), **botón flotante Esquivar → Parry con el temporizador encima**,
-varios QTE a la vez **por prioridad y sin solaparse**, **menú**, **ajustes por jugador** (se guardan en el servidor y te siguen del
-móvil al PC), **prueba de latencia** que ajusta tus tiempos y un **tutorial** con práctica. Los QTE siguen funcionando también por
-el chat de siempre.
+**Versión 0.11.0:** además de lo anterior, el **panel del GM** (para quien tiene el rol de administrador): lanzar QTE, controlar al
+jefe, a los jugadores, los valores del juego y el contenido (logros, árboles, objetos, traducciones) sin tocar archivos ni comandos.
+En la 0.10.0 llegaron **tus paneles** (perfil, logros, personajes y poderes, habilidades, inventario, imágenes y ranking) y en la
+0.9.0 la interfaz nueva (todo en español), el **botón flotante Esquivar → Parry con el temporizador encima**, varios QTE a la vez
+**por prioridad y sin solaparse**, **ajustes por jugador**, la **prueba de latencia** que ajusta tus tiempos y el **tutorial**.
+Los QTE siguen funcionando también por el chat de siempre.
 
 ## Cómo funciona
 - La app abre un servidor web en tu PC (puerto 8765) dentro del mismo proceso del bot.
@@ -104,6 +106,37 @@ Los textos de los datos (logros, habilidades, objetos) están en inglés en los 
 con una tabla incorporada. Para traducir los tuyos, crea `data/i18n_es.json` (se recarga sola al guardarlo):
 `{"exact": {"Boss Slayer": "Cazajefes"}, "patterns": [["^Kill (\\d+) bosses$", "Derrota a \\1 jefes"]]}`.
 
+## Panel del GM (para quien tiene el rol de administrador)
+Menú (☰) → «Equipo de GM» → **Panel del GM**. Solo aparece si el bot te considera administrador (el mismo rol que usa para
+`/registerboss`, `/giveobject`…), y aunque alguien abriera esa página por otro camino, **el servidor vuelve a comprobar el rol en
+cada acción**: si te lo quitan, el panel deja de funcionar al instante (lo comprueba una prueba que llama a todas las acciones sin
+el rol). Cada acción hace lo mismo que su comando o su tecla del bot y respeta **los mismos límites**; si algo no es válido te lo
+explica en español y **no cambia nada**. Todo lo que se cambia queda firmado en el **Historial** (`data/gm_log.jsonl`).
+- **Evento:** el estado (combate, QTE en curso, jugadores, sesión, jefe, aturdimiento), **lanzar un QTE** (individual, grupal, combo,
+  dirección o falso; dificultad; a quién o al azar; lo mismo que F9–F12 y `/targetqte`), la **tanda de QTE**, el **combate**
+  (empezar, terminar, checkpoint, sincronizar comandos) y el **modo de los QTE automáticos** con sus probabilidades. Se actualiza
+  solo cada pocos segundos.
+- **Jefe:** el jefe en combate (hacerle daño, curarlo, fijar su vida, derrotarlo o retirarlo sin victoria), **registrar** uno
+  (`/registerboss`) o hacer aparecer al de **Tupperbox**, sus ajustes, sus **habilidades** (con estado alterado; usarlas al momento),
+  las **imágenes** de esquive, contraataque y derrota (sube una o pega un enlace https) y su **dominio**.
+- **Jugadores:** la lista con búsqueda (vida, cargas, puntos, quién está en la Actividad). Dentro de cada persona: **vida** (actual y
+  máxima, restaurar), **cargas** de los poderes, reiniciar **recargas**, dejarla fuera o dentro de los QTE, **puntos de habilidad**
+  (dar, quitar, o reiniciar sus habilidades devolviéndole lo gastado), **logros** (dar y quitar, con su título y dominio) y
+  **objetos** (dar, quitar, vueltas de adaptación y espacios del inventario). «Restaurar la vida de todos» pide confirmación.
+- **Valores:** los números del juego agrupados (vida máxima, curación de checkpoint, rescates, Black Flash, cargas y recargas, modo
+  venganza, tolerancia de latencia…) y los **tiempos y el daño de cada dificultad**. Valen desde ya y **se conservan al reiniciar el
+  bot** (lo que ya guardaba `/config save` va a `live_config.json`; el resto, a `data/gm_values.json`, que se vuelve a comprobar al
+  cargarlo).
+- **Contenido:** **logros** con formulario (crear, cambiar, borrar), **objetos** (aprobar o rechazar los pendientes, con sus errores a
+  la vista) y **archivos** (logros, árboles de habilidades, objetos y traducciones en JSON). El editor comprueba el archivo mientras
+  escribes y el servidor lo vuelve a comprobar antes de guardarlo: si hay un error, **no se toca nada**. Antes de cada cambio queda una
+  **copia del archivo anterior** en `data/backups` (las últimas 20 de cada uno, con botón para recuperarlas) y el cambio se carga en el
+  bot sin reiniciarlo. Se pueden crear árboles y objetos nuevos desde las plantillas.
+- **Historial:** quién hizo qué y cuándo (también tras reiniciar).
+
+**Probarlo en este PC sin Discord:** `http://127.0.0.1:8765/?dev=Ana&gm=1` (solo funciona abriéndolo desde el propio PC; por el
+túnel público el modo de prueba está cerrado, y quien entra con Discord no puede pedir el panel diciéndolo en su saludo).
+
 ## Puesta en marcha (una sola vez)
 En <https://discord.com/developers/applications> → tu aplicación (la del bot principal):
 1. **Activities**: actívalas («Enable Activities»). Discord crea el comando de entrada «Launch».
@@ -164,15 +197,19 @@ La app escribe en su registro (gris, con 🌐) todo lo que pasa con la Actividad
 1. **Escribir + QTE básico** (0.6.0), **estado, personajes, imágenes y enlace fijo** (0.7.0), **varios QTE, todos los modos y
    cooldowns** (0.8.x).
 2. **Interfaz nueva, QTE flotante, menú, ajustes, latencia y tutorial** (0.9.0).
-3. **Paneles del jugador** (perfil, logros, personajes y poderes, habilidades, inventario, imágenes, ranking) (0.10.0). Siguen:
-   panel del GM (0.11.0), app de escritorio renovada (1.0.0) y mensajes del bot en español.
+3. **Paneles del jugador** (perfil, logros, personajes y poderes, habilidades, inventario, imágenes, ranking) (0.10.0).
+4. **Panel del GM** (evento, jefe, jugadores, valores, contenido, historial) (0.11.0). Siguen: app de escritorio renovada (1.0.0) y
+   mensajes del bot en español.
 
 ## Desarrollo del cliente
 El cliente web está en `discord-bot/activity_client` (Preact + esbuild; `npm ci && npm run build` lo genera en
 `eventos_app/activity/web`). `npm test` ejecuta sus pruebas de lógica (ventanas de QTE, colocación de botones, latencia,
 ajustes) y `python activity_client/preview.py <carpeta> [escenario…]` lo abre con datos inventados y guarda capturas
-(`desktop`, `phone`, `pages`, `modes`, `crowd`, `tutorial`) para revisar el aspecto sin Discord; `preview_panel.py <carpeta>` hace lo
-mismo con los paneles del jugador, usando el puente real y un bot inventado.
+(`desktop`, `phone`, `pages`, `modes`, `crowd`, `tutorial`) para revisar el aspecto sin Discord; `preview_panel.py <carpeta>` y
+`preview_gm.py <carpeta>` hacen lo mismo con los paneles del jugador y con el del GM, usando el puente real y un bot inventado.
+Las pruebas del panel del GM comprueban las operaciones (`test_activity_gm.py`), el acceso por rol de cada acción
+(`test_activity_gm_socket.py`), el navegador (`test_activity_gm_browser.py`) y que cada atributo y método del bot que usa el panel
+exista y se llame como el bot lo declara (`test_activity_gm_contract.py`).
 
 ## Qué falta comprobar en esta versión (con Discord real)
 - Cómo se ve y se siente el botón flotante en **móviles reales** dentro de Discord (tamaños, posiciones, zona del pulgar) y con
@@ -180,5 +217,7 @@ mismo con los paneles del jugador, usando el puente real y un bot inventado.
 - La **prueba de latencia** con conexiones y móviles distintos: si el ajuste te parece corto o largo, dime los números de
   *Ayuda → Datos de tu conexión*.
 - La mini-ventana de Discord (el comportamiento de la «PiP interactiva» depende de la versión de Discord).
+- El **panel del GM con el rol real** del servidor (las pruebas usan un bot inventado con el mismo contrato que el real, y la
+  prueba de contrato lo vigila, pero no hay un Discord de verdad detrás) y el uso de los formularios largos en el móvil.
 - **Subir una imagen desde el móvil** dentro de Discord: el selector de archivos de la Actividad puede comportarse distinto según
   el sistema; el enlace https sirve siempre. Y que el canal del evento deje al bot publicar archivos (la imagen se guarda ahí).

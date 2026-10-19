@@ -1,4 +1,4 @@
-import { Backpack, Drama, Gauge, GitBranch, GraduationCap, Image as ImageIcon, LifeBuoy, Medal, Settings, Swords, Trophy, UserRound } from "lucide-preact";
+import { Backpack, Crown, Drama, Gauge, GitBranch, GraduationCap, Image as ImageIcon, LifeBuoy, Medal, Settings, Swords, Trophy, UserRound } from "lucide-preact";
 import { go, link, tutorial, you, version, perms } from "../state.js";
 import { QUALITY } from "../terms.js";
 import { Avatar } from "../ui/Avatar.jsx";
@@ -48,6 +48,14 @@ export function MenuPage() {
           ))}
         </div>
       </Section>
+
+      {perms.value.gm && (
+        <Section title="Equipo de GM">
+          <div class="tiles">
+            <Tile id="gm" icon={Crown} title="Panel del GM" sub="Lanza QTE, controla al jefe, a los jugadores, los valores y el contenido." color="#f472b6" onClick={() => go("gm", { tab: "event" })} />
+          </div>
+        </Section>
+      )}
 
       <Section title="La Actividad">
         <div class="tiles">

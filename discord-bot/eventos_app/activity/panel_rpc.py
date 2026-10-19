@@ -53,15 +53,16 @@ class PanelRpc:
         self._uploads: dict[int, list[float]] = {}
 
     # ---- who is who ----------------------------------------------------------------------------------------------
-    async def who_is(self, user_id: int) -> tuple[str, str | None]:
-        """(name, picture) of a player for a leaderboard: the server's nickname if the bot can see them, else their Discord name."""
+    async def who_is(self, user_id: int, fetch: bool = True) -> tuple[str, str | None]:
+        """(name, picture) of a player for a list: the server's nickname if the bot can see them, else their Discord name
+        (`fetch=False` never asks Discord: long lists must not make hundreds of requests)."""
         cached = self._names.get(user_id)
         if cached and time.monotonic() - cached[0] < NAME_CACHE_SECONDS:
             return cached[1], cached[2]
         name = avatar = None
         guild = self.app.resolve_event_guild()
         member = guild.get_member(user_id) if guild is not None else None
-        if member is None:
+        if member is None and fetch:
             try:
                 member = await self.app.bot.fetch_user(user_id)
             except Exception:  # noqa: BLE001 - deleted account, no network...

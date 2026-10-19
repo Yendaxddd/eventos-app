@@ -34,7 +34,7 @@ export function usePanel(op, args) {
     setState({ data, error: null, loading: false });
   }, [key]);
 
-  return { ...state, reload: () => load(true), replace };
+  return { ...state, reload: () => load(true), refresh: () => load(false), replace };
 }
 
 // A change: the server's answer, or null after telling the player why it was refused.

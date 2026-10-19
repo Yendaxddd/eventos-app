@@ -417,7 +417,9 @@ class BotRunner:
         bridge = activity.ActivityBridge(hub, app, pool=lambda: self._pool,
                                          avatar_file=paths.data_dir() / "character_avatars.json",
                                          prefs_file=paths.data_dir() / "activity_prefs.json",
-                                         latency_file=paths.data_dir() / "activity_latency.json")
+                                         latency_file=paths.data_dir() / "activity_latency.json",
+                                         data_dir=self._bot_data_dir(app), gm_log_file=paths.data_dir() / "gm_log.jsonl",
+                                         values_file=paths.data_dir() / "gm_values.json")
         server = activity.ActivityServer(hub, auth=auth, authorize=bridge.authorize, client_id=client_id,
                                          web_dir=paths.resource_path("eventos_app", "activity", "web"),
                                          actions=bridge, media_dir=paths.app_home() / "cache" / "media",
@@ -433,6 +435,13 @@ class BotRunner:
         self._activity = types.SimpleNamespace(hub=hub, auth=auth, bridge=bridge, server=server, tunnel=tunnel)
         out.print(f"[green]✓ Servidor de la Actividad en el puerto {port}. Abriendo el túnel…[/green]")
         self._activity_task = asyncio.get_running_loop().create_task(self._open_tunnel())
+
+    @staticmethod
+    def _bot_data_dir(app):
+        """The folder the bot itself reads and writes its game data in (it falls back to another folder if the usual one is read-only)."""
+        module = importlib.import_module(type(app).__module__) if type(app).__module__ else None
+        found = getattr(module, "DATA_DIR", None)
+        return found if found is not None else paths.data_dir()
 
     @staticmethod
     def _make_tunnel(settings: Settings, port: int):

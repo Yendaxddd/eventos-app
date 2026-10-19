@@ -16,6 +16,8 @@ import discord
 
 from .auth import AuthError
 from .hub import Conn, Hub, RpcError
+from .gm import GmLog, GmPanel
+from .gm_rpc import GmRpc
 from .panel_rpc import PanelRpc, is_storage_message
 from .latency import CAP_MS, LatencyBook, compensation
 from .prefs import PrefsStore
@@ -103,9 +105,10 @@ def serialize_message(message: Any, own_webhooks: set[int] | frozenset[int] = fr
     }
 
 
-class ActivityBridge(PanelRpc):
+class ActivityBridge(PanelRpc, GmRpc):
     def __init__(self, hub: Hub, app: Any, pool: Callable[[], Any] | None = None, avatar_file: Path | None = None,
-                 prefs_file: Path | None = None, latency_file: Path | None = None) -> None:
+                 prefs_file: Path | None = None, latency_file: Path | None = None, data_dir: Path | None = None,
+                 gm_log_file: Path | None = None, values_file: Path | None = None) -> None:
         self.hub, self.app = hub, app        # app: the AdvancedQTEBot instance
         self.pool = pool or (lambda: None)   # the SenderPool, for webhook sends
         self._listeners: list[tuple[Any, str]] = []
@@ -118,6 +121,7 @@ class ActivityBridge(PanelRpc):
         self._warned_no_lane = False
         self._state_task = None
         self._init_panel()                           # the player dashboards (panel_rpc.py)
+        self.gm = GmPanel(app, GmLog(gm_log_file), data_dir, values_file)       # the game-master panel (gm/, gm_rpc.py)
 
     # ---- wiring ---------------------------------------------------------------------------------
     def start(self) -> None:
@@ -132,6 +136,7 @@ class ActivityBridge(PanelRpc):
             book.on_start, book.on_end = self._qte_started, self._qte_ended
         self.hub.loader = self.load_backlog
         self.hub.on_tick = self.push_comps
+        self.gm.apply_saved()                        # the numbers the game masters changed in the panel come back after a restart
         self.sync_channel()
         try:
             self._state_task = asyncio.get_running_loop().create_task(self._state_loop())

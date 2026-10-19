@@ -867,6 +867,20 @@ class AdvancedQTEBot:
         row("Admin Role", self.admin_role_id, guild.get_role(self.admin_role_id) if guild and self.admin_role_id else None, "@{}", required=False)
         console.print(table)
 
+    def save_live_config(self):
+        """Save the live configuration (what /config save writes and _load_live_config restores). Also used by the Activity's GM panel."""
+        save_data("live_config", {
+            "qte_timings": self.qte_timings,
+            "damage_ranges": {k: list(v) for k, v in self.damage_ranges.items()},
+            "revenge_threshold": self.revenge_threshold,
+            "revenge_damage_multiplier": self.revenge_damage_multiplier,
+            "revenge_bf_bonus": self.revenge_bf_bonus,
+            "bf_timing_window": self.bf_timing_window,
+            "ultimate_base_cooldown": self.ultimate_base_cooldown,
+            "charge_per_damage_dealt": self.charge_per_damage_dealt,
+            "ultimate_max_damage": self.ultimate_max_damage
+        })
+
     def _load_live_config(self):
         """Load saved live configuration from file (set by /config save)"""
         try:
@@ -3226,18 +3240,7 @@ Your response (1-2 sentences max):"""
                 
                 elif action == "save":
                     # Save current config to a JSON file
-                    config_data = {
-                        "qte_timings": self.qte_timings,
-                        "damage_ranges": {k: list(v) for k, v in self.damage_ranges.items()},
-                        "revenge_threshold": self.revenge_threshold,
-                        "revenge_damage_multiplier": self.revenge_damage_multiplier,
-                        "revenge_bf_bonus": self.revenge_bf_bonus,
-                        "bf_timing_window": self.bf_timing_window,
-                        "ultimate_base_cooldown": self.ultimate_base_cooldown,
-                        "charge_per_damage_dealt": self.charge_per_damage_dealt,
-                        "ultimate_max_damage": self.ultimate_max_damage
-                    }
-                    save_data("live_config", config_data)
+                    self.save_live_config()
                     await interaction.response.send_message("✅ Configuration saved to `live_config.json`!", ephemeral=True)
                     console.print(f"[green]💾 {interaction.user.name} saved live config[/green]")
                 

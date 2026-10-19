@@ -51,7 +51,7 @@ export function Block({ q, children }) {
 }
 
 // A button that asks «¿Seguro?» before doing something that cannot be undone.
-export function ConfirmButton({ children, confirm = "Sí, seguro", onConfirm, class: className, icon: Icon, disabled, testid }) {
+export function ConfirmButton({ children, confirm = "Sí, seguro", onConfirm, class: className, icon: Icon, disabled, testid, label }) {
   const [armed, setArmed] = useState(false);
   useEffect(() => {
     if (!armed) return undefined;
@@ -67,7 +67,7 @@ export function ConfirmButton({ children, confirm = "Sí, seguro", onConfirm, cl
     );
   }
   return (
-    <button class={cx("btn btn-sm", className)} type="button" disabled={disabled} data-testid={testid} onClick={() => setArmed(true)}>
+    <button class={cx("btn btn-sm", className)} type="button" disabled={disabled} data-testid={testid} aria-label={label} title={label} onClick={() => setArmed(true)}>
       {Icon && <Icon size={14} />}{children}
     </button>
   );

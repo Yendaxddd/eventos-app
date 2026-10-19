@@ -32,6 +32,14 @@ export function duration(seconds) {
 }
 
 export const decimal = (n, digits = 1) => Number(n).toFixed(digits).replace(".", ",");
+
+// what a game master typed in a number field → a number (a comma works as the decimal point), or null while it is empty or not a number
+export function parseNumber(text) {
+  const clean = String(text ?? "").trim().replace(",", ".");
+  if (clean === "") return null;
+  const n = Number(clean);
+  return Number.isFinite(n) ? n : null;
+}
 export const num = (n) => String(Math.round(Number(n) * 100) / 100).replace(".", ",");      // 0.2 -> "0,2", 10 -> "10"
 
 // ---- a power's effect: "damage:50" <-> { kind: "damage", a: 50 } ---------------------------------------------------
