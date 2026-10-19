@@ -143,6 +143,48 @@ servidor marca esa conexión como «anfitrión», así que **no cuenta como juga
 **Probarlo en este PC sin Discord:** `http://127.0.0.1:8765/?dev=Ana&gm=1` (solo funciona abriéndolo desde el propio PC; por el
 túnel público el modo de prueba está cerrado, y quien entra con Discord no puede pedir el panel diciéndolo en su saludo).
 
+## Canal silencioso (1.1.0)
+Con la Actividad abierta, el canal ya no se llena: **sin reacciones** (✅ ❌ ⭐…) y **sin un mensaje por cada esquive o parry**. En el
+canal queda el mensaje del QTE; cada resultado le aparece **a quien lo hizo** como un aviso en su Actividad (arriba, junto al
+chat). Quien no tiene la Actividad abierta sigue recibiendo el mensaje en el canal, así que nadie se queda sin saber cómo le fue.
+Se elige en la app: *Configuración → Mensajes del canal*: **Automático** (lo de arriba), **Silencioso** (nunca en el canal) o
+**Todo en el canal** (como antes). El veredicto del juego (puntos, logros) se guarda igual en los tres modos.
+
+## Botones de los QTE (1.1.0)
+Una tecla (o un toque) responde **a un solo QTE**: el más urgente que se pueda responder en ese momento, y es el que la pantalla
+marca con el aro y la tecla. Al responder, su barra desaparece de inmediato y la tecla pasa al siguiente. Los toques en
+pantallas táctiles se registran al soltar el dedo sobre el botón correcto, sin dobles.
+
+## Audio en la Actividad (1.1.0)
+Panel del GM → **Audio**. Sube música y sonidos (MP3, OGG, WAV, M4A, WebM, FLAC o AAC; hasta 25 MB cada uno, 1 GB en total) o
+**pégalos desde un enlace https** (la app los descarga ella misma y no sigue enlaces a redes privadas). Se guardan en el PC del
+anfitrión, en la carpeta `activity_media` de los datos de la app (**no entra en las copias de seguridad de los datos del bot**;
+cópiala aparte si cambias de PC).
+- **Música:** elige una pista y dale *Reproducir*; suena en la Actividad de todos, con fundido al cambiar y volumen propio. Quien
+  entra tarde la oye a partir del segundo en que va.
+- **Sonidos ligados a eventos:** QTE (por dificultad o tipo), Black Flash, cadena máxima, combo, expansión, jefe que aparece o cae,
+  combate, checkpoint… cada evento tiene su sonido, si quieres, y puede sonar para todos o solo para el objetivo del QTE.
+- **Pad de sonidos:** lanza uno en el momento.
+- Cada jugador ajusta en *Ajustes* el volumen de música y de efectos o los apaga. Los navegadores y Discord en el móvil no dejan
+  sonar nada hasta el primer toque: aparece «Toca para activar el sonido» y, en cuanto se toca, suena lo que estaba esperando.
+
+## Importar personajes de Tupperbox (1.1.0)
+Mi panel → Personajes → **Importar de Tupperbox**: sube el archivo `.json` del comando `tul!export` (o pégalo). Se crean los
+personajes con sus nombres y **las imágenes se descargan y se guardan en el PC del anfitrión** (así no caducan como los archivos de
+Discord y no necesitan URL Mappings). Te dice qué se importó, qué ya existía y qué imagen no se pudo descargar y por qué.
+
+## Cinemáticas (1.1.0)
+Panel del GM → **Cinemáticas**. Una cinemática es una lista de pasos con tiempo (en segundos desde el inicio): **texto** (con quién
+habla, color y una imagen opcional), **sonido o música** de tu biblioteca, y el final. Se pueden lanzar a mano o **ligar a un
+evento** (el jefe cae, empieza el combate, expansión…) para que salten solas. Todos la ven a la vez, sincronizada con el reloj del
+servidor; cada jugador puede **saltarla** o apagarlas en *Ajustes → Cinemáticas* (entonces solo oye el sonido). Un QTE nunca queda
+tapado: los botones están por encima. Si el canal tiene mensajes activados, el texto también queda escrito en él.
+
+## Estilos de la Actividad (1.1.0)
+*Ajustes → Pantalla*: **8 temas** (Oscuro, Muy oscuro, Alto contraste, Medianoche, Brasa, Bosque, Rosa, Sepia), **7 colores de
+acento**, **esquinas** rectas, redondas o muy redondas y **fondo** liso, cuadrícula o aurora. Se guardan por persona en el servidor,
+así que te siguen del PC al móvil. «Daltonismo» y «Alto contraste» siguen funcionando con cualquier combinación.
+
 ## Puesta en marcha (una sola vez)
 En <https://discord.com/developers/applications> → tu aplicación (la del bot principal):
 1. **Activities**: actívalas («Enable Activities»). Discord crea el comando de entrada «Launch».
@@ -230,3 +272,8 @@ exista y se llame como el bot lo declara (`test_activity_gm_contract.py`).
   si algo falla, se abre en tu navegador) y la app de escritorio en un Windows real más allá de la prueba de arranque del instalador.
 - **Subir una imagen desde el móvil** dentro de Discord: el selector de archivos de la Actividad puede comportarse distinto según
   el sistema; el enlace https sirve siempre. Y que el canal del evento deje al bot publicar archivos (la imagen se guarda ahí).
+- **Audio dentro de Discord**, sobre todo en el móvil (el permiso de sonido y la reproducción en segundo plano dependen de la
+  versión de Discord), y la **temporización de las cinemáticas** con latencias reales.
+- **Exportaciones reales de Tupperbox** (las pruebas usan archivos con el mismo formato documentado, no los de tu servidor).
+- **Voz:** esta versión no reproduce en un canal de voz; el sonido va por la Actividad de cada persona.
+- El bot sigue escribiendo en inglés los mensajes de **canal** (la traducción de esos textos queda para otra versión).
