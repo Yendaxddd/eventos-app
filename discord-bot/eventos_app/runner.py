@@ -449,6 +449,8 @@ class BotRunner:
             return {"ok": False, "error": str(exc)}
         out.print(f"[green]✓ Actividad lista. Pega esta dirección en el Developer Portal (Activities → URL Mappings → raíz «/»): "
                   f"{url.removeprefix('https://')}[/green]")
+        out.print(f"[cyan]🔎 Para comprobar el mapping sin abrir Discord, abre en el navegador: "
+                  f"https://{a.server.client_id}.discordsays.com/healthz  (debe mostrar {{\"ok\": true…}})[/cyan]")
         return {"ok": True, "url": url}
 
     async def _stop_activity(self) -> None:
