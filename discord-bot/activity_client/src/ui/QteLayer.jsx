@@ -15,7 +15,8 @@ import { CMD, DIFFICULTY, KEYS, MODE } from "../terms.js";
 
 const ARROW_ICON = { up: ArrowUp, down: ArrowDown, left: ArrowLeft, right: ArrowRight };
 const ARROW_OF = { "⬆": "up", "⬇": "down", "⬅": "left", "➡": "right" };
-const arrowName = (glyph) => ARROW_OF[String(glyph || "").replace(/️/g, "")] || "up";
+const GLYPH = { up: "⬆", down: "⬇", left: "⬅", right: "➡" };
+const arrowName = (glyph) => ARROW_OF[String(glyph || "").replace(/️/g, "")] || (ARROW_ICON[glyph] ? glyph : "up");      // the bot sends the glyph; a practice QTE the name
 
 // ---- geometry ---------------------------------------------------------------------------------------------------------
 const touch = () => typeof matchMedia === "function" && matchMedia("(pointer: coarse)").matches;
@@ -146,7 +147,7 @@ function Widget({ entry, phase, rank, lead, spot, size, ctx }) {
       )}
       {phase.kind === "arrows" ? (
         <>
-          <div class="qw-hint">Flecha: {String(q.arrow || "").replace(/️/g, "")} — pulsa la <b>OPUESTA</b></div>
+          <div class="qw-hint">Flecha: {GLYPH[arrowName(q.arrow)]} — pulsa la <b>OPUESTA</b></div>
           <div class="qw-pad">
             {["up", "left", "right", "down"].map((dir) => {
               const A = ARROW_ICON[dir];

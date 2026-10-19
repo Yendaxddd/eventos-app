@@ -14,11 +14,16 @@ export function practiceFrame(id, difficulty, rules, mode = "single", extra = {}
     windows: { evade: [0, t.evade], parry: [t.parry[0], t.parry[1]], bf: [Math.max(0, center - bfHalf), center + bfHalf] },
     commands: ["evade", "parry"], practice: true,
   };
-  if (mode === "group") { frame.windows = { evade: [0, t.evade], bf: null }; frame.commands = ["evade"]; }
+  if (mode === "group") { frame.participants = ["practice"]; frame.windows = { evade: [0, t.evade], bf: null }; frame.commands = ["evade"]; }
   if (mode === "direction") {
     const limit = Math.min(t.evade + 1, 4);
     frame.timeout = limit; frame.windows = { evade: [0, limit], bf: null }; frame.commands = ["up", "down", "left", "right"];
     frame.arrow = extra.arrow || "up";
+  }
+  if (mode === "bf_chain") {
+    const from = extra.from ?? 1.0, len = extra.len ?? 1.2;
+    frame.timeout = 3; frame.commands = ["parry"]; frame.chain = extra.chain || 1;
+    frame.windows = { parry: [from, from + len], bf: [from + len / 2 - bfHalf, from + len / 2 + bfHalf] };
   }
   if (mode === "combo") {
     const sequence = extra.sequence || ["evade", "parry", "evade"];
@@ -45,6 +50,14 @@ export function judge(q, cmd, t, state = {}) {
       return bf ? { ok: true, bf: true, label: "¡Zona Black Flash!", sub: `${fmt(t)} · en el juego real tiene una probabilidad de salir` }
         : { ok: true, label: "¡Parry!", sub: fmt(t) };
     }
+  }
+  if (q.mode === "bf_chain") {
+    const [a, b] = w.parry;
+    if (cmd !== "parry") return { ok: false, label: "Fallaste", sub: "" };
+    if (t < a) return { ok: false, label: "Demasiado pronto", sub: `${fmt(t)} · la cadena se rompe; la ventana abre en ${a.toFixed(1)} s` };
+    if (t > b) return { ok: false, label: "Tarde", sub: fmt(t) };
+    const bf = w.bf && t >= w.bf[0] && t <= w.bf[1];
+    return bf ? { ok: true, bf: true, label: "¡Zona Black Flash!", sub: fmt(t) } : { ok: true, label: "¡Parry!", sub: fmt(t) };
   }
   if (q.mode === "group") return cmd === "evade" && t <= evEnd ? { ok: true, label: "¡Esquivado!", sub: fmt(t) } : { ok: false, label: "Tarde", sub: fmt(t) };
   if (q.mode === "direction") {

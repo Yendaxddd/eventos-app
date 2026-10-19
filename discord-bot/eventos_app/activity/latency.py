@@ -79,6 +79,10 @@ class LatencyBook:
         clean = sanitize(raw)
         if clean is None:
             return None
+        before = self._data.get(str(user_id))
+        if clean["device"] is None and before and before.get("device") is not None:
+            # a test that did not measure the device (the tap step was skipped) must not erase an earlier measurement
+            clean.update({"device": before["device"], "spread": before.get("spread"), "taps": before.get("taps", 0)})
         self._data[str(user_id)] = clean
         if user_id > 0:
             self._save()

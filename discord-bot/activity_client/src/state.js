@@ -35,7 +35,7 @@ export const prefs = signal(loadLocalPrefs());
 export const qtes = signal([]);
 
 // ---- navigation, overlays -------------------------------------------------------------------------------------
-export const view = signal("event");                   // event | menu | settings | latency | help | profile ...
+export const view = signal("event");                   // event | menu | settings | latency | training | help | profile ...
 export const viewArgs = signal(null);
 export const openTab = (tab) => { viewArgs.value = { tab }; };           // switch tab inside «Mi panel» (the page itself does not change)
 export const sheet = signal(null);                     // "players" | null (bottom drawer on small screens)

@@ -1,4 +1,4 @@
-import { Backpack, Crown, Drama, Gauge, GitBranch, GraduationCap, Image as ImageIcon, LifeBuoy, Medal, Settings, Swords, Trophy, UserRound } from "lucide-preact";
+import { Backpack, Crown, Drama, Dumbbell, Gauge, GitBranch, GraduationCap, Image as ImageIcon, LifeBuoy, Medal, Settings, Swords, Trophy, UserRound } from "lucide-preact";
 import { go, link, tutorial, you, version, perms } from "../state.js";
 import { QUALITY } from "../terms.js";
 import { Avatar } from "../ui/Avatar.jsx";
@@ -61,6 +61,7 @@ export function MenuPage() {
         <div class="tiles">
           <Tile id="settings" icon={Settings} title="Ajustes" sub="Pantalla, botones de QTE, sonido y chat." color="#a78bfa" onClick={() => go("settings")} />
           <Tile id="latency" icon={Gauge} title="Prueba de latencia" sub="Mide tu conexión y tu dispositivo para ajustar tus tiempos." color="#34d399" onClick={() => go("latency")} />
+          <Tile id="training" icon={Dumbbell} title="Entrenamiento" sub="QTE al azar con el tipo, la dificultad y el ritmo que elijas." color="#fb923c" onClick={() => go("training")} />
           <Tile id="tutorial" icon={GraduationCap} title="Tutorial" sub="Aprende a jugar y practica un QTE sin riesgo." color="#fbbf24" onClick={() => { tutorial.value = { active: true, step: 0 }; go("event"); }} />
           <Tile id="help" icon={LifeBuoy} title="Ayuda y atajos" sub="Teclas, reglas de los QTE y datos para soporte." color="#60a5fa" onClick={() => go("help")} />
         </div>

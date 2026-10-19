@@ -77,6 +77,17 @@ def test_the_adjustment_is_network_added_and_device_taken_off_with_limits(tmp_pa
     assert book.device_ms(7) == 0.0
 
 
+def test_a_test_that_skipped_the_tap_step_keeps_the_earlier_device_measurement(tmp_path):
+    book = LatencyBook(tmp_path / "latency.json")
+    book.set(7, {"median": 60, "device": 45, "spread": 12, "taps": 8})
+    kept = book.set(7, {"median": 80, "min": 40, "device": None, "spread": None, "taps": 0})
+    assert kept["median"] == 80 and kept["device"] == 45 and kept["taps"] == 8                 # the network part is new, the device part stays
+    assert LatencyBook(tmp_path / "latency.json").device_ms(7) == 45.0
+    book.clear(8)
+    assert book.set(8, {"median": 80, "device": None})["device"] is None                       # nothing to keep for somebody new
+    assert book.device_ms(8) == 0.0
+
+
 # ---- what the server says when somebody comes in -----------------------------------------------------------------------
 def test_a_new_player_is_welcomed_with_rules_adjustment_and_no_settings_and_a_game_master_is_told_so():
     async def scenario():

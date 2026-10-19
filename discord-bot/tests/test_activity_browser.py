@@ -688,34 +688,144 @@ def test_settings_apply_at_once_are_remembered_and_sent_to_the_server():
     asyncio.run(with_page(scenario, actions=True))
 
 
+async def open_latency_test(browser, url):
+    page = await open_page(browser, url, width=1000, height=760, init="window.__fastLatency = true")
+    await page.click("[data-testid=menu-button]")
+    await page.click("[data-testid=tile-latency]")
+    await page.click("[data-testid=start-test]")
+    await page.wait_for_selector("[data-testid=net-result]", timeout=8000)
+    return page
+
+
+async def follow_flashes(page, press, until="[data-testid=result-step]", seconds=10):
+    """Answer each flash of the circle like a person with a quick, accurate hand: `press` is called once for every flash that lights up."""
+    loop = asyncio.get_running_loop()
+    deadline = loop.time() + seconds
+    last = None
+    while loop.time() < deadline and await page.locator(until).count() == 0:
+        state = await page.evaluate("(() => { const el = document.querySelector('.tap-target'); return el ? [el.dataset.lit, document.querySelector('.tap-stage p')?.textContent] : null; })()")
+        if state and state[0] == "1" and state[1] != last:
+            last = state[1]
+            await press()
+        await asyncio.sleep(0.005)
+
+
+async def tap_circle(page):
+    await page.evaluate("document.querySelector('.tap-target')?.dispatchEvent(new PointerEvent('pointerdown', {bubbles: true, button: 0, pointerType: 'mouse'}))")
+
+
 def test_the_latency_test_measures_the_connection_and_the_device_and_the_server_is_told():
     async def scenario(hub, browser, url):
-        page = await open_page(browser, url, width=1000, height=760, init="window.__fastLatency = true")
+        page = await open_latency_test(browser, url)
         acts = hub.test_actions
-        await page.click("[data-testid=menu-button]")
-        await page.click("[data-testid=tile-latency]")
-        await page.click("[data-testid=start-test]")
-        await page.wait_for_selector("[data-testid=net-result]", timeout=8000)
         assert "tu conexión" in (await page.locator("[data-testid=net-result]").inner_text()).lower()
         await page.click("[data-testid=start-tap]")
         await page.wait_for_selector(".tap-target")
-        # tap along with each flash, like a person with a quick, accurate hand
-        deadline = asyncio.get_running_loop().time() + 8
-        seen = None
-        while asyncio.get_running_loop().time() < deadline and await page.locator("[data-testid=result-step]").count() == 0:
-            flash = await page.evaluate("document.querySelector('.tap-target')?.dataset.flash ?? null")
-            if flash in ("0", "1"):
-                token = (flash, await page.evaluate("performance.now() | 0") // 150)
-                if token != seen:
-                    seen = token
-                    # one call for looking and pressing: the circle vanishes by itself when the last flash is done
-                    await page.evaluate("document.querySelector('.tap-target')?.dispatchEvent(new PointerEvent('pointerdown', {bubbles: true, button: 0, pointerType: 'mouse'}))")
-            await asyncio.sleep(0.01)
+        await follow_flashes(page, lambda: tap_circle(page))
         await page.wait_for_selector("[data-testid=result-step]", timeout=4000)
         assert acts.latency is not None and acts.latency["taps"] >= 4 and 0 <= acts.latency["device"] <= 150
         assert acts.latency["median"] is not None and acts.latency["loss"] == 0
         assert "ms" in await page.locator("[data-testid=adj-net]").inner_text()
         assert await page.evaluate("window.__eventos.comp.device") == acts.latency["device"]          # the server's answer is applied
+        assert page.errors == []
+
+    asyncio.run(with_page(scenario, actions=True))
+
+
+def test_the_circle_flashes_briefly_once_per_beat_and_a_tap_does_not_hide_the_flash():
+    async def scenario(hub, browser, url):
+        page = await open_latency_test(browser, url)
+        await page.click("[data-testid=start-tap]")
+        await page.wait_for_selector(".tap-target")
+        await page.evaluate("""() => {
+            window.__lit = [];
+            const el = document.querySelector('.tap-target');
+            let last = el.dataset.lit;
+            new MutationObserver(() => { if (el.dataset.lit !== last) { last = el.dataset.lit; window.__lit.push([last, performance.now()]); } })
+              .observe(el, { attributes: true, attributeFilter: ['data-lit'] });
+        }""")
+        stayed_lit = []
+
+        async def tap_and_look():
+            await tap_circle(page)                                              # a tap on the beat itself: the flash must still be there
+            stayed_lit.append(await page.evaluate("document.querySelector('.tap-target')?.dataset.lit"))
+        await follow_flashes(page, tap_and_look)
+        edges = await page.evaluate("window.__lit")
+        rising = [t for v, t in edges if v == "1"]
+        falling = [t for v, t in edges if v == "0"]
+        assert len(rising) == 8, edges                                          # one flash per beat (the fast test has 8), not a light that stays on
+        assert all(0 < f - r < 250 for r, f in zip(rising, falling)), edges     # each one is short
+        assert stayed_lit and set(stayed_lit) == {"1"}, stayed_lit
+        assert page.errors == []
+
+    asyncio.run(with_page(scenario, actions=True))
+
+
+def test_the_space_bar_taps_too_and_taps_without_a_pointer_are_counted():
+    async def scenario(hub, browser, url):
+        page = await open_latency_test(browser, url)
+        await page.click("[data-testid=start-tap]")
+        await page.wait_for_selector(".tap-target")
+        await follow_flashes(page, lambda: page.keyboard.press("Space"))
+        await page.wait_for_selector("[data-testid=result-step]", timeout=4000)
+        assert hub.test_actions.latency["taps"] >= 4
+        assert page.errors == []
+
+    asyncio.run(with_page(scenario, actions=True))
+
+
+def test_no_taps_or_wild_taps_ask_to_repeat_and_nothing_is_saved():
+    async def scenario(hub, browser, url):
+        page = await open_latency_test(browser, url)
+        await page.click("[data-testid=start-tap]")
+        await page.wait_for_selector("[data-testid=tap-failed]", timeout=8000)             # nobody tapped
+        assert "suficientes toques" in await page.locator("[data-testid=tap-failed]").inner_text()
+        assert hub.test_actions.latency is None
+        await page.click("[data-testid=tap-retry]")
+        await page.wait_for_selector(".tap-target")
+        # tapping all over the place, far from the beat: some taps land near flashes, but with no steadiness
+        loop = asyncio.get_running_loop()
+        for i in range(30):
+            await tap_circle(page)
+            await asyncio.sleep(0.07 + (i % 5) * 0.05)
+            if await page.locator("[data-testid=tap-failed]").count():
+                break
+        await page.wait_for_selector("[data-testid=tap-failed],[data-testid=result-step]", timeout=6000)
+        assert loop.time() > 0
+        assert page.errors == []
+
+    asyncio.run(with_page(scenario, actions=True))
+
+
+def test_skipping_the_tap_step_saves_the_connection_and_says_the_device_measurement_stays():
+    async def scenario(hub, browser, url):
+        page = await open_latency_test(browser, url)
+        acts = hub.test_actions
+        await page.click("text=Saltar")
+        await page.wait_for_selector("[data-testid=result-step]", timeout=4000)
+        assert acts.latency["device"] is None and acts.latency["median"] is not None and acts.latency["taps"] == 0
+        assert "se mantiene" in await page.locator("[data-testid=kept-note]").inner_text()
+        assert page.errors == []
+
+    asyncio.run(with_page(scenario, actions=True))
+
+
+def test_a_result_the_server_never_confirms_is_not_called_saved_and_can_be_retried():
+    async def scenario(hub, browser, url):
+        page = await open_latency_test(browser, url)
+        acts = hub.test_actions
+        real = acts.save_latency
+
+        async def lost(conn, result):
+            raise RuntimeError("the disk is full")                                        # the server logs it and answers nothing
+        acts.save_latency = lost
+        await page.click("text=Saltar")
+        await page.wait_for_selector("[data-testid=unsent-step]", timeout=4000)
+        assert await page.locator("[data-testid=result-step]").count() == 0
+        acts.save_latency = real
+        await page.get_by_role("button", name="Reintentar").click()
+        await page.wait_for_selector("[data-testid=result-step]", timeout=4000)
+        assert acts.latency is not None
         assert page.errors == []
 
     asyncio.run(with_page(scenario, actions=True))

@@ -13,6 +13,7 @@ import { MenuPage } from "../views/Menu.jsx";
 import { SettingsPage } from "../views/Settings.jsx";
 import { HelpPage } from "../views/Help.jsx";
 import { LatencyPage } from "../views/Latency.jsx";
+import { TrainingPage } from "../views/Training.jsx";
 import { PanelPage } from "../views/Panel.jsx";
 import { GmPage } from "../views/Gm.jsx";
 import { TutorialHost } from "../views/Tutorial.jsx";
@@ -59,6 +60,7 @@ function Pages({ layout }) {
       {v === "menu" && <MenuPage />}
       {v === "settings" && <SettingsPage />}
       {v === "latency" && <LatencyPage />}
+      {v === "training" && <TrainingPage />}
       {v === "help" && <HelpPage />}
       {v === "panel" && <PanelPage />}
       {v === "gm" && <GmPage />}

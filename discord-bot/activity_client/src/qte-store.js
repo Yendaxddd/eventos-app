@@ -44,6 +44,12 @@ export function startQte(frame, { practice = false, ago = 0 } = {}) {
   }
 }
 
+// A practice QTE the player let slip (a combo step whose time ran out, for one): it ends as a miss, as the real one would.
+export function expirePractice(id, label = "Se acabó el tiempo", sub = "no se pulsó nada") {
+  const open = find(id);
+  if (open && open.practice && !open.pressed) settle(open, null, { ok: false, label, sub });
+}
+
 export function endQte(id) {
   const entry = find(id);
   if (!entry) return;
@@ -108,7 +114,8 @@ function settle(entry, cmd, res, extra = {}) {
   if (combo && res.ok && !res.done) {
     // practice combo: move to the next step
     const index = (entry.step ? entry.step.index : 0) + 1;
-    replace(entry.id, { step: { cmd: entry.q.combo.sequence[index], index, from: elapsedSeconds(entry, performance.now()) }, result: verdict, pressedCmd: cmd, pressed: false, busy: false });
+    replace(entry.id, { step: { cmd: entry.q.combo.sequence[index], index, from: elapsedSeconds(entry, performance.now()) }, result: null, pressedCmd: cmd, pressed: false, busy: false });      // the next button comes back (a result would lock it)
+    playVerdict(verdict);
     return;
   }
   replace(entry.id, { pressed: true, pressedCmd: cmd, result: verdict, busy: false, ms: extra.ms ?? res.ms });

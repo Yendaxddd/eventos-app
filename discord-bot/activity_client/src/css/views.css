@@ -16,7 +16,7 @@
 .metrics b { font: 700 1.25rem/1.1 var(--font-display); }
 .tap-stage { display: flex; flex-direction: column; align-items: center; gap: var(--sp-5); padding: var(--sp-6) 0; }
 .tap-target { position: relative; width: min(60vw, 240px); height: min(60vw, 240px); border-radius: 50%; border: 3px solid var(--line); background: radial-gradient(circle at 35% 28%, var(--surface-4), var(--surface-2)); color: var(--text-dim); display: grid; place-items: center; touch-action: manipulation; user-select: none; -webkit-user-select: none; transition: background 40ms linear, border-color 40ms linear, transform 80ms; }
-.tap-target[data-flash="0"], .tap-target[data-flash="1"] { background: radial-gradient(circle at 35% 28%, #fff, var(--parry)); border-color: #fff; color: #1a1205; box-shadow: 0 0 60px var(--parry-glow); }
+.tap-target[data-lit="1"] { background: radial-gradient(circle at 35% 28%, #fff, var(--parry)); border-color: #fff; color: #1a1205; box-shadow: 0 0 60px var(--parry-glow); }
 .tap-target[data-tapped="1"] { transform: scale(.96); }
 .tap-target .ring { position: absolute; inset: -4px; border-radius: 50%; border: 3px solid var(--parry); opacity: 0; animation: tap-ring .7s ease-out; }
 @keyframes tap-ring { 0% { opacity: .9; transform: scale(1); } 100% { opacity: 0; transform: scale(1.4); } }
@@ -40,3 +40,16 @@
 .tut-verdict.bad { border: 1px solid var(--bad); color: var(--text); background: color-mix(in srgb, var(--bad) 14%, var(--surface)); }
 .tut-actions { display: flex; justify-content: space-between; gap: var(--sp-2); }
 .spin-icon { animation: spin 1s linear infinite; color: var(--primary-2); }
+
+/* ---- training ---- */
+.chiprow { display: flex; flex-wrap: wrap; gap: var(--sp-2); }
+.chipbtn { padding: 8px 14px; border-radius: var(--r-pill); border: 1px solid var(--line); background: var(--surface-2); color: var(--text-dim); font: 600 .8125rem/1 var(--font-ui); cursor: pointer; transition: background var(--t-fast), border-color var(--t-fast), color var(--t-fast); }
+.chipbtn:hover { background: var(--surface-3); color: var(--text); }
+.chipbtn[aria-pressed="true"] { background: color-mix(in srgb, var(--primary) 26%, var(--surface-2)); border-color: var(--primary-2); color: var(--text); }
+.bar-thin { height: 6px; border-radius: 3px; background: var(--surface-4); overflow: hidden; }
+.bar-thin > i { display: block; height: 100%; background: linear-gradient(90deg, var(--primary), var(--primary-2)); transition: width var(--t-med) var(--ease); }
+.dots { display: flex; flex-wrap: wrap; gap: 4px; min-height: 10px; }
+.dots i { width: 10px; height: 10px; border-radius: 50%; background: var(--bad); }
+.dots i[data-ok="1"] { background: var(--ok); }
+.brk { padding: 4px 0; border-bottom: 1px solid var(--line-soft); }
+.brk:last-child { border-bottom: 0; }

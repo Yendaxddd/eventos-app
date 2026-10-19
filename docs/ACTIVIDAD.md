@@ -66,7 +66,7 @@ Los QTE siguen funcionando también por el chat de siempre.
   botones) y los QTE siguen funcionando.
 
 ## Menú, ajustes, latencia y tutorial
-- **Menú** (☰ arriba a la izquierda): Ajustes, Prueba de latencia, Tutorial y Ayuda. `Esc` o la flecha vuelven a donde estabas.
+- **Menú** (☰ arriba a la izquierda): Ajustes, Prueba de latencia, Entrenamiento, Tutorial y Ayuda. `Esc` o la flecha vuelven a donde estabas.
 - **Ajustes por jugador** (engranaje): tema (oscuro, muy oscuro, alto contraste), colores para daltonismo (azul y naranja), tamaño
   del texto, espaciado, animaciones reducidas (los temporizadores siguen moviéndose), **tamaño de los botones**, **dónde aparecen**
   (al azar, abajo, izquierda o derecha: más cómodo con una mano), mantener Esquivar durante el parry, un QTE a la vez, sonidos y
@@ -79,6 +79,20 @@ Los QTE siguen funcionando también por el chat de siempre.
   jugador por su cuenta (un ping cada 2 s) y a cada respuesta le **suma** el retraso típico de la red (el QTE tardó en llegarte)
   y le **resta** el retraso de tu dispositivo (tu pantalla y tu toque tardan), con un tope de ±300 ms. Nadie puede comprar tiempo
   inflando un número: la red la mide el servidor y el dispositivo está limitado a 150 ms.
+  Desde la 1.2.0: el círculo **se enciende solo un instante** en cada ritmo (antes se quedaba encendido y un toque justo antes
+  del destello lo apagaba), los toques se miden con la hora real del evento y también vale la **barra espaciadora**; cada toque
+  responde a un solo destello; un pong que tarda más de lo que dice la pantalla cuenta como perdido; si la pantalla se oculta o los
+  toques son muy irregulares la prueba pide repetirse en vez de guardar un número malo; **«Saltar» ya no borra** la medición
+  anterior del dispositivo; y el ajuste solo se da por guardado cuando el servidor lo confirma (si no, ofrece reintentar).
+- **Entrenamiento** (menú → Entrenamiento, 1.2.0): QTE de práctica al azar con los tiempos reales del bot, sin daño, sin puntos y
+  sin enviar nada al servidor. Eliges los **tipos** (individual, grupal, dirección, combo y cadena de Black Flash), las
+  **dificultades** (se elige una al azar de las marcadas), la **cantidad** (10, 25, 50, 100 o sin fin), la **pausa** entre QTE (mínimo
+  y máximo), cuántos pueden estar **a la vez** (1 a 3, para practicar la prioridad), la **velocidad** (50 a 200 %: más de 100 acorta
+  todas las ventanas), el largo de los combos y la **muerte súbita** (termina al primer fallo); o un preajuste (Calentamiento, Normal,
+  Intenso, Caos). Lo elegido se recuerda en el dispositivo. Durante la tanda ves aciertos, fallos, racha, precisión y tiempo medio,
+  y puedes pausar o terminar; si te llega un QTE de verdad, el entrenamiento espera. Al final: resumen con precisión, mejor racha,
+  tiempo medio y más rápido, Black Flash, QTE sin pulsar, desglose por tipo y por dificultad, y si batiste tus **marcas** (guardadas
+  en el dispositivo; la precisión y la velocidad solo cuentan en tandas de 10 o más).
 - **Tutorial:** por pasos (el canal, escribir, esquivar, parry con práctica real usando las ventanas del bot, rescatar/poderes,
   menú y ajustes). Empieza solo la primera vez y se repite desde el menú. La práctica no envía nada al servidor.
 
