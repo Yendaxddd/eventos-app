@@ -1,0 +1,113 @@
+/* ---- Floating QTE buttons ----
+   One widget per QTE that is for this player: a timer on top and one big button below. EVADE comes first; when the
+   parry window opens the widget is replaced by PARRY (somewhere else on the screen). Positions never overlap. */
+.qlayer { position: fixed; inset: 0; z-index: 100; pointer-events: none; }
+.qw {
+  --btn-base: 104px;
+  --size: calc(var(--btn-base) * var(--lead-k, 1) * var(--fit, 1));   /* --btn-base already has the player's size setting in it (set by the app) */
+  --c: var(--evade); --c-deep: var(--evade-deep); --glow: var(--evade-glow);
+  position: absolute; left: 0; top: 0; width: calc(var(--size) + 36px); display: flex; flex-direction: column; align-items: center; gap: 8px;
+  transform: translate(var(--x, 0px), var(--y, 0px)); pointer-events: none; will-change: transform;
+}
+.qw[data-kind="parry"] { --c: var(--parry); --c-deep: var(--parry-deep); --glow: var(--parry-glow); }
+.qw[data-kind="save"] { --c: var(--save); --c-deep: var(--save-deep); --glow: var(--save-glow); }
+.qw[data-kind="counter"] { --c: var(--counter); --c-deep: var(--counter-deep); --glow: var(--counter-glow); }
+.qw[data-kind="bf"] { --c: var(--bf); --c-deep: var(--bf-deep); --glow: var(--bf-glow); }
+.qw[data-kind="arrows"], .qw[data-kind="combo"] { --c: var(--evade); --c-deep: var(--evade-deep); --glow: var(--evade-glow); }
+.qw[data-lead="true"] { --lead-k: 1.14; z-index: 2; }
+
+.qw-in { display: contents; }
+.qw > * { pointer-events: auto; }
+.qw-timer { width: 100%; display: flex; align-items: center; gap: 8px; padding: 6px 8px; border-radius: var(--r-pill); background: rgb(8 8 16 / .82); border: 1px solid rgb(255 255 255 / .12); backdrop-filter: blur(6px); box-shadow: 0 6px 20px -6px rgb(0 0 0 / .7); animation: qw-in .26s var(--ease-spring) both; pointer-events: none; }
+.qw-track { position: relative; flex: 1; height: 12px; border-radius: var(--r-pill); background: rgb(255 255 255 / .1); overflow: hidden; }
+.qw-fill { position: absolute; inset: 0; border-radius: inherit; background: linear-gradient(90deg, var(--c-deep), var(--c)); transform-origin: left center; animation: qw-drain linear both; will-change: transform; }
+.qw-secs { min-width: 34px; text-align: right; font: 700 .8125rem/1 var(--font-display); color: var(--c); text-shadow: 0 0 10px var(--glow); }
+@keyframes qw-drain { from { transform: scaleX(1); } to { transform: scaleX(0); } }
+
+/* parry: the whole bar is the window, the cursor walks through it and the Black Flash band sits in the middle */
+.qw-track.window { background: color-mix(in srgb, var(--parry) 26%, rgb(0 0 0 / .5)); }
+.qw-spent { position: absolute; inset: 0; background: rgb(0 0 0 / .62); transform-origin: left center; animation: qw-spend linear both; will-change: transform; }
+.qw-zone { position: absolute; top: 0; bottom: 0; background: linear-gradient(180deg, #e9d5ff, var(--bf)); box-shadow: 0 0 10px var(--bf-glow); border-radius: 3px; min-width: 4px; }
+.qw-cursor { position: absolute; inset: 0; animation: qw-walk linear both; will-change: transform; }
+.qw-cursor::after { content: ""; position: absolute; left: 0; top: -2px; bottom: -2px; width: 3px; margin-left: -1px; border-radius: 2px; background: #fff; box-shadow: 0 0 8px #fff; }
+@keyframes qw-spend { from { transform: scaleX(0); } to { transform: scaleX(1); } }
+@keyframes qw-walk { from { transform: translateX(0); } to { transform: translateX(100%); } }
+
+.qw-btn {
+  position: relative; width: var(--size); height: var(--size); border-radius: 50%; border: 0; padding: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px;
+  color: #fff; font: 700 calc(var(--size) * .15)/1 var(--font-display); letter-spacing: .06em; text-transform: uppercase; cursor: pointer; touch-action: manipulation; user-select: none; -webkit-user-select: none;
+  background: radial-gradient(circle at 32% 24%, color-mix(in srgb, var(--c) 70%, #fff), var(--c) 38%, var(--c-deep));
+  box-shadow: 0 0 0 4px rgb(255 255 255 / .16), 0 0 0 8px color-mix(in srgb, var(--c) 36%, transparent), 0 14px 40px -4px var(--glow), inset 0 -8px 18px rgb(0 0 0 / .28), inset 0 3px 10px rgb(255 255 255 / .35);
+  text-shadow: 0 2px 6px rgb(0 0 0 / .55); animation: qw-pop .3s var(--ease-spring) both; transition: filter var(--t-fast), transform var(--t-fast);
+}
+.qw-btn:active:not(:disabled) { transform: scale(.93); filter: brightness(1.2); }
+.qw-btn svg { width: calc(var(--size) * .34); height: calc(var(--size) * .34); filter: drop-shadow(0 2px 4px rgb(0 0 0 / .5)); }
+.qw-btn .kbd { position: absolute; bottom: calc(var(--size) * .1); font-size: .625rem; opacity: .85; }
+.qw[data-lead="true"] .qw-btn::after { content: ""; position: absolute; inset: -6px; border-radius: 50%; border: 3px solid var(--c); opacity: 0; animation: qw-ring 1.3s ease-out infinite; pointer-events: none; }
+@keyframes qw-pop { from { transform: scale(.4) rotate(-14deg); opacity: 0; } 60% { transform: scale(1.08) rotate(2deg); opacity: 1; } to { transform: none; opacity: 1; } }
+@keyframes qw-in { from { transform: translateY(8px) scale(.9); opacity: 0; } to { transform: none; opacity: 1; } }
+@keyframes qw-ring { 0% { transform: scale(1); opacity: .85; } 100% { transform: scale(1.5); opacity: 0; } }
+
+.qw-meta { display: flex; align-items: center; gap: 6px; padding: 3px 9px 3px 4px; border-radius: var(--r-pill); background: rgb(8 8 16 / .78); border: 1px solid rgb(255 255 255 / .1); font: 600 .6875rem/1 var(--font-display); letter-spacing: .08em; text-transform: uppercase; color: var(--text-dim); pointer-events: none; white-space: nowrap; }
+.qw-rank { display: inline-grid; place-items: center; width: 18px; height: 18px; border-radius: 50%; background: var(--c); color: #0b0b12; font: 800 .6875rem/1 var(--font-display); }
+
+/* late (the window is gone), waiting (before it opens), locked (cooldown) */
+.qw[data-state="late"] { --c: #6b6b82; --c-deep: #3b3b4d; --glow: transparent; }
+.qw[data-state="late"] .qw-btn, .qw[data-state="wait"] .qw-btn, .qw[data-state="locked"] .qw-btn { cursor: not-allowed; }
+.qw[data-state="late"] .qw-btn { filter: saturate(.2); animation: none; }
+.qw[data-state="wait"] .qw-btn { filter: saturate(.55) brightness(.8); }
+.qw[data-state="locked"] .qw-btn { filter: saturate(.3) brightness(.75); }
+.qw-btn .sub { font: 600 calc(var(--size) * .1)/1 var(--font-display); letter-spacing: .04em; opacity: .9; text-transform: none; }
+
+/* verdict */
+.qw[data-state="done"] .qw-btn { animation: none; cursor: default; }
+.qw[data-result="ok"] .qw-btn { --c: var(--ok); --c-deep: var(--evade-deep); --glow: var(--evade-glow); animation: qw-burst .5s var(--ease) both; }
+.qw[data-result="bad"] .qw-btn { --c: var(--bad); --c-deep: #be123c; --glow: var(--counter-glow); animation: shake .4s ease-in-out both; }
+.qw[data-result="bf"] .qw-btn { --c: var(--bf); --c-deep: var(--bf-deep); --glow: var(--bf-glow); animation: qw-burst .6s var(--ease) both; }
+.qw-result { padding: 5px 12px; border-radius: var(--r-pill); background: rgb(8 8 16 / .86); border: 1px solid var(--c); color: #fff; font: 700 .8125rem/1.1 var(--font-display); letter-spacing: .05em; text-transform: uppercase; text-align: center; box-shadow: 0 0 22px -4px var(--glow); animation: qw-in .26s var(--ease-spring) both; pointer-events: none; }
+.qw-result small { display: block; font-weight: 600; font-size: .6875rem; color: var(--text-dim); letter-spacing: .04em; text-transform: none; margin-top: 2px; }
+@keyframes qw-burst { 0% { transform: scale(.9); } 40% { transform: scale(1.18); } 100% { transform: scale(1); } }
+.qw.is-leaving { animation: qw-out .3s ease-in forwards; }
+@keyframes qw-out { to { opacity: 0; transform: translate(var(--x, 0px), calc(var(--y, 0px) - 14px)) scale(.9); } }
+
+/* combo pips + direction pad */
+.qw-pips { display: flex; gap: 5px; justify-content: center; }
+.qw-pips i { width: 10px; height: 10px; border-radius: 50%; background: rgb(255 255 255 / .18); border: 1px solid rgb(255 255 255 / .25); }
+.qw-pips i.done { background: var(--ok); border-color: transparent; box-shadow: 0 0 8px var(--evade-glow); }
+.qw-pips i.now { background: var(--c); border-color: #fff; box-shadow: 0 0 10px var(--glow); transform: scale(1.25); }
+.qw-pad { display: grid; grid-template-columns: repeat(3, calc(var(--size) * .58)); grid-template-rows: repeat(3, calc(var(--size) * .58)); gap: 6px; animation: qw-pop .3s var(--ease-spring) both; }
+.qw-pad button { width: 100%; height: 100%; border-radius: 16px; border: 0; background: radial-gradient(circle at 30% 25%, color-mix(in srgb, var(--c) 70%, #fff), var(--c-deep)); color: #fff; display: grid; place-items: center; box-shadow: 0 0 0 3px rgb(255 255 255 / .14), 0 10px 26px -6px var(--glow), inset 0 2px 8px rgb(255 255 255 / .3); touch-action: manipulation; transition: transform var(--t-fast), filter var(--t-fast); }
+.qw-pad button:active:not(:disabled) { transform: scale(.92); filter: brightness(1.25); }
+.qw-pad button:disabled { filter: saturate(.2) brightness(.7); cursor: not-allowed; }
+.qw-pad button svg { width: 46%; height: 46%; }
+.qw-pad .up { grid-area: 1 / 2; } .qw-pad .left { grid-area: 2 / 1; } .qw-pad .right { grid-area: 2 / 3; } .qw-pad .down { grid-area: 3 / 2; }
+.qw-pad .shown { grid-area: 2 / 2; display: grid; place-items: center; border-radius: 50%; background: rgb(8 8 16 / .86); border: 2px dashed var(--c); color: var(--c); }
+.qw-pad .shown svg { width: 55%; height: 55%; }
+.qw-hint { max-width: 220px; text-align: center; font: 600 .75rem/1.25 var(--font-ui); color: #fff; padding: 4px 10px; border-radius: var(--r-md); background: rgb(8 8 16 / .78); pointer-events: none; }
+
+/* small second button: evade stays available while the parry window is open (setting) */
+.qw-alt { display: inline-flex; align-items: center; gap: 6px; min-height: 34px; padding: 0 14px; border-radius: var(--r-pill); border: 1px solid color-mix(in srgb, var(--evade) 60%, transparent); background: rgb(8 8 16 / .86); color: var(--evade); font: 700 .75rem/1 var(--font-display); letter-spacing: .06em; text-transform: uppercase; touch-action: manipulation; }
+.qw-alt:active { transform: scale(.95); }
+
+/* ---- Rescues (save) for somebody else's QTE ---- */
+.rescue-dock { position: fixed; z-index: 101; display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; padding: 0 12px; pointer-events: none; }
+.rescue-chip {
+  position: relative; pointer-events: auto; display: inline-flex; align-items: center; gap: 8px; min-height: 44px; padding: 5px 14px 5px 6px; border-radius: var(--r-pill); overflow: hidden;
+  background: rgb(8 8 16 / .86); border: 1px solid color-mix(in srgb, var(--save) 55%, transparent); color: #fff; backdrop-filter: blur(6px);
+  box-shadow: 0 8px 26px -8px var(--save-glow); animation: qw-in .26s var(--ease-spring) both; touch-action: manipulation; font-weight: 700;
+}
+.rescue-chip:hover:not(:disabled) { border-color: var(--save); }
+.rescue-chip:active:not(:disabled) { transform: scale(.96); }
+.rescue-chip:disabled { opacity: .55; cursor: not-allowed; border-color: var(--line); box-shadow: none; }
+.rescue-chip .r-txt { display: flex; flex-direction: column; gap: 2px; text-align: left; }
+.rescue-chip .r-txt b { font: 700 .8125rem/1 var(--font-display); letter-spacing: .03em; text-transform: uppercase; }
+.rescue-chip .r-txt small { font: 600 .6875rem/1 var(--font-display); color: var(--save); }
+.rescue-chip .r-bar { position: absolute; left: 0; right: 0; bottom: 0; height: 3px; background: rgb(255 255 255 / .08); }
+.rescue-chip .r-bar i { position: absolute; inset: 0; background: var(--save); transform-origin: left; animation: qw-drain linear both; }
+.rescue-chip.ok { border-color: var(--ok); } .rescue-chip.bad { border-color: var(--bad); }
+
+/* queue indicator when a player prefers one-at-a-time */
+.qqueue { position: fixed; right: 14px; top: calc(var(--topbar-h) + 14px); z-index: 101; padding: 6px 12px; border-radius: var(--r-pill); background: rgb(8 8 16 / .86); border: 1px solid var(--parry); font: 700 .75rem/1 var(--font-display); letter-spacing: .06em; color: var(--parry); text-transform: uppercase; }
+
+@media (max-width: 720px) { .qw { --btn-base: 94px; } }
+@media (pointer: coarse) { .qw { --btn-base: 108px; } .rescue-chip { min-height: 48px; } }

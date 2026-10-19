@@ -1,0 +1,319 @@
+[
+ {
+  "raw": {},
+  "expected": {
+   "theme": "dark",
+   "palette": "default",
+   "textScale": 100,
+   "density": "comfortable",
+   "motion": "full",
+   "buttonScale": 100,
+   "buttonPlacement": "random",
+   "keepEvade": false,
+   "queueMode": false,
+   "sound": true,
+   "volume": 60,
+   "haptics": true,
+   "showAvatars": true,
+   "showMedia": true,
+   "showTimestamps": true,
+   "showPlayers": true,
+   "compactHud": false,
+   "messageLimit": 150,
+   "tutorialDone": false
+  }
+ },
+ {
+  "raw": {
+   "theme": "oled",
+   "density": "compact"
+  },
+  "expected": {
+   "theme": "oled",
+   "palette": "default",
+   "textScale": 100,
+   "density": "compact",
+   "motion": "full",
+   "buttonScale": 100,
+   "buttonPlacement": "random",
+   "keepEvade": false,
+   "queueMode": false,
+   "sound": true,
+   "volume": 60,
+   "haptics": true,
+   "showAvatars": true,
+   "showMedia": true,
+   "showTimestamps": true,
+   "showPlayers": true,
+   "compactHud": false,
+   "messageLimit": 150,
+   "tutorialDone": false
+  }
+ },
+ {
+  "raw": {
+   "textScale": 500,
+   "volume": -5
+  },
+  "expected": {
+   "theme": "dark",
+   "palette": "default",
+   "textScale": 140,
+   "density": "comfortable",
+   "motion": "full",
+   "buttonScale": 100,
+   "buttonPlacement": "random",
+   "keepEvade": false,
+   "queueMode": false,
+   "sound": true,
+   "volume": 0,
+   "haptics": true,
+   "showAvatars": true,
+   "showMedia": true,
+   "showTimestamps": true,
+   "showPlayers": true,
+   "compactHud": false,
+   "messageLimit": 150,
+   "tutorialDone": false
+  }
+ },
+ {
+  "raw": {
+   "buttonPlacement": "up"
+  },
+  "expected": {
+   "theme": "dark",
+   "palette": "default",
+   "textScale": 100,
+   "density": "comfortable",
+   "motion": "full",
+   "buttonScale": 100,
+   "buttonPlacement": "random",
+   "keepEvade": false,
+   "queueMode": false,
+   "sound": true,
+   "volume": 60,
+   "haptics": true,
+   "showAvatars": true,
+   "showMedia": true,
+   "showTimestamps": true,
+   "showPlayers": true,
+   "compactHud": false,
+   "messageLimit": 150,
+   "tutorialDone": false
+  }
+ },
+ {
+  "raw": {
+   "sound": false,
+   "haptics": false,
+   "keepEvade": true
+  },
+  "expected": {
+   "theme": "dark",
+   "palette": "default",
+   "textScale": 100,
+   "density": "comfortable",
+   "motion": "full",
+   "buttonScale": 100,
+   "buttonPlacement": "random",
+   "keepEvade": true,
+   "queueMode": false,
+   "sound": false,
+   "volume": 60,
+   "haptics": false,
+   "showAvatars": true,
+   "showMedia": true,
+   "showTimestamps": true,
+   "showPlayers": true,
+   "compactHud": false,
+   "messageLimit": 150,
+   "tutorialDone": false
+  }
+ },
+ {
+  "raw": {
+   "messageLimit": 75.6,
+   "buttonScale": 1000
+  },
+  "expected": {
+   "theme": "dark",
+   "palette": "default",
+   "textScale": 100,
+   "density": "comfortable",
+   "motion": "full",
+   "buttonScale": 160,
+   "buttonPlacement": "random",
+   "keepEvade": false,
+   "queueMode": false,
+   "sound": true,
+   "volume": 60,
+   "haptics": true,
+   "showAvatars": true,
+   "showMedia": true,
+   "showTimestamps": true,
+   "showPlayers": true,
+   "compactHud": false,
+   "messageLimit": 76,
+   "tutorialDone": false
+  }
+ },
+ {
+  "raw": {
+   "nonsense": 1,
+   "theme": "contrast",
+   "palette": "cb"
+  },
+  "expected": {
+   "theme": "contrast",
+   "palette": "cb",
+   "textScale": 100,
+   "density": "comfortable",
+   "motion": "full",
+   "buttonScale": 100,
+   "buttonPlacement": "random",
+   "keepEvade": false,
+   "queueMode": false,
+   "sound": true,
+   "volume": 60,
+   "haptics": true,
+   "showAvatars": true,
+   "showMedia": true,
+   "showTimestamps": true,
+   "showPlayers": true,
+   "compactHud": false,
+   "messageLimit": 150,
+   "tutorialDone": false
+  }
+ },
+ {
+  "raw": {
+   "textScale": true
+  },
+  "expected": {
+   "theme": "dark",
+   "palette": "default",
+   "textScale": 100,
+   "density": "comfortable",
+   "motion": "full",
+   "buttonScale": 100,
+   "buttonPlacement": "random",
+   "keepEvade": false,
+   "queueMode": false,
+   "sound": true,
+   "volume": 60,
+   "haptics": true,
+   "showAvatars": true,
+   "showMedia": true,
+   "showTimestamps": true,
+   "showPlayers": true,
+   "compactHud": false,
+   "messageLimit": 150,
+   "tutorialDone": false
+  }
+ },
+ {
+  "raw": {
+   "theme": null,
+   "volume": "loud"
+  },
+  "expected": {
+   "theme": "dark",
+   "palette": "default",
+   "textScale": 100,
+   "density": "comfortable",
+   "motion": "full",
+   "buttonScale": 100,
+   "buttonPlacement": "random",
+   "keepEvade": false,
+   "queueMode": false,
+   "sound": true,
+   "volume": 60,
+   "haptics": true,
+   "showAvatars": true,
+   "showMedia": true,
+   "showTimestamps": true,
+   "showPlayers": true,
+   "compactHud": false,
+   "messageLimit": 150,
+   "tutorialDone": false
+  }
+ },
+ {
+  "raw": null,
+  "expected": {
+   "theme": "dark",
+   "palette": "default",
+   "textScale": 100,
+   "density": "comfortable",
+   "motion": "full",
+   "buttonScale": 100,
+   "buttonPlacement": "random",
+   "keepEvade": false,
+   "queueMode": false,
+   "sound": true,
+   "volume": 60,
+   "haptics": true,
+   "showAvatars": true,
+   "showMedia": true,
+   "showTimestamps": true,
+   "showPlayers": true,
+   "compactHud": false,
+   "messageLimit": 150,
+   "tutorialDone": false
+  }
+ },
+ {
+  "raw": "garbage",
+  "expected": {
+   "theme": "dark",
+   "palette": "default",
+   "textScale": 100,
+   "density": "comfortable",
+   "motion": "full",
+   "buttonScale": 100,
+   "buttonPlacement": "random",
+   "keepEvade": false,
+   "queueMode": false,
+   "sound": true,
+   "volume": 60,
+   "haptics": true,
+   "showAvatars": true,
+   "showMedia": true,
+   "showTimestamps": true,
+   "showPlayers": true,
+   "compactHud": false,
+   "messageLimit": 150,
+   "tutorialDone": false
+  }
+ },
+ {
+  "raw": {
+   "textScale": 112.4,
+   "motion": "reduced",
+   "showMedia": false,
+   "tutorialDone": true
+  },
+  "expected": {
+   "theme": "dark",
+   "palette": "default",
+   "textScale": 112,
+   "density": "comfortable",
+   "motion": "reduced",
+   "buttonScale": 100,
+   "buttonPlacement": "random",
+   "keepEvade": false,
+   "queueMode": false,
+   "sound": true,
+   "volume": 60,
+   "haptics": true,
+   "showAvatars": true,
+   "showMedia": false,
+   "showTimestamps": true,
+   "showPlayers": true,
+   "compactHud": false,
+   "messageLimit": 150,
+   "tutorialDone": true
+  }
+ }
+]

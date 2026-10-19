@@ -1,0 +1,42 @@
+/* ---- static preview of the floating buttons (settings) ---- */
+.qte-preview { display: flex; flex-wrap: wrap; gap: var(--sp-5); justify-content: center; padding: var(--sp-5) var(--sp-3); border-radius: var(--r-lg); background: radial-gradient(400px 160px at 50% 0%, rgb(139 92 246 / .12), transparent 70%), var(--bg-2); border: 1px solid var(--line-soft); }
+.qw.static { position: relative; transform: none; --size: calc(var(--btn-base) * var(--btn-scale)); }
+.qw.static .qw-btn { animation: none; }
+.qw.static .qw-timer, .qw.static > * { pointer-events: none; }
+
+/* ---- latency test ---- */
+.center-text { text-align: center; }
+.rtt-bars { display: flex; align-items: flex-end; gap: 4px; height: 96px; padding: 8px; border-radius: var(--r-md); background: var(--bg-2); border: 1px solid var(--line-soft); }
+.rtt-bars i { flex: 1; min-width: 4px; border-radius: 3px 3px 0 0; background: var(--surface-4); transition: height var(--t-med) var(--ease), background var(--t-fast); }
+.rtt-bars i[data-q="great"] { background: var(--ok); } .rtt-bars i[data-q="fair"] { background: var(--warn); }
+.rtt-bars i[data-q="poor"], .rtt-bars i[data-q="lost"] { background: var(--bad); }
+.metrics { display: grid; grid-template-columns: repeat(auto-fit, minmax(96px, 1fr)); gap: var(--sp-2); }
+.metrics > div { display: flex; flex-direction: column; gap: 4px; padding: var(--sp-2) var(--sp-3); border-radius: var(--r-md); background: var(--surface); border: 1px solid var(--line-soft); }
+.metrics span { font: 600 .6875rem/1 var(--font-display); letter-spacing: .1em; text-transform: uppercase; color: var(--text-faint); }
+.metrics b { font: 700 1.25rem/1.1 var(--font-display); }
+.tap-stage { display: flex; flex-direction: column; align-items: center; gap: var(--sp-5); padding: var(--sp-6) 0; }
+.tap-target { position: relative; width: min(60vw, 240px); height: min(60vw, 240px); border-radius: 50%; border: 3px solid var(--line); background: radial-gradient(circle at 35% 28%, var(--surface-4), var(--surface-2)); color: var(--text-dim); display: grid; place-items: center; touch-action: manipulation; user-select: none; -webkit-user-select: none; transition: background 40ms linear, border-color 40ms linear, transform 80ms; }
+.tap-target[data-flash="0"], .tap-target[data-flash="1"] { background: radial-gradient(circle at 35% 28%, #fff, var(--parry)); border-color: #fff; color: #1a1205; box-shadow: 0 0 60px var(--parry-glow); }
+.tap-target[data-tapped="1"] { transform: scale(.96); }
+.tap-target .ring { position: absolute; inset: -4px; border-radius: 50%; border: 3px solid var(--parry); opacity: 0; animation: tap-ring .7s ease-out; }
+@keyframes tap-ring { 0% { opacity: .9; transform: scale(1); } 100% { opacity: 0; transform: scale(1.4); } }
+
+/* ---- tutorial ---- */
+.tut { position: fixed; inset: 0; z-index: 90; pointer-events: none; }
+.tut-dim { position: absolute; inset: 0; background: rgb(5 5 12 / .5); }
+.tut-spot { position: absolute; border-radius: var(--r-lg); box-shadow: 0 0 0 9999px rgb(5 5 12 / .62), 0 0 0 2px var(--primary-2), 0 0 28px 4px var(--primary-glow); transition: left var(--t-slow) var(--ease), top var(--t-slow) var(--ease), width var(--t-slow) var(--ease), height var(--t-slow) var(--ease); }
+.tut-card {
+  position: absolute; left: 50%; bottom: calc(var(--safe-bottom) + 16px); transform: translateX(-50%); width: min(520px, calc(100vw - 24px)); pointer-events: auto;
+  display: flex; flex-direction: column; gap: var(--sp-3); padding: var(--sp-4); border-radius: var(--r-xl); background: var(--surface-2); border: 1px solid var(--line); box-shadow: var(--shadow-3); animation: rise var(--t-med) var(--ease);
+}
+.tut[data-step="chat"] .tut-card, .tut[data-step="write"] .tut-card { bottom: auto; top: calc(var(--topbar-h) + 14px); }
+.tut-head { display: flex; align-items: center; gap: var(--sp-2); }
+.tut-progress { height: 4px; border-radius: 4px; background: var(--surface-4); overflow: hidden; }
+.tut-progress i { display: block; height: 100%; background: linear-gradient(90deg, var(--primary), #ec4899); transition: width var(--t-slow) var(--ease); }
+.tut-card h2 { font: 700 1.25rem/1.2 var(--font-display); letter-spacing: .02em; }
+.tut-card p { color: var(--text-dim); font-size: .9375rem; line-height: 1.5; }
+.tut-verdict { display: flex; align-items: center; justify-content: space-between; gap: var(--sp-3); padding: var(--sp-3); border-radius: var(--r-md); background: var(--surface); border: 1px dashed var(--line); color: var(--text-dim); font-size: .875rem; }
+.tut-verdict.ok { border: 1px solid var(--ok); color: var(--text); background: color-mix(in srgb, var(--ok) 14%, var(--surface)); }
+.tut-verdict.bad { border: 1px solid var(--bad); color: var(--text); background: color-mix(in srgb, var(--bad) 14%, var(--surface)); }
+.tut-actions { display: flex; justify-content: space-between; gap: var(--sp-2); }
+.spin-icon { animation: spin 1s linear infinite; color: var(--primary-2); }

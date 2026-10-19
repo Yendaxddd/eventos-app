@@ -53,11 +53,21 @@ def test_the_qte_book_is_a_plain_dict_that_says_when_a_qte_starts_and_ends():
 
 
 def test_the_client_clock_is_trusted_only_within_what_a_human_and_the_real_time_allow():
-    assert response_seconds(1000, 100, 5000) == 1.05                # dt + half the round trip
+    assert response_seconds(1000, 50, 5000) == 1.05                 # dt + the time the QTE took to reach the player
     assert response_seconds(50, 0, 5000) is None                    # nobody is that fast
     assert response_seconds(float("nan"), 0, 5000) is None and response_seconds(999999, 0, 5000) is None
     assert abs(response_seconds(4000, 0, 2000) - 2.15) < 1e-9       # cannot have taken longer than it has been
-    assert response_seconds(500, 10_000_000, 60_000) == (500 + 2500) / 1000   # the round trip counts at most 5 s
+    assert response_seconds(500, 10_000_000, 60_000) == (500 + 300) / 1000    # the adjustment never moves an answer more than the cap
+
+
+def test_a_slow_screen_is_compensated_and_the_adjustment_is_bounded():
+    # network delay is added, the device's lag (screen + touch) is taken off
+    assert response_seconds(1000, 40, 9000, device_ms=60) == 0.98
+    assert response_seconds(1000, 0, 9000, device_ms=60) == 0.94
+    assert response_seconds(1000, 0, 9000, device_ms=10_000) == 0.85          # at most 150 ms of device lag
+    assert response_seconds(1000, 500, 9000, device_ms=0) == 1.3               # at most 300 ms in total (and 400 of network)
+    assert response_seconds(1000, 500, 9000, device_ms=0, cap_ms=100) == 1.1   # the game master can tighten the cap
+    assert response_seconds(100, 0, 9000, device_ms=150) == 0.001 or response_seconds(100, 0, 9000, device_ms=150) > 0   # never zero or negative
 
 
 def test_a_qte_is_described_without_leaking_its_windows():
@@ -446,7 +456,8 @@ def test_a_combo_shows_the_next_step_only_to_who_earned_it_and_a_save_goes_to_th
             return opened, step, other, rig.calls
 
     opened, step, other, calls = run(scenario())
-    assert opened["combo"] == {"length": 5, "index": 0, "step": "parry"} and opened["commands"] == ["evade", "parry"]
+    assert opened["combo"] == {"length": 5, "index": 0, "step": "parry", "limits": [6.5, 13.0, 19.5, 26.0, 32.5]}   # each step is judged from the start: (evade window + 0.5 s) per step
+    assert opened["commands"] == ["evade", "parry"]
     assert step == {"t": "qte_step", "id": "3", "index": 1, "step": "evade"}
     assert other["commands"] == ["evade", "parry", "save", "adapt"] and calls[-1][0] == "*save*"
 

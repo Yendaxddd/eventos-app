@@ -47,7 +47,7 @@ def activity_check() -> dict:
     from . import activity
 
     web = paths.resource_path("eventos_app", "activity", "web")
-    result = {"activity_client_bundled": all((web / name).is_file() for name in ("index.html", "app.js", "style.css"))}
+    result = {"activity_client_bundled": all((web / name).is_file() for name in ("index.html", "app.js", "app.css"))}
 
     async def serve() -> bool:
         server = activity.ActivityServer(activity.Hub(), auth=activity.DiscordAuth(client_id=1, client_secret=""),

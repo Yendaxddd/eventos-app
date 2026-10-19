@@ -24,13 +24,15 @@ import aiohttp
 from aiohttp import web
 from yarl import URL
 
+from .. import __version__
 from .auth import AuthError, DiscordAuth
-from .hub import Conn, Hub
+from .hub import Conn, Hub, RpcError
 
 log = logging.getLogger("eventos_app.activity")
 
 DEFAULT_PORT = 8765
 HELLO_TIMEOUT = 10.0
+RPC_TIMEOUT = 15.0
 MAX_FRAME = 64 * 1024
 # Pictures and clips the mirror shows come through this server (no URL Mappings needed in the Developer Portal),
 # and only from Discord's own hosts.
@@ -106,7 +108,8 @@ class ActivityServer:
         """Files of the client are always re-checked (a cheap 304 when unchanged), so an update is seen at once."""
         response = await handler(request)
         if isinstance(response, web.FileResponse) and "Cache-Control" not in response.headers and not request.path.endswith("/media"):
-            response.headers["Cache-Control"] = "no-cache"
+            # fonts have a fingerprint in their name, so they never change under it: keep them; everything else is re-checked
+            response.headers["Cache-Control"] = "public, max-age=31536000, immutable" if "/fonts/" in request.path else "no-cache"
         return response
 
     @staticmethod
@@ -164,6 +167,7 @@ class ActivityServer:
         raise OSError(f"no hay un puerto libre desde el {self.port}: {last}")
 
     async def stop(self) -> None:
+        await self.hub.close()
         for conn in list(self.hub.conns.values()):
             try:
                 await conn.ws.close(code=1001, message=b"server stopping")
@@ -261,9 +265,9 @@ class ActivityServer:
         return web.FileResponse(path, headers={"Cache-Control": "public, max-age=86400"})
 
     def _versioned(self, text: str) -> str:
-        """`app.js` and `style.css` get a version in their address: Discord's browser keeps files it has seen for a
+        """`app.js` and `app.css` get a version in their address: Discord's browser keeps files it has seen for a
         while, and an old script with a new page (or the other way round) leaves buttons missing."""
-        for name in ("app.js", "style.css"):
+        for name in ("app.js", "app.css", "style.css"):
             path = self.web_dir / name
             if path.is_file():
                 version = hashlib.sha1(path.read_bytes()).hexdigest()[:10]
@@ -319,6 +323,7 @@ class ActivityServer:
                 await ws.send_json({"t": "error", "code": "auth", "reason": "no llegó el saludo inicial"})
                 return ws
             conn = Conn(self.hub.new_id(), user_id, name, avatar, ws, dev=dev)
+            conn.gm = bool(dev and hello.get("gm"))           # a test window on this PC may ask for the GM panel; Discord users never do
             backlog = await self.hub.load_backlog()
             if self.actions is not None and hasattr(self.actions, "push_state"):
                 await self.actions.push_state()                  # so the welcome carries the game as it is right now
@@ -326,11 +331,14 @@ class ActivityServer:
             if not any(u["id"] == str(user_id) for u in users):
                 users.append(conn.public())          # you are in the list you are first shown
             characters = self.actions.characters_of(user_id) if self.actions is not None else []
-            await ws.send_json({"t": "welcome", "you": conn.public(), "serverTime": self.hub.now_ms(),
+            extras = {}
+            if self.actions is not None and hasattr(self.actions, "welcome_extras"):
+                extras = await self.actions.welcome_extras(conn)         # perms, settings, latency, rules, pictures of the characters
+            await ws.send_json({"t": "welcome", "you": conn.public(), "serverTime": self.hub.now_ms(), "version": __version__,
                                 "channel": self.hub.channel_name, "users": users, "backlog": backlog,
                                 "characters": characters, "qtes": list(self.hub.qtes.values()), "state": self.hub.state,
-                                "me": self.actions.me_of(user_id) if self.actions is not None and not dev else {},
-                                "canWrite": self.actions is not None})
+                                "me": self.actions.me_of(user_id) if self.actions is not None else {},
+                                "canWrite": self.actions is not None, **extras})
             await self.hub.add(conn)
             self._note(f"{name} entró a la Actividad")
             async for message in ws:
@@ -362,6 +370,30 @@ class ActivityServer:
             except (KeyError, TypeError, ValueError):
                 return
             self.hub._changed()
+        elif kind == "sq":                    # the answer to one of the server's own pings
+            self.hub.note_sq(conn, frame.get("n"))
+        elif kind == "prefs" and self.actions is not None and hasattr(self.actions, "save_prefs"):
+            await self.actions.save_prefs(conn, frame.get("prefs"))
+        elif kind == "latency" and self.actions is not None and hasattr(self.actions, "save_latency"):
+            try:
+                calib, comp = await self.actions.save_latency(conn, frame.get("result"))
+            except Exception:  # noqa: BLE001
+                log.exception("could not save a latency test")
+                return
+            await conn.ws.send_json({"t": "calib", "calib": calib})
+            await conn.ws.send_json({"t": "comp", "comp": comp})
+        elif kind == "rpc" and self.actions is not None and hasattr(self.actions, "rpc"):
+            call_id = str(frame.get("id", ""))[:32]
+            try:
+                data = await asyncio.wait_for(self.actions.rpc(conn, str(frame.get("op", "")), frame.get("args") or {}), RPC_TIMEOUT)
+                await conn.ws.send_json({"t": "rpc_ok", "id": call_id, "data": data})
+            except RpcError as exc:
+                await conn.ws.send_json({"t": "rpc_err", "id": call_id, "reason": str(exc)})
+            except asyncio.TimeoutError:
+                await conn.ws.send_json({"t": "rpc_err", "id": call_id, "reason": "El servidor tardó demasiado."})
+            except Exception:  # noqa: BLE001 - one bad request must not close the connection
+                log.exception("rpc %r failed", frame.get("op"))
+                await conn.ws.send_json({"t": "rpc_err", "id": call_id, "reason": "Algo falló al procesarlo; inténtalo otra vez."})
         elif kind in ("say", "press"):
             if self.actions is None:
                 await conn.ws.send_json({"t": "error", "code": "readonly", "reason": "Esta Actividad es de solo lectura."})

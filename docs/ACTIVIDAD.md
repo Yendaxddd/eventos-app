@@ -4,52 +4,79 @@ Una **Actividad** es una pantalla web que Discord abre dentro de la app (PC y m�
 con el tiempo medido **en tu pantalla** (sin depender de mensajes ni reacciones), el canal del evento a la vista y una caja
 para escribir, para no cambiar de canal en pleno timing.
 
-**Versión 0.7.0:** se puede **escribir** y **responder QTE con botones** (con la barra de tiempo y sus ventanas), ver el **HP, el
-jefe y tus cargas**, y las imágenes salen por la propia app. Los QTE siguen funcionando también por el chat de siempre.
+**Versión 0.9.0:** interfaz nueva (diseño propio, todo en español), **botón flotante Esquivar → Parry con el temporizador encima**,
+varios QTE a la vez **por prioridad y sin solaparse**, **menú**, **ajustes por jugador** (se guardan en el servidor y te siguen del
+móvil al PC), **prueba de latencia** que ajusta tus tiempos y un **tutorial** con práctica. Los QTE siguen funcionando también por
+el chat de siempre.
 
 ## Cómo funciona
 - La app abre un servidor web en tu PC (puerto 8765) dentro del mismo proceso del bot.
 - Discord descarga la Actividad desde internet, así que la app abre un **túnel gratuito de Cloudflare** (`cloudflared`, se
   descarga una vez en `tools\`) que da una dirección pública `https://algo.trycloudflare.com`. **Esa dirección cambia cada vez
-  que inicias el bot**, y hay que pegarla en el Developer Portal (paso 3).
+  que inicias el bot**, y hay que pegarla en el Developer Portal (paso 3). Con **Tailscale Funnel** la dirección es fija.
 - Cada jugador entra con su cuenta de Discord (OAuth2, solo el permiso «identify»). El bot comprueba que sea miembro del
   servidor y pueda ver el canal del evento: si no, no ve nada.
-- El cliente y el servidor sincronizan relojes (ping/pong tipo NTP) y la app muestra el ida y vuelta y el desfase de cada
-  jugador. Es la base para mostrar cosas a la misma hora a todos y medir reacciones en el cliente.
+- El tiempo de cada respuesta lo mide **la pantalla del jugador** (desde que ve el QTE hasta que lo pulsa) y el servidor lo
+  compensa con la red y el dispositivo de cada persona (más abajo), rechazando lo imposible (menos de 80 ms, o más que el tiempo
+  real que lleva el QTE).
 
 ## Jugar desde la Actividad
-- **Escribir:** la caja de abajo publica en el canal del evento **con tu nombre y tu foto** (por el webhook del bot, sin
-  menciones/pings). Si tienes personajes registrados aparece un selector para escribir como uno de ellos (con la foto con la
-  que Tupperbox lo mostró por última vez). El bot trata lo escrito como cualquier mensaje del chat: `*attack*`, frases entre
-  comillas, etc. funcionan igual. Sin permiso «Gestionar webhooks» el bot lo publica como `**Nombre:** texto`.
-- **QTE (varios a la vez):** cada QTE que te toca tiene **su tarjeta** con su barra de tiempo y sus botones; un botón responde
-  exactamente a *su* QTE, así que puedes contestar primero el segundo. Se miden desde que el QTE se pinta en tu pantalla; el
-  servidor suma la mitad del ida y vuelta y rechaza tiempos imposibles (menos de 80 ms) o más largos que el tiempo real.
-  - **Individual y grupo:** Evade y Parry. Si el QTE es de otra persona aparece **🛡 Salvar a …** (con su contador de salvaciones).
-  - **Combo:** la tarjeta dice el paso que toca (1/5 · ahora: Parry…); el siguiente solo lo ves tú cuando aciertas, como en el chat.
-  - **Dirección:** muestra la flecha y un pad de 4 flechas: pulsa la **opuesta**.
-  - **Cadena Black Flash:** solo Parry, con su ventana de 3 s.
-  - **Falso:** no tiene botones ni dice a quién va (igual que en el chat, donde no hay ping).
-- **Parry flotante:** el botón de Parry no está fijo: **aparece en un sitio al azar de la pantalla cuando se abre su ventana** y
-  desaparece al pulsarlo o al acabar el QTE (con varios QTE lleva el número). Se puede desmarcar con «Parry flotante»
-  (se recuerda); en el combo el Parry va fijo.
-- **Botones siempre disponibles:** Adapt, **Ataque** (se enciende con los segundos que le quedan a la ventana del contraataque),
-  **Poder 1 / Poder 2** del personaje activo (nombre, % de carga, brillo al estar listo, y ⏱ de enfriamiento o ⏸ si espera a la
-  próxima pelea) y **Dominio** si tienes uno. El Parry muestra su enfriamiento tras una cadena de Black Flash.
-- **Teclas (PC):** `E` evade, `P` parry, `S` salvar, `A` adapt, `Q` ataque, `1` / `2` poderes, `3` dominio, flechas para el pad;
-  responden al QTE más antiguo que pueda recibirlas. Mientras escribes en la caja, `Alt`+tecla. `Esc` sale de la caja.
-- En el canal, la respuesta aparece con ✅/❌ en el mensaje del QTE, como siempre, y los mensajes de resultado de siempre.
+- **Pantalla:** a la izquierda el equipo (vida de cada jugador) y quién está en la Actividad; en el centro el canal del evento
+  (espejo en vivo, con respuestas, reacciones, stickers y embeds completos) con la barra del jefe encima y la caja para escribir
+  debajo; a la derecha tu personaje (HP, cargas, racha) y tus botones. En pantallas medianas la columna del equipo pasa a un
+  cajón (icono de personas); en el móvil queda el chat, una franja con tu HP y cargas, y los botones abajo.
+- **Escribir:** la caja publica en el canal **con tu nombre y tu foto** (por el webhook del bot, sin pings). Con personajes
+  registrados aparece un selector para escribir **como uno de ellos** (con la foto con la que Tupperbox lo mostró por última vez).
+  El bot trata lo escrito como cualquier mensaje del chat: `*attack*`, frases entre comillas, etc. `Enter` envía y
+  `Mayús+Enter` hace un salto de línea. Sin permiso «Gestionar webhooks» el bot lo publica como `**Nombre:** texto`.
+- **QTE: un botón flotante por cada QTE que te toca.** Aparece en un sitio distinto de la pantalla cada vez, con el
+  **temporizador encima** y debajo el número de prioridad y la dificultad:
+  - Primero es **ESQUIVAR** (barra verde que se vacía hasta que se abre la ventana de parry). Al abrirse esa ventana, el botón
+    **cambia a PARRY** y aparece en otro sitio: ahora la barra es la propia ventana del parry, con un cursor que avanza y una
+    **banda violeta que marca la zona de Black Flash** (luego hay una tirada de suerte). Pulsar el parry antes o después de la
+    ventana falla, igual que en el chat. Esquivar sigue valiendo (con la tecla `E`) hasta el final de *su* ventana; si quieres un
+    botón pequeño para ello mientras el parry está abierto, actívalo en Ajustes («Mantener Esquivar durante el parry»).
+  - **Varios a la vez:** se ordenan por urgencia (el que antes se acaba es el **1**, más grande y con un halo) y **nunca se
+    solapan**: si la pantalla está llena, el último botón se hace más pequeño en vez de taparse con otro (y, en un caso extremo, se
+    recolocan todos en filas). Cada botón responde exactamente a *su* QTE. Con «Un QTE a la vez» solo ves el más urgente y los
+    demás esperan en cola (sus tiempos siguen corriendo). Si tienes el cajón de jugadores abierto, se cierra solo al llegarte un QTE.
+  - **Grupal:** solo Esquivar (el bot rechaza el parry en un QTE de grupo).
+  - **Combo:** el botón del paso que toca (Esquivar o Parry) con puntos de progreso; solo ves el siguiente cuando aciertas, como en
+    el chat. **Dirección:** una cruz de 4 flechas y la flecha mostrada: pulsa la **opuesta**. **Cadena Black Flash:** espera
+    («Prepárate») a que se abra su ventana y entonces solo ofrece el Parry; pulsarlo antes terminaría la cadena.
+  - **Falso:** no tiene botón ni dice a quién va (igual que en el chat, donde no hay ping).
+  - **Rescatar:** si el QTE es de otro jugador aparece arriba una pastilla «Rescatar a …» con su cuenta atrás y tus rescates
+    restantes (máximo 2 por minuto); se apaga cuando pasa su ventana, porque un rescate tardío haría daño a quien rescata.
+  - **Contraataque:** tras esquivar a tiempo aparece un botón rojo **ATACAR** con los segundos que quedan de la ventana.
+  - El resultado se dice una vez, bajo el botón («¡Parry perfecto!», «¡BLACK FLASH!», «Fallaste»…) con el tiempo contado, y la
+    pantalla destella en rojo si pierdes vida, en verde si te curas y en violeta con un Black Flash.
+- **Botones siempre disponibles** (columna derecha, o franja inferior en el móvil): **Adaptar**, **Ataque**, **Poder 1 / 2** del
+  personaje activo (nombre, % de carga, brillo al estar listo, enfriamiento o «en pausa» si espera a la próxima pelea) y
+  **Dominio** si tienes uno.
+- **Teclado (PC):** `Espacio` responde al QTE más urgente (esquivar o parry, según toque); `E` esquivar, `P` parry, `S` rescatar,
+  flechas para el QTE de direcciones, `A` adaptar, `Q` ataque, `1`/`2` poderes, `3` dominio. Mientras escribes en la caja,
+  `Alt`+tecla. `Esc` sale de la caja o vuelve atrás.
 - **Aún por el chat:** Final Judgement, choque de dominios y juicios (puedes escribirlos en la caja: pasan por el mismo camino
   que el chat, pero sin medición del cliente).
-- **Barra de tiempo:** muestra todo el QTE con sus zonas: verde = evade (hasta el límite), naranja = parry, oscuro = ventana de
-  Black Flash (solo es la ventana: luego hay una tirada de suerte), y un cursor que arranca donde va el reloj del motor.
-  Respeta el modo REVENGE (ventana de parry movida).
-- **Estado:** barra del jefe, HP de los jugadores, tu HP, tus cargas de Power 1 y 2 (brillan al llegar al 100 %) y tu racha de evades.
-- **Personajes:** el selector de abajo es tu *personaje activo*: lo que escribes y los botones actúan como ese personaje
-  (poderes, registro, etc.), no solo cambia el nombre. La foto de cada personaje se recuerda entre sesiones, sin peticiones extra.
-  Tupperbox sigue sirviendo para el chat normal; la Actividad no lo usa (publica con su webhook: un mensaje por mensaje).
-- El espejo muestra ahora respuestas, reacciones, stickers y embeds completos (imagen, GIF de Tenor/Klipy como clip silencioso,
-  campos, pie).
+- **Mini-ventana de Discord:** si Discord reduce la Actividad a una ventanita flotante, queda lo esencial (jefe, tu HP y cargas,
+  botones) y los QTE siguen funcionando.
+
+## Menú, ajustes, latencia y tutorial
+- **Menú** (☰ arriba a la izquierda): Ajustes, Prueba de latencia, Tutorial y Ayuda. `Esc` o la flecha vuelven a donde estabas.
+- **Ajustes por jugador** (engranaje): tema (oscuro, muy oscuro, alto contraste), colores para daltonismo (azul y naranja), tamaño
+  del texto, espaciado, animaciones reducidas (los temporizadores siguen moviéndose), **tamaño de los botones**, **dónde aparecen**
+  (al azar, abajo, izquierda o derecha: más cómodo con una mano), mantener Esquivar durante el parry, un QTE a la vez, sonidos y
+  volumen (sintetizados, sin archivos), vibración, fotos de perfil, hora, cargar imágenes solas, panel del equipo y cuántos
+  mensajes se guardan. Se aplican al momento, se guardan en el servidor por jugador (`data/activity_prefs.json`) y también en el
+  navegador, para que la apariencia sea la correcta antes de conectar.
+- **Prueba de latencia** (menú, o tocando el indicador de ms de arriba): mide **tu conexión** (24 mensajes de ida y vuelta: tiempo
+  típico, saltos, pérdidas) y **tu dispositivo** (tocas un círculo al ritmo de un destello: una pantalla o un toque con retraso
+  tocan *después* del destello). El resultado se guarda (`data/activity_latency.json`). El servidor mide además la red de cada
+  jugador por su cuenta (un ping cada 2 s) y a cada respuesta le **suma** el retraso típico de la red (el QTE tardó en llegarte)
+  y le **resta** el retraso de tu dispositivo (tu pantalla y tu toque tardan), con un tope de ±300 ms. Nadie puede comprar tiempo
+  inflando un número: la red la mide el servidor y el dispositivo está limitado a 150 ms.
+- **Tutorial:** por pasos (el canal, escribir, esquivar, parry con práctica real usando las ventanas del bot, rescatar/poderes,
+  menú y ajustes). Empieza solo la primera vez y se repite desde el menú. La práctica no envía nada al servidor.
 
 ## Puesta en marcha (una sola vez)
 En <https://discord.com/developers/applications> → tu aplicación (la del bot principal):
@@ -106,15 +133,22 @@ La app escribe en su registro (gris, con 🌐) todo lo que pasa con la Actividad
 - No se puede incrustar el canal real de Discord dentro de la Actividad: se hace un **espejo** (el bot ya lee los mensajes).
 - Si el servidor supera los 25 miembros hará falta verificar la aplicación en Discord.
 
-## Fases previstas
+## Fases
 0. Prototipo y puerta de decisión (0.5.0): servidor, túnel, autenticación, reloj, espejo de solo lectura.
-1. **Escribir + QTE básico** (0.6.0): caja de escribir con identidad, botones evade/parry/adapt/ataque con tiempo
-   medido en el cliente, render mejorado del espejo.
-2. **Estado, barra con ventanas, personajes, imágenes y enlace fijo** (0.7.0).
-3. Resto de modos (combo, dirección, falso, Cadena BF…) y botones de poderes con medición propia.
-4. Pulido, antitrampas y documentación.
+1. **Escribir + QTE básico** (0.6.0), **estado, personajes, imágenes y enlace fijo** (0.7.0), **varios QTE, todos los modos y
+   cooldowns** (0.8.x).
+2. **Interfaz nueva, QTE flotante, menú, ajustes, latencia y tutorial** (0.9.0).
+3. Paneles del jugador (perfil, logros, habilidades, inventario, ranking, jefe) y panel del GM: ver `CHANGELOG`/notas de versión.
 
-## Qué falta comprobar en esta versión
-- Que escribir con webhook salga con el nombre/foto correctos y sin duplicar mensajes, y cómo se siente el teclado en móvil.
-- Que los resultados de un QTE respondido con botón coincidan con lo esperado (compáralo con un QTE respondido por el chat).
-- Imágenes y GIF (avatares, adjuntos, Klipy/Tenor): ahora salen por la app; si algo sigue sin verse, dímelo.
+## Desarrollo del cliente
+El cliente web está en `discord-bot/activity_client` (Preact + esbuild; `npm ci && npm run build` lo genera en
+`eventos_app/activity/web`). `npm test` ejecuta sus pruebas de lógica (ventanas de QTE, colocación de botones, latencia,
+ajustes) y `python activity_client/preview.py <carpeta> [escenario…]` lo abre con datos inventados y guarda capturas
+(`desktop`, `phone`, `pages`, `modes`, `crowd`, `tutorial`) para revisar el aspecto sin Discord.
+
+## Qué falta comprobar en esta versión (con Discord real)
+- Cómo se ve y se siente el botón flotante en **móviles reales** dentro de Discord (tamaños, posiciones, zona del pulgar) y con
+  varios QTE a la vez. Los ajustes de tamaño y posición están para afinarlo.
+- La **prueba de latencia** con conexiones y móviles distintos: si el ajuste te parece corto o largo, dime los números de
+  *Ayuda → Datos de tu conexión*.
+- La mini-ventana de Discord (el comportamiento de la «PiP interactiva» depende de la versión de Discord).

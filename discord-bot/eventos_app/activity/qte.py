@@ -7,6 +7,8 @@ import logging
 from datetime import datetime, timezone
 from typing import Any, Callable
 
+from .latency import CAP_MS, DEVICE_MAX_MS, NET_MAX_MS
+
 log = logging.getLogger("eventos_app.activity")
 
 TIMED = ("evade", "parry", "save", "up", "down", "left", "right")   # answers to a QTE, measured on the player's screen
@@ -118,6 +120,8 @@ def describe(qte_id, data: dict, times: dict, now_ms: float, *, timeouts: dict |
              adjust: Callable[[str, int], tuple[float, float]] | None = None, chain_window: float = 0.0) -> dict:
     """What a client needs to draw a QTE: who it is for, for how long, the windows of the timing bar and which buttons.
 
+    Every window is in seconds from the start of the QTE and is exactly what the bot's handlers judge an answer by.
+
     `times`: the bot's `qte_times`; `timeouts`: its `qte_timeout_durations`; `bf_window` / `chain_window`: its Black Flash
     tolerances; `adjust(difficulty, user_id)`: the parry window of a player (REVENGE mode moves and narrows it)."""
     difficulty = data.get("difficulty")
@@ -126,7 +130,7 @@ def describe(qte_id, data: dict, times: dict, now_ms: float, *, timeouts: dict |
     target = None if mode == "fake" else data.get("target")    # a fake QTE does not say who it is for
     evade = float(timing.get("evade_window", 5.0))
     parry = tuple(timing.get("parry_window") or (0.0, 0.0))
-    if target is not None and adjust is not None:
+    if target is not None and adjust is not None and mode in ("single", "bf_chain"):
         try:
             parry = tuple(adjust(difficulty, target.id))
         except Exception:  # noqa: BLE001 - the base window is a fine answer
@@ -140,22 +144,26 @@ def describe(qte_id, data: dict, times: dict, now_ms: float, *, timeouts: dict |
     if mode == "single":
         commands = ["evade", "parry", "save", "adapt"]            # `save` is for a QTE that is somebody else's
     elif mode == "group":
-        commands = ["evade", "parry"]
+        # the bot refuses a parry in a group QTE ("Cannot parry in group QTEs"), so there is only the evade window
+        commands, windows, window = ["evade"], {"evade": [0.0, evade]}, 0.0
     elif mode == "combo":
         sequence = list(data.get("combo_sequence") or [])
         index = int(data.get("combo_index", 0))
+        length = int(data.get("combo_length", len(sequence)))
+        step = evade + 0.5                                         # each step is judged from the start: (evade + 0.5) s per step so far
         timeout, windows, commands = 15.0, None, ["evade", "parry"]
-        extra["combo"] = {"length": int(data.get("combo_length", len(sequence))), "index": index,
-                          "step": sequence[index] if index < len(sequence) else None}
+        extra["combo"] = {"length": length, "index": index, "step": sequence[index] if index < len(sequence) else None,
+                          "limits": [round(step * (i + 1), 3) for i in range(length)]}
     elif mode == "direction":
-        limit = float(times.get(difficulty, {}).get("timeout", 3.0)) + 1.0     # the bot gives up after this long
-        timeout, windows, commands = limit, {"evade": [0.0, min(evade + 1.0, limit)]}, ["up", "down", "left", "right"]
+        limit = float(timing.get("timeout", 3.0)) + 1.0            # the bot gives up after this long...
+        end = min(evade + 1.0, limit)                               # ...and judges "too slow" after the evade window + 1 s
+        timeout, windows, commands = limit, {"evade": [0.0, round(end, 3)]}, ["up", "down", "left", "right"]
         extra["arrow"] = str(data.get("shown_arrow", ""))
     elif mode == "bf_chain":
         timeout, windows, commands, window = 3.0, {"parry": [round(parry[0], 3), round(parry[1], 3)]}, ["parry"], chain_window
         extra["chain"] = int(data.get("chain_level", 1))
     else:                                                          # fake, or one the Activity does not know
-        windows, commands = None, []
+        timeout, windows, commands = float(timing.get("timeout", 3.0)), None, []
     if windows is not None:
         windows["bf"] = [round(max(0.0, center - window), 3), round(center + window, 3)] if window and "parry" in windows else None
     return {
@@ -166,17 +174,18 @@ def describe(qte_id, data: dict, times: dict, now_ms: float, *, timeouts: dict |
     }
 
 
-def response_seconds(dt_ms: float, rtt_ms: float, elapsed_ms: float) -> float | None:
+def response_seconds(dt_ms: float, net_ms: float, elapsed_ms: float, device_ms: float = 0.0, cap_ms: float = CAP_MS) -> float | None:
     """Seconds since the QTE started, from what the client measured. None when the claim is not credible.
 
-    `dt_ms`: client clock between seeing the stimulus and pressing. The stimulus reached the client about
-    `rtt/2` after the server sent it, so that is added back (a slow connection must not cost the player the QTE).
-    A claim above the real elapsed time is trimmed to it, one below what a human can do is refused.
+    `dt_ms`: the player's own stopwatch, from seeing the QTE to pressing. The QTE reached them about `net_ms` after the bot
+    started it, so that is added back (a slow connection must not cost them the QTE); `device_ms` is the lag of their screen
+    and touch, which delays what they measure and is taken off. The adjustment is at most `cap_ms` either way, and an answer
+    cannot have taken longer than the QTE has existed, nor less than a human can do.
     """
     if dt_ms != dt_ms or dt_ms < HUMAN_MIN_MS or dt_ms > 120_000:       # NaN, a script, or nonsense
         return None
-    rtt = max(0.0, min(rtt_ms, 5_000.0))
-    claimed = dt_ms + rtt / 2.0
-    return min(claimed, elapsed_ms + GRACE_MS) / 1000.0
-
-
+    net = max(0.0, min(net_ms, NET_MAX_MS))
+    device = max(0.0, min(device_ms, DEVICE_MAX_MS))
+    shift = max(-cap_ms, min(cap_ms, net - device))
+    claimed = dt_ms + shift
+    return max(0.001, min(claimed, elapsed_ms + GRACE_MS) / 1000.0)

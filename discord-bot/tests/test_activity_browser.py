@@ -1,4 +1,5 @@
-"""The real client in a real (headless) Chromium: sign-in, mirrored messages, escaping, clock sync, phone layout.
+"""The real client in a real (headless) Chromium: sign-in, the mirrored channel, the floating QTE buttons (evade turning into
+parry, several at once, never overlapping), settings, the latency test and the tutorial.
 
 Skipped when the client has not been built (`npm run build` in activity_client/) or Playwright's Chromium is missing.
 """
@@ -20,7 +21,11 @@ pytestmark = pytest.mark.skipif(not (WEB / "app.js").exists(), reason="activity 
 
 from eventos_app.activity import ActivityServer, DiscordAuth, Hub  # noqa: E402
 
-WIN = {"evade": [0.0, 4.0], "parry": [2.5, 4.5], "bf": [3.3, 3.7]}
+# short windows so the tests do not wait for seconds: evade until 2.0 s, parry from 0.8 s to 2.6 s, Black Flash band 1.5–1.9 s
+WIN = {"evade": [0.0, 2.0], "parry": [0.8, 2.6], "bf": [1.5, 1.9]}
+RULES = {"times": {"medium": {"evade": 2.5, "parry": [1.5, 3.1], "perfect": 2.3, "timeout": 3.6},
+                   "easy": {"evade": 6.0, "parry": [4.0, 7.0], "perfect": 5.5, "timeout": 6.75}},
+         "bfWindow": 0.2, "chainWindow": 0.15, "counterWindow": 5.0, "saveLimit": 2, "saveWindow": 60, "ultimateCost": 100}
 PIXEL = base64.b64decode("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==")
 SHOTS = os.environ.get("ACTIVITY_SHOTS")     # a folder: screenshots are saved there when set
 
@@ -33,11 +38,8 @@ def message(mid: str, text: str, name: str = "Ana", **extra) -> dict:
 
 def _chromium() -> str | None:
     """The Chromium Playwright was set up with (its own version may differ from the library's expectations)."""
-    for pattern in ("chromium-*/chrome-linux/chrome",):
-        found = sorted(Path(os.environ.get("PLAYWRIGHT_BROWSERS_PATH", "/opt/pw-browsers")).glob(pattern))
-        if found:
-            return str(found[-1])
-    return None
+    found = sorted(Path(os.environ.get("PLAYWRIGHT_BROWSERS_PATH", "/opt/pw-browsers")).glob("chromium-*/chrome-linux/chrome"))
+    return str(found[-1]) if found else None
 
 
 class Actions:
@@ -45,25 +47,42 @@ class Actions:
 
     def __init__(self, hub):
         self.hub, self.said, self.pressed = hub, [], []
+        self.prefs = None                     # the last settings the client sent
+        self.latency = None                   # the last latency test result
+        self.tutorial_done = True
+        self.me = {}
+        self.result_ms = 321
 
     def characters_of(self, user_id):
         return ["Kuro", "Shiro"]
 
     def me_of(self, user_id):
-        return {}
+        return self.me
+
+    async def welcome_extras(self, conn):
+        return {"perms": {"gm": bool(conn.gm)}, "prefs": {"tutorialDone": self.tutorial_done, **(self.prefs or {})}, "calib": None,
+                "comp": {"net": 24.0, "device": 0.0, "cap": 300}, "rules": RULES, "charAvatars": {}}
+
+    async def save_prefs(self, conn, prefs):
+        self.prefs = prefs
+
+    async def save_latency(self, conn, result):
+        self.latency = result
+        return result, {"net": 21.0, "device": float((result or {}).get("device") or 0), "cap": 300}
 
     async def say(self, conn, frame):
         self.said.append(frame)
 
     async def press(self, conn, frame):
         self.pressed.append(frame)
-        await self.hub.send(conn, {"t": "qte_result", "id": frame.get("id"), "ok": True, "ms": 321, "reactions": ["✅"]})
+        await self.hub.send(conn, {"t": "qte_result", "id": frame.get("id"), "ok": True, "ms": self.result_ms, "reactions": ["✅"]})
 
 
-async def with_page(scenario, actions: bool = False):
+async def with_page(scenario, actions: bool = False, fast_ping: bool = False):
     hub = Hub()
     hub.channel_name = "qte-evento"
     acts = Actions(hub) if actions else None
+
     async def media(url):                       # Discord's CDN, replaced by one real 1x1 picture
         hub.media_requests.append(url)
         return "image/png", PIXEL
@@ -87,157 +106,122 @@ async def with_page(scenario, actions: bool = False):
         await server.stop()
 
 
+async def open_page(browser, url, name="Ana", width=1100, height=760, mobile=False, init=None, extra=""):
+    context = await browser.new_context(viewport={"width": width, "height": height}, device_scale_factor=2 if mobile else 1,
+                                        is_mobile=mobile, has_touch=mobile)
+    page = await context.new_page()
+    page.errors = []
+    page.on("pageerror", lambda e: page.errors.append(str(e)))
+    if init:
+        await page.add_init_script(init)
+    await page.goto(f"{url}/?dev={name}{extra}")
+    await page.wait_for_selector("[data-testid=composer]")
+    page.me = await page.evaluate("window.__eventos.you.id")
+    return page
+
+
+def qte(hub, qid, me, mode="single", difficulty="medium", ago=0.0, **extra):
+    """A QTE frame as the bridge makes it (for this very player unless `target` is given)."""
+    commands = {"single": ["evade", "parry", "save", "adapt"], "group": ["evade"], "combo": ["evade", "parry"],
+                "direction": ["up", "down", "left", "right"], "bf_chain": ["parry"]}[mode]
+    frame = {"id": str(qid), "mode": mode, "difficulty": difficulty, "target": {"id": me, "name": "Ana"}, "participants": [],
+             "tGo": hub.now_ms() - ago * 1000, "timeout": 3.0, "windows": WIN, "commands": commands}
+    frame.update(extra)
+    return frame
+
+
+async def widgets(page):
+    return await page.evaluate("""() => [...document.querySelectorAll('[data-testid=qte-widget]')].map((el) => {
+        const r = el.getBoundingClientRect();
+        return { id: el.dataset.qte, kind: el.dataset.kind, state: el.dataset.state, phase: el.dataset.phase, lead: el.dataset.lead,
+                 result: el.dataset.result || null, x: r.x, y: r.y, w: r.width, h: r.height,
+                 rank: (el.querySelector('.qw-rank') || {}).textContent || '', cmd: (el.querySelector('.qw-btn') || {}).dataset ? el.querySelector('.qw-btn').dataset.cmd : null };
+    })""")
+
+
+def widget(page, qid):
+    return page.locator(f'[data-testid=qte-widget][data-qte="{qid}"]')
+
+
+async def tap(locator):
+    """A press the way the client listens for it (pointer down, like a finger)."""
+    await locator.dispatch_event("pointerdown", {"button": 0, "pointerType": "mouse"})
+
+
+async def wait_presses(acts, count, seconds=2.0):
+    for _ in range(int(seconds / 0.05)):
+        if len(acts.pressed) >= count:
+            return
+        await asyncio.sleep(0.05)
+    raise AssertionError(f"expected {count} presses, got {acts.pressed}")
+
+
+def overlap(a, b):
+    return a["x"] < b["x"] + b["w"] and a["x"] + a["w"] > b["x"] and a["y"] < b["y"] + b["h"] and a["y"] + a["h"] > b["y"]
+
+
+# ======================================================================================================================
 def test_the_client_mirrors_the_channel_safely_and_measures_the_clock():
     async def scenario(hub, browser, url):
         hub.backlog.append(message("1", "**negrita** y *cursiva* y `código` y ||secreto|| https://example.com/x"))
         hub.backlog.append(message("2", "<script>window.hacked=1</script><img src=x onerror=window.hacked=1>"))
-        page = await browser.new_page(viewport={"width": 1000, "height": 640})
-        errors = []
-        page.on("pageerror", lambda e: errors.append(str(e)))
-        await page.goto(f"{url}/?dev=Ana")
-        await page.wait_for_selector("body[data-state=connected]")
-        feed = page.locator("#feed .msg")
-        assert await feed.count() == 2
-        assert await page.locator("#feed strong").inner_text() == "negrita"
-        assert await page.locator("#feed em").inner_text() == "cursiva"
-        assert await page.locator("#feed code").inner_text() == "código"
-        assert await page.locator("#feed a").get_attribute("href") == "https://example.com/x"
-        text2 = await feed.nth(1).locator(".text").inner_text()
+        hub.backlog.append(message("2b", "# Un título\n> una cita\n- uno\n- dos\n```\ncódigo en bloque\n```"))
+        page = await open_page(browser, url, width=1200, height=640)
+        feed = page.locator(".feed .msg")
+        assert await feed.count() == 3
+        assert await page.locator(".feed strong").first.inner_text() == "negrita"
+        assert await page.locator(".feed em").inner_text() == "cursiva"
+        assert await page.locator(".feed code").inner_text() == "código"
+        assert await page.locator(".feed a").get_attribute("href") == "https://example.com/x"
+        text2 = await feed.nth(1).locator(".msg-text").inner_text()
         assert "<script>" in text2 and await page.evaluate("window.hacked") is None      # shown as text, never run
-        assert await page.locator("#feed script, #feed img[src='x']").count() == 0
+        assert await page.locator(".feed script, .feed img[src='x']").count() == 0
+        assert await page.locator(".md-h1").inner_text() == "Un título" and await page.locator(".feed blockquote").count() == 1
+        assert await page.locator(".feed li").count() == 2 and "código en bloque" in await page.locator(".feed pre").inner_text()
 
-        spoiler = page.locator("#feed .spoiler")
+        spoiler = page.locator(".feed .spoiler")
         assert "open" not in (await spoiler.get_attribute("class"))
         await spoiler.click()
         assert "open" in (await spoiler.get_attribute("class"))
 
         await hub.push_message(message("3", "en vivo"))
-        await page.wait_for_function("document.querySelectorAll('#feed .msg').length === 3")
+        await page.wait_for_function("document.querySelectorAll('.feed .msg').length === 4")
         await hub.edit_message(message("3", "editado", edited=True))
-        await page.wait_for_function("document.querySelector('#feed .msg:last-child .text').textContent === 'editado'")
+        await page.wait_for_function("document.querySelector('.feed .msg:last-child .msg-text').textContent.startsWith('editado')")
+        assert "(editado)" in await page.locator(".feed .msg:last-child").inner_text()
         await hub.delete_message("1")
-        await page.wait_for_function("document.querySelectorAll('#feed .msg').length === 2")
+        await page.wait_for_function("document.querySelectorAll('.feed .msg').length === 3")
 
-        await page.wait_for_function("window.__eventos.samples.length >= 8", timeout=5000)
-        sync = await page.locator("#sync").inner_text()
-        assert "ms · reloj" in sync
-        offset = await page.evaluate("window.__eventos.offset")
-        assert abs(offset) < 50                       # same machine: the clocks agree within a few ms
+        await page.wait_for_function("window.__eventos.link.samples >= 8", timeout=5000)
+        assert "ms" in await page.locator("[data-testid=conn-badge]").inner_text()
         stats = hub.stats()
         assert stats[0]["rtt_ms"] is not None and stats[0]["rtt_ms"] < 100 and abs(stats[0]["offset_ms"]) < 50
 
-        other = await browser.new_page(viewport={"width": 1000, "height": 640})
-        await other.goto(f"{url}/?dev=Luis")
-        await other.wait_for_selector("body[data-state=connected]")
-        await page.wait_for_function("document.querySelectorAll('#users li').length === 2")
-        assert await other.locator("#feed .msg").count() == 2          # the backlog arrives with the welcome
-        if SHOTS:
-            await page.screenshot(path=str(Path(SHOTS) / "activity-desktop.png"))
-        assert errors == []
+        other = await open_page(browser, url, name="Luis", width=1200, height=640)
+        await page.wait_for_function("document.querySelectorAll('[data-testid=players-panel] .online li').length === 2")
+        assert await other.locator(".feed .msg").count() == 3                      # the backlog arrives with the welcome
+        assert page.errors == [] and other.errors == []
 
     asyncio.run(with_page(scenario))
 
 
-def test_the_phone_layout_fits_and_a_page_opened_outside_discord_says_what_to_do():
+def test_the_server_measures_each_players_round_trip_itself(monkeypatch):
+    import eventos_app.activity.hub as hub_module
+    monkeypatch.setattr(hub_module, "PING_EVERY", 0.15)
+
     async def scenario(hub, browser, url):
-        for i in range(12):
-            hub.backlog.append(message(str(i), f"mensaje largo número {i} " + "palabra " * 30, name="Jugador con un nombre largo"))
-        phone = await browser.new_page(viewport={"width": 375, "height": 700}, device_scale_factor=2, is_mobile=True)
-        await phone.goto(f"{url}/?dev=Ana")
-        await phone.wait_for_selector("body[data-state=connected]")
-        assert await phone.evaluate("document.documentElement.scrollWidth <= window.innerWidth")   # no sideways scroll
-        feed_box = await phone.locator("#feed").bounding_box()
-        assert feed_box["height"] > 300 and feed_box["width"] <= 375
-        if SHOTS:
-            await phone.screenshot(path=str(Path(SHOTS) / "activity-phone.png"))
-
-        plain = await browser.new_page()
-        await plain.goto(f"{url}/")                                     # no ?dev, not inside Discord
-        await plain.wait_for_selector("body[data-state=error]")
-        assert "desde Discord" in await plain.locator("#banner").inner_text()
-
-    asyncio.run(with_page(scenario))
-
-
-def qte(hub, qid, me, mode="single", difficulty="easy", offset_ms=0, **extra):
-    """A QTE frame as the bridge makes it (for this very player unless `target` is given)."""
-    commands = {"single": ["evade", "parry", "save", "adapt"], "group": ["evade", "parry"], "combo": ["evade", "parry"],
-                "direction": ["up", "down", "left", "right"], "bf_chain": ["parry"]}[mode]
-    frame = {"id": str(qid), "mode": mode, "difficulty": difficulty, "target": {"id": me, "name": "Ana"}, "participants": [],
-             "tGo": hub.now_ms() - offset_ms, "timeout": 6.0, "windows": WIN, "commands": commands}
-    frame.update(extra)
-    return frame
-
-async def settle_after(page, count):
-    await page.wait_for_function(f"window.__eventos.qtes.size >= {count} && [...window.__eventos.qtes.values()].every(e => e.seen !== null)")
-
-
-async def settle(page):
-    await page.wait_for_function("[...window.__eventos.qtes.values()].every(e => e.seen !== null)")
-
-
-
-
-def test_the_player_writes_with_the_chosen_identity_and_answers_a_qte_with_a_timed_button():
-    async def scenario(hub, browser, url):
-        page = await browser.new_page(viewport={"width": 1000, "height": 700})
-        errors = []
-        page.on("pageerror", lambda e: errors.append(str(e)))
-        await page.goto(f"{url}/?dev=Ana")
-        await page.wait_for_selector("body[data-state=connected]")
-        acts = hub.test_actions
-
-        # writing: Enter sends, the box is cleared, the identity selector offers the characters
-        assert not await page.locator("#input").is_disabled()
-        assert await page.locator("#as option").all_inner_texts() == ["Ana (prueba local)", "Kuro", "Shiro"]
-        await page.select_option("#as", "Kuro")
-        await page.fill("#input", "  hola desde la actividad  ")
-        await page.press("#input", "Enter")
-        await page.wait_for_function("document.querySelector('#input').value === ''")
-        await page.fill("#input", "   ")
-        await page.press("#input", "Enter")                         # blank: nothing is sent
-        for _ in range(40):
-            if acts.said:
+        page = await open_page(browser, url)
+        await page.wait_for_function("true")
+        conn = next(iter(hub.conns.values()))
+        for _ in range(60):
+            if len(conn.rtts) >= 3:
                 break
-            await asyncio.sleep(0.05)
-        assert acts.said == [{"t": "say", "text": "hola desde la actividad", "as": "Kuro"}]
-
-        # a QTE for somebody else: no evade, but this player can save them
-        await hub.qte_start(qte(hub, 5, "999", target={"id": "999", "name": "Luis"}))
-        card = page.locator('.qcard[data-id="5"]')
-        await card.wait_for()
-        assert "Para Luis" in await card.locator(".who").inner_text()
-        await settle(page)
-        assert await card.locator('.act[data-cmd=evade]').count() == 0
-        assert not await card.locator('.act[data-cmd=save]').is_disabled()
-        await hub.qte_end("5")
-        await page.wait_for_selector('.qcard[data-id="5"]', state="detached")
-
-        # a QTE for this player: press Evade with the keyboard; the screen's own stopwatch is what is sent
-        me = await page.evaluate("window.__eventos.you.id")
-        await hub.qte_start(qte(hub, 6, me))
-        mine = page.locator('.qcard[data-id="6"]')
-        await mine.wait_for()
-        await settle(page)
-        assert not await mine.locator('.act[data-cmd=evade]').is_disabled()
-        await asyncio.sleep(0.35)
-        await page.keyboard.press("Alt+e")                                    # still typing in the box: Alt+letter works
-        await page.wait_for_selector('.qcard[data-id="6"][data-result=ok]')
-        assert "321 ms" in await mine.locator(".res").inner_text()
-        assert await mine.locator('.act[data-cmd=evade]').is_disabled()      # one answer per QTE
-        press = acts.pressed[0]
-        assert press["command"] == "evade" and press["id"] == "6" and 300 <= press["dt"] < 1500, press
-        await page.keyboard.press("Alt+p")                                    # parry is not offered inline (it floats): nothing sent
-        await hub.qte_end("6")
-        assert len(acts.pressed) == 1
-
-        await page.fill("#input", "")
-        await page.keyboard.type("aqe")                                       # letters typed in the box are letters
-        assert len(acts.pressed) == 1 and await page.locator("#input").input_value() == "aqe"
-        assert errors == []
+            await asyncio.sleep(0.1)
+        assert len(conn.rtts) >= 3 and conn.net_ms < 50          # the server's own figure, same machine: a few ms
+        assert hub.stats()[0]["net_ms"] == round(conn.net_ms, 1)
+        assert page.errors == []
 
     asyncio.run(with_page(scenario, actions=True))
-
 
 
 def test_the_mirror_shows_replies_reactions_stickers_and_rich_embeds_and_the_read_only_mode_says_so():
@@ -249,292 +233,532 @@ def test_the_mirror_shows_replies_reactions_stickers_and_rich_embeds_and_the_rea
                            "image": "", "thumb": "https://media.discordapp.net/external/a/thumb.png", "video": "https://media.discordapp.net/external/a/clip.mp4",
                            "author": "Klipy", "footer": "pie", "fields": [{"name": "HP", "value": "10", "inline": True}]}]
         hub.backlog.append(rich)
-        page = await browser.new_page(viewport={"width": 1000, "height": 700})
-        await page.goto(f"{url}/?dev=Ana")
-        await page.wait_for_selector("body[data-state=connected]")
-        assert "Luis: ¿qué pasó?" in await page.locator("#feed .reply").inner_text()
-        chips = await page.locator("#feed .reactions span").all_inner_texts()
-        assert chips == ["✅3", "1"]
-        assert await page.locator("#feed img.sticker").count() == 1
-        assert await page.locator("#feed .embed .et a").get_attribute("href") == "https://klipy.com/x"
-        assert await page.locator("#feed .embed video").count() == 1 and await page.locator("#feed .embed strong").inner_text() == "gif"
-        assert await page.locator("#feed .embed .fields b").inner_text() == "HP"
-        assert await page.locator("#input").is_disabled() and "Solo lectura" in (await page.locator("#input").get_attribute("placeholder"))
-        assert await page.locator('#actions .act[data-cmd=adapt]').count() == 0 or await page.locator('#actions .act[data-cmd=adapt]').is_disabled()
-        if SHOTS:
-            await page.screenshot(path=str(Path(SHOTS) / "activity-rich.png"))
+        page = await open_page(browser, url, width=1000, height=700)
+        assert "Luis: ¿qué pasó?" in await page.locator(".feed .msg-reply").inner_text()
+        assert await page.locator(".feed .reaction").all_inner_texts() == ["✅\n3", "1"]
+        assert await page.locator(".feed img.sticker").count() == 1
+        assert await page.locator(".feed .embed .e-title a").get_attribute("href") == "https://klipy.com/x"
+        assert await page.locator(".feed .embed video").count() == 1 and await page.locator(".feed .embed .e-desc strong").inner_text() == "gif"
+        assert await page.locator(".feed .embed .e-fields b").inner_text() == "HP"
+        composer = page.locator("[data-testid=composer] textarea")
+        assert await composer.is_disabled() and "Solo lectura" in (await composer.get_attribute("placeholder"))
+        assert await page.locator("[data-testid=actions] .act").first.is_disabled()
+        assert page.errors == []
 
     asyncio.run(with_page(scenario))
 
 
-
-def test_the_phone_layout_keeps_the_buttons_and_the_writing_box_on_screen():
-    async def scenario(hub, browser, url):
-        for i in range(15):
-            hub.backlog.append(message(str(i), f"mensaje {i} " + "palabra " * 20))
-        phone = await browser.new_page(viewport={"width": 375, "height": 667}, device_scale_factor=2, is_mobile=True, has_touch=True)
-        await phone.goto(f"{url}/?dev=Ana")
-        await phone.wait_for_selector("body[data-state=connected]")
-        me = await phone.evaluate("window.__eventos.you.id")
-        await hub.qte_start(qte(hub, 1, me, difficulty="hard"))
-        await phone.wait_for_selector(".qcard")
-        await settle(phone)
-        assert await phone.evaluate("document.documentElement.scrollWidth <= window.innerWidth")
-        for selector in ("#dock", "#actions", "#input", "#send", '.qcard .act[data-cmd=evade]'):
-            box = await phone.locator(selector).bounding_box()
-            assert box and box["y"] >= 0 and box["y"] + box["height"] <= 667 and box["x"] >= 0 and box["x"] + box["width"] <= 375, (selector, box)
-        evade = await phone.locator('.qcard .act[data-cmd=evade]').bounding_box()
-        assert evade["height"] >= 44 and evade["width"] >= 60                # a thumb-sized target
-        assert (await phone.locator("#feed").bounding_box())["height"] > 100
-        if SHOTS:
-            await phone.screenshot(path=str(Path(SHOTS) / "activity-phone-qte.png"))
-
-    asyncio.run(with_page(scenario, actions=True))
-
-
-
-
-def test_the_time_bar_shows_the_windows_and_the_cursor_starts_where_the_engine_is():
-    async def scenario(hub, browser, url):
-        page = await browser.new_page(viewport={"width": 900, "height": 700})
-        await page.goto(f"{url}/?dev=Ana")
-        await page.wait_for_selector("body[data-state=connected]")
-        me = await page.evaluate("window.__eventos.you.id")
-        await hub.qte_start(qte(hub, 1, me, difficulty="hard", offset_ms=2000, timeout=5.0))
-        await settle_after(page, 1)
-        card = page.locator('.qcard[data-id="1"]')
-        assert await card.locator(".track").is_visible() and await page.locator("#legend").is_visible()
-        boxes = {name: await card.locator(f".zone.{name}").evaluate("e => [e.style.left, e.style.width]") for name in ("evade", "parry", "bf")}
-        assert boxes["evade"] == ["0%", "80%"] and boxes["parry"] == ["50%", "40%"] and boxes["bf"][0] == "66%"
-        read = "e => parseFloat(getComputedStyle(e).left) / e.parentElement.clientWidth * 100"
-        first = float(await card.locator(".cursor").evaluate(read))
-        assert first >= 38                                      # 2 s of the 5 s had already gone by when the frame arrived
-        await asyncio.sleep(0.6)
-        later = float(await card.locator(".cursor").evaluate(read))
-        assert later > first + 5
-        if SHOTS:
-            await page.screenshot(path=str(Path(SHOTS) / "activity-bar.png"))
-        await hub.qte_end("1")
-
-        # a combo shows the step it wants now; a fake QTE has no buttons and does not say who it is for
-        await hub.qte_start(qte(hub, 2, me, mode="combo", windows=None, timeout=15.0, combo={"length": 5, "index": 0, "step": "parry"}))
-        combo = page.locator('.qcard[data-id="2"]')
-        await combo.wait_for()
-        assert "1/5" in await combo.locator(".combo").inner_text() and "Parry" in await combo.locator(".combo").inner_text()
-        assert await combo.locator(".track").count() == 0 and await combo.locator('.act[data-cmd=parry]').count() == 1   # combos keep the parry inline
-        await hub.send(next(iter(hub.conns.values())), {"t": "qte_step", "id": "2", "index": 1, "step": "evade"})
-        await page.wait_for_function("document.querySelector('.qcard[data-id=\"2\"] .combo').textContent.includes('2/5')")
-        await hub.qte_start(qte(hub, 3, me, mode="combo", windows=None, target=None, commands=[]))
-        fake = page.locator('.qcard[data-id="3"]')
-        await fake.wait_for()
-        assert await fake.locator(".act").count() == 0
-
-    asyncio.run(with_page(scenario, actions=True))
-
-
-
-def test_the_hud_shows_the_boss_the_players_hp_and_your_charges():
-    async def scenario(hub, browser, url):
-        page = await browser.new_page(viewport={"width": 900, "height": 700})
-        await page.goto(f"{url}/?dev=Ana")
-        await page.wait_for_selector("body[data-state=connected]")
-        me = await page.evaluate("window.__eventos.you.id")
-        assert await page.locator("#hud").is_hidden()          # nothing to show yet
-        hub.state = {"boss": {"name": "Sukuna", "hp": 650, "max": 1000}, "fight": True, "players": [
-            {"id": me, "name": "Ana", "hp": 20, "max": 100, "revenge": True}, {"id": "9", "name": "Luis", "hp": 90, "max": 100, "revenge": False}]}
-        await hub.broadcast({"t": "state", "s": hub.state})
-        await hub.broadcast({"t": "me", "me": {"charges": {"power1": 100.0, "power2": 30.0}, "cost": 100, "streak": 4}})
-        await page.wait_for_selector("#hud:not([hidden])")
-        assert await page.locator("#boss-text").inner_text() == "650 / 1000" and "Sukuna" in await page.locator("#boss-name").inner_text()
-        assert "20 / 100 · REVENGE" == await page.locator("#me-hp-text").inner_text()
-        assert await page.locator("#me-hp-fill").get_attribute("data-level") == "low"
-        assert await page.locator("#players li").count() == 2 and await page.locator("#players li.you").count() == 1
-        assert "ready" in await page.locator("#ch1-fill").evaluate("e => e.parentElement.className")
-        assert "ready" not in await page.locator("#ch2-fill").evaluate("e => e.parentElement.className")
-        assert "4" in await page.locator("#streak").inner_text()
-        if SHOTS:
-            await page.screenshot(path=str(Path(SHOTS) / "activity-hud.png"))
-        phone = await browser.new_page(viewport={"width": 375, "height": 667}, is_mobile=True, has_touch=True)
-        await phone.goto(f"{url}/?dev=Luis")
-        await phone.wait_for_selector("body[data-state=connected]")
-        await phone.wait_for_selector("#hud:not([hidden])")
-        assert await phone.evaluate("document.documentElement.scrollWidth <= window.innerWidth")
-        assert await phone.locator("#players").is_hidden()      # the phone keeps the compact strip only
-
-    asyncio.run(with_page(scenario, actions=True))
-
-
 def test_pictures_load_through_the_app_and_a_name_in_maths_letters_keeps_its_first_letter():
     async def scenario(hub, browser, url):
-        hub.backlog.append(message("1", "con foto", name="Ana", **{}))
+        hub.backlog.append(message("1", "con foto", name="Ana"))
         hub.backlog[-1]["author"]["avatar"] = "https://cdn.discordapp.com/avatars/1/a.png"
         hub.backlog[-1]["attachments"] = [{"url": "https://cdn.discordapp.com/attachments/1/2/x.png", "name": "x.png", "image": True}]
         hub.backlog.append(message("2", "sin foto", name="𝙋𝙖𝙣𝙘𝙤𝙣𝙦𝙪𝙚𝙨𝙤"))
-        page = await browser.new_page(viewport={"width": 900, "height": 700})
-        await page.goto(f"{url}/?dev=Ana")
-        await page.wait_for_selector("body[data-state=connected]")
-        await page.wait_for_function("document.querySelectorAll('#feed img.avatar, #feed .attach img').length === 2 && "
-                                     "[...document.querySelectorAll('#feed img.avatar, #feed .attach img')].every(i => i.complete && i.naturalWidth > 0)")
-        sources = await page.locator("#feed img").evaluate_all("els => els.map(e => e.getAttribute('src'))")
+        page = await open_page(browser, url, width=1000, height=700)
+        await page.wait_for_function("[...document.querySelectorAll('.feed .avatar img, .feed .attach img')].length === 2 && "
+                                     "[...document.querySelectorAll('.feed .avatar img, .feed .attach img')].every(i => i.complete && i.naturalWidth > 0)")
+        sources = await page.locator(".feed .avatar img, .feed .attach img").evaluate_all("els => els.map(e => e.getAttribute('src'))")
         assert all(src.startswith("/media?u=https%3A%2F%2Fcdn.discordapp.com%2F") for src in sources), sources
         assert len(hub.media_requests) == 2
-        letter = await page.locator("#feed .msg:nth-child(2) .avatar").inner_text()
+        letter = await page.locator(".feed .msg:nth-child(2) .avatar").inner_text()
         assert letter == "𝙋"                                     # not the broken half of a surrogate pair
 
     asyncio.run(with_page(scenario))
 
 
-def test_several_qtes_at_once_each_with_its_own_card_and_buttons():
+def test_the_phone_layout_fits_and_a_page_opened_outside_discord_says_what_to_do():
     async def scenario(hub, browser, url):
-        page = await browser.new_page(viewport={"width": 1000, "height": 800})
-        await page.goto(f"{url}/?dev=Ana")
-        await page.wait_for_selector("body[data-state=connected]")
+        for i in range(12):
+            hub.backlog.append(message(str(i), f"mensaje largo número {i} " + "palabra " * 30, name="Jugador con un nombre largo"))
+        phone = await open_page(browser, url, width=375, height=667, mobile=True)
+        assert await phone.evaluate("document.documentElement.scrollWidth <= window.innerWidth")   # no sideways scroll
+        me = phone.me
+        await hub.qte_start(qte(hub, 1, me, difficulty="hard"))
+        await phone.wait_for_selector("[data-testid=qte-widget]")
+        await asyncio.sleep(0.4)
+        assert await phone.evaluate("document.documentElement.scrollWidth <= window.innerWidth")
+        for selector in ("[data-testid=composer]", "[data-testid=actions]", ".qw-btn", "[data-testid=mini-hud]"):
+            box = await phone.locator(selector).first.bounding_box()
+            assert box and box["y"] >= 0 and box["y"] + box["height"] <= 667 + 1 and box["x"] >= 0 and box["x"] + box["width"] <= 375 + 1, (selector, box)
+        evade = await phone.locator(".qw-btn").bounding_box()
+        assert evade["height"] >= 80 and evade["width"] >= 80                    # a thumb-sized target
+        feed_box = await phone.locator(".feed").bounding_box()
+        assert feed_box["height"] > 150 and feed_box["width"] <= 375
+        assert await phone.locator("[data-testid=players-panel]").count() == 0     # the phone keeps the compact strip
+        if SHOTS:
+            await phone.screenshot(path=str(Path(SHOTS) / "activity-phone-qte.png"))
+
+        plain = await browser.new_page()
+        await plain.goto(f"{url}/")                                     # no ?dev, not inside Discord
+        await plain.wait_for_selector("[data-testid=splash]")
+        assert "desde Discord" in await plain.locator("[data-testid=splash]").inner_text()
+
+    asyncio.run(with_page(scenario, actions=True))
+
+
+def test_the_player_writes_with_the_chosen_identity_and_a_blank_message_is_not_sent():
+    async def scenario(hub, browser, url):
+        page = await open_page(browser, url)
         acts = hub.test_actions
-        me = await page.evaluate("window.__eventos.you.id")
-        await hub.qte_start(qte(hub, 1, me, difficulty="easy"))
-        await hub.qte_start(qte(hub, 2, me, difficulty="hard"))
-        await hub.qte_start(qte(hub, 3, "999", target={"id": "999", "name": "Luis"}))
-        await settle_after(page, 3)
-        assert await page.locator(".qcard").count() == 3 and await page.locator(".qcard .track").count() == 3
-        # answer the SECOND one first: the press names its QTE and the first keeps its buttons
-        await page.locator('.qcard[data-id="2"] .act[data-cmd=evade]').dispatch_event("pointerdown", {"button": 0, "pointerType": "mouse"})
-        for _ in range(40):
-            if acts.pressed:
-                break
-            await asyncio.sleep(0.05)
-        assert [(p["id"], p["command"]) for p in acts.pressed] == [("2", "evade")]
-        assert await page.locator('.qcard[data-id="2"] .act[data-cmd=evade]').is_disabled()
-        assert not await page.locator('.qcard[data-id="1"] .act[data-cmd=evade]').is_disabled()
-        # the keyboard answers the oldest QTE that still can
-        await page.keyboard.press("e")
-        for _ in range(40):
-            if len(acts.pressed) == 2:
-                break
-            await asyncio.sleep(0.05)
-        assert [(p["id"], p["command"]) for p in acts.pressed] == [("2", "evade"), ("1", "evade")]
-        # and it is a rescue for the one that is not mine
-        await page.locator('.qcard[data-id="3"] .act[data-cmd=save]').dispatch_event("pointerdown", {"button": 0, "pointerType": "mouse"})
-        for _ in range(40):
-            if len(acts.pressed) == 3:
-                break
-            await asyncio.sleep(0.05)
-        assert acts.pressed[2]["command"] == "save" and acts.pressed[2]["id"] == "3"
+        box = page.locator("[data-testid=composer] textarea")
+        assert not await box.is_disabled()
+        await page.click("[data-testid=as-picker]")                                   # the identity selector offers the characters
+        assert await page.locator(".as-menu [role=option] .ellipsis").all_inner_texts() == ["Ana (prueba local)", "Kuro", "Shiro"]
+        await page.locator(".as-menu [role=option]", has_text="Kuro").click()
+        await box.fill("  hola desde la actividad  ")
+        await box.press("Enter")
+        await page.wait_for_function("document.querySelector('[data-testid=composer] textarea').value === ''")
+        await box.fill("   ")
+        await box.press("Enter")                                                       # blank: nothing is sent
+        await box.fill("línea uno")
+        await box.press("Shift+Enter")                                                 # a new line, not a send
+        await box.type("línea dos")
+        assert await box.input_value() == "línea uno\nlínea dos"
+        await asyncio.sleep(0.3)
+        assert acts.said == [{"t": "say", "text": "hola desde la actividad", "as": "Kuro"}]
+        await page.reload()
+        await page.wait_for_selector("[data-testid=composer]")
+        assert "Kuro" in await page.locator("[data-testid=as-picker]").inner_text()   # remembered
+        assert page.errors == []
+
+    asyncio.run(with_page(scenario, actions=True))
+
+
+# ======================================================================================================================
+def test_a_qte_starts_as_evade_and_turns_into_parry_with_its_timer_on_top():
+    async def scenario(hub, browser, url):
+        page = await open_page(browser, url, width=1100, height=760)
+        acts = hub.test_actions
+        await hub.qte_start(qte(hub, 1, page.me))
+        await page.wait_for_selector("[data-testid=qte-widget]")
+        await asyncio.sleep(0.35)                                                          # the button has finished popping in
+        first = (await widgets(page))[0]
+        assert first["kind"] == "evade" and first["phase"] == "evade" and first["state"] == "live"
+        assert (await widget(page, 1).locator(".qw-btn").inner_text()).lower() == "esquivar\ne"
+        timer = widget(page, 1).locator(".qw-timer")
+        assert await timer.is_visible()
+        timer_box, button_box = await timer.bounding_box(), await widget(page, 1).locator(".qw-btn").bounding_box()
+        assert timer_box["y"] + timer_box["height"] <= button_box["y"] + 1               # the timer is ABOVE the button
+        assert float(await timer.locator(".qw-secs").inner_text()) <= 0.8
+        # the evade phase drains
+        await asyncio.sleep(0.2)
+        assert await widget(page, 1).locator(".qw-fill").count() == 1
+
+        # the parry window opens: the widget becomes PARRY, somewhere else on the screen, with a window bar and the Black Flash band
+        await page.wait_for_function("document.querySelector('[data-testid=qte-widget]').dataset.phase === 'parry'", timeout=3000)
+        second = (await widgets(page))[0]
+        assert second["kind"] == "parry" and (await widget(page, 1).locator(".qw-btn").inner_text()).lower() == "parry\np"
+        assert (abs(second["x"] - first["x"]) > 8 or abs(second["y"] - first["y"]) > 8), (first, second)
+        assert await widget(page, 1).locator(".qw-zone").count() == 1 and await widget(page, 1).locator(".qw-cursor").count() == 1
+        area = await page.locator("[data-arena]").bounding_box()                          # it lands on the chat
+        assert area["x"] <= second["x"] and second["x"] + second["w"] <= area["x"] + area["width"] + 1
+        assert area["y"] <= second["y"] and second["y"] + second["h"] <= area["y"] + area["height"] + 1
+
+        await tap(widget(page, 1).locator(".qw-btn"))
+        await wait_presses(acts, 1)
+        press = acts.pressed[0]
+        assert press["command"] == "parry" and press["id"] == "1" and 700 <= press["dt"] <= 2700, press     # the screen's own stopwatch
+        await page.wait_for_selector('[data-testid=qte-widget][data-result=ok]')
+        assert "321" in await widget(page, 1).locator(".qw-result").inner_text() or "0.32" in await widget(page, 1).locator(".qw-result").inner_text()
+        await hub.qte_end("1")
+        await page.wait_for_selector("[data-testid=qte-widget]", state="detached")
+        assert page.errors == []
+
+    asyncio.run(with_page(scenario, actions=True))
+
+
+def test_pressing_evade_early_answers_with_evade_and_the_widget_shows_the_verdict():
+    async def scenario(hub, browser, url):
+        page = await open_page(browser, url)
+        acts = hub.test_actions
+        await hub.qte_start(qte(hub, 5, page.me))
+        await page.wait_for_selector("[data-testid=qte-widget]")
+        await asyncio.sleep(0.25)
+        await tap(widget(page, 5).locator(".qw-btn"))
+        await wait_presses(acts, 1)
+        assert acts.pressed[0]["command"] == "evade" and 200 <= acts.pressed[0]["dt"] < 790, acts.pressed
+        await page.wait_for_selector('[data-testid=qte-widget][data-result=ok]')
+        assert "esquivado" in (await widget(page, 5).locator(".qw-result").inner_text()).lower()
+        assert await widget(page, 5).locator(".qw-btn").is_disabled()                    # one answer per QTE
+        await tap(widget(page, 5).locator(".qw-btn"))
+        await asyncio.sleep(0.3)
+        assert len(acts.pressed) == 1
+        # a refused answer brings the button back
+        await hub.qte_end("5")
+        await hub.qte_start(qte(hub, 6, page.me))
+        await page.wait_for_selector('[data-testid=qte-widget][data-qte="6"]')
+        await tap(widget(page, 6).locator(".qw-btn"))
+        await wait_presses(acts, 2)
+        assert acts.pressed[1]["id"] == "6"
+
+    asyncio.run(with_page(scenario, actions=True))
+
+
+def test_several_qtes_never_overlap_are_ranked_by_urgency_and_each_button_answers_its_own_qte():
+    async def scenario(hub, browser, url):
+        page = await open_page(browser, url, width=1100, height=800)
+        acts = hub.test_actions
+        for qid, timeout in ((1, 6.0), (2, 3.0), (3, 4.5), (4, 5.0)):
+            await hub.qte_start(qte(hub, qid, page.me, timeout=timeout, windows={"evade": [0, 2.0], "parry": [1.9, 2.5], "bf": None}))
+        await page.wait_for_function("document.querySelectorAll('[data-testid=qte-widget]').length === 4")
+        boxes = await widgets(page)
+        for i, a in enumerate(boxes):
+            for b in boxes[i + 1:]:
+                assert not overlap(a, b), (a, b)                                          # never on top of each other
+        ranks = {w["id"]: w["rank"] for w in boxes}
+        assert ranks == {"2": "1", "3": "2", "4": "3", "1": "4"}                          # the one about to run out is first
+        assert {w["id"] for w in boxes if w["lead"] == "true"} == {"2"}
+        # answer the second one first: the press names its QTE
+        await tap(widget(page, 3).locator(".qw-btn"))
+        await wait_presses(acts, 1)
+        assert (acts.pressed[0]["id"], acts.pressed[0]["command"]) == ("3", "evade")
+        assert await widget(page, 3).locator(".qw-btn").is_disabled() and not await widget(page, 2).locator(".qw-btn").is_disabled()
+        # Space answers the most urgent one
+        await page.keyboard.press("Space")
+        await wait_presses(acts, 2)
+        assert (acts.pressed[1]["id"], acts.pressed[1]["command"]) == ("2", "evade")
+        await page.keyboard.press("e")                                                    # then the next most urgent that can
+        await wait_presses(acts, 3)
+        assert acts.pressed[2]["id"] == "4"
         if SHOTS:
             await page.screenshot(path=str(Path(SHOTS) / "activity-multi.png"))
+        assert page.errors == []
 
     asyncio.run(with_page(scenario, actions=True))
 
 
-def test_the_parry_button_appears_at_a_random_place_when_its_window_opens_unless_switched_off():
+def test_a_crowded_phone_screen_shrinks_the_newest_button_instead_of_overlapping():
     async def scenario(hub, browser, url):
-        page = await browser.new_page(viewport={"width": 1000, "height": 800})
-        await page.goto(f"{url}/?dev=Ana")
-        await page.wait_for_selector("body[data-state=connected]")
+        page = await open_page(browser, url, width=375, height=667, mobile=True)
+        for qid in range(1, 6):
+            await hub.qte_start(qte(hub, qid, page.me, timeout=4.0 + qid * 0.1))
+        await page.wait_for_function("document.querySelectorAll('[data-testid=qte-widget]').length === 5")
+        boxes = await widgets(page)
+        for i, a in enumerate(boxes):
+            for b in boxes[i + 1:]:
+                assert not overlap(a, b), (a, b)
+        assert min(w["w"] for w in boxes) < max(w["w"] for w in boxes)                   # some had to be made smaller
+        assert await page.evaluate("document.documentElement.scrollWidth <= window.innerWidth")
+
+    asyncio.run(with_page(scenario, actions=True))
+
+
+def test_somebody_elses_qte_offers_a_rescue_that_respects_the_saves_left():
+    async def scenario(hub, browser, url):
+        page = await open_page(browser, url)
         acts = hub.test_actions
-        me = await page.evaluate("window.__eventos.you.id")
-        window = {"evade": [0.0, 4.0], "parry": [0.5, 3.0], "bf": [1.5, 1.9]}
-        spots = []
-        for qid in (1, 2, 3, 4):
-            await hub.qte_start(qte(hub, qid, me, windows=window))
-            await settle_after(page, 1)
-            assert await page.locator(".float-parry").count() == 0              # not before the window opens
-            assert await page.locator(f'.qcard[data-id="{qid}"] .act[data-cmd=parry]').count() == 0    # and never inline
-            await page.wait_for_selector(".float-parry", timeout=3000)
-            box = await page.locator(".float-parry").bounding_box()
-            feed = await page.locator("#feed").bounding_box()
-            assert feed["x"] <= box["x"] and box["x"] + box["width"] <= feed["x"] + feed["width"] + 1
-            assert feed["y"] <= box["y"] and box["y"] + box["height"] <= feed["y"] + feed["height"] + 1
-            spots.append((round(box["x"]), round(box["y"])))
-            if qid == 1:
-                await page.locator(".float-parry").dispatch_event("pointerdown", {"button": 0, "pointerType": "mouse"})
-                for _ in range(40):
-                    if acts.pressed:
-                        break
-                    await asyncio.sleep(0.05)
-                assert acts.pressed[0]["command"] == "parry" and acts.pressed[0]["id"] == "1"
-                assert await page.locator(".float-parry").count() == 0          # pressed: it goes away
-            await hub.qte_end(str(qid))
-            await page.wait_for_selector(f'.qcard[data-id="{qid}"]', state="detached")
-            assert await page.locator(".float-parry").count() == 0
-        assert len(set(spots)) > 1                                              # it does not sit in one place
-
-        await page.uncheck("#float-parry")                                      # the player prefers it fixed
-        await hub.qte_start(qte(hub, 9, me, windows=window))
-        await page.locator('.qcard[data-id="9"] .act[data-cmd=parry]').wait_for()
-        assert await page.locator(".float-parry").count() == 0
-        assert await page.evaluate("localStorage.getItem('eventos.floatParry')") == "0"
+        await hub.qte_start(qte(hub, 3, "999", target={"id": "999", "name": "Luis"}))
+        chip = page.locator("[data-testid=rescue-chip]")
+        await chip.wait_for()
+        assert "rescatar a luis" in (await chip.inner_text()).lower() and await page.locator("[data-testid=qte-widget]").count() == 0
+        assert not await chip.is_disabled()
+        await hub.broadcast({"t": "me", "now": hub.now_ms(), "me": {"charges": {"power1": 0, "power2": 0}, "cost": 100, "streak": 0,
+                                                                       "saves": {"left": 0, "limit": 2, "until": hub.now_ms() + 20000}, "powers": {}, "domain": False}})
+        await page.wait_for_function("document.querySelector('[data-testid=rescue-chip]').disabled")
+        assert "sin rescates" in (await chip.inner_text()).lower()
+        await hub.broadcast({"t": "me", "now": hub.now_ms(), "me": {"charges": {"power1": 0, "power2": 0}, "cost": 100, "streak": 0,
+                                                                       "saves": {"left": 2, "limit": 2, "until": None}, "powers": {}, "domain": False}})
+        await page.wait_for_function("!document.querySelector('[data-testid=rescue-chip]').disabled")
+        await tap(chip)
+        await wait_presses(acts, 1)
+        assert (acts.pressed[0]["id"], acts.pressed[0]["command"]) == ("3", "save")
+        # the evade window is over: saving late would hurt the saver, so the chip is switched off
+        await hub.qte_end("3")
+        await hub.qte_start(qte(hub, 4, "999", target={"id": "999", "name": "Luis"}, ago=2.3))
+        await page.wait_for_function("document.querySelector('[data-testid=rescue-chip]') && document.querySelector('[data-testid=rescue-chip]').disabled")
+        assert "tarde" in (await page.locator("[data-testid=rescue-chip]").inner_text()).lower()
 
     asyncio.run(with_page(scenario, actions=True))
 
 
-def test_the_cooldowns_of_saves_parry_counter_and_powers_count_down_on_the_buttons():
+def test_parry_cooldown_locks_the_parry_button_and_the_counter_window_has_its_own_button():
     async def scenario(hub, browser, url):
-        page = await browser.new_page(viewport={"width": 1000, "height": 800})
-        await page.goto(f"{url}/?dev=Ana")
-        await page.wait_for_selector("body[data-state=connected]")
-        me = await page.evaluate("window.__eventos.you.id")
+        page = await open_page(browser, url, width=1100, height=800)
+        acts = hub.test_actions
         now = hub.now_ms()
-        await hub.broadcast({"t": "me", "me": {
+        await hub.broadcast({"t": "me", "now": now, "me": {
             "charges": {"power1": 100.0, "power2": 30.0}, "cost": 100, "streak": 0,
-            "saves": {"left": 0, "limit": 2, "until": now + 20000}, "parryUntil": now + 15000, "counterUntil": now + 4000,
+            "saves": {"left": 2, "limit": 2, "until": None}, "parryUntil": now + 15000, "counterUntil": now + 4000,
             "powers": {"Kuro": {"power1": {"name": "Rayo", "until": None, "paused": None}, "power2": {"name": "Escudo", "until": now + 30000, "paused": None}}},
             "domain": True}})
-        attack = page.locator('#actions .act[data-cmd=attack]')
-        await page.wait_for_function("document.querySelector('#actions .act[data-cmd=attack]').classList.contains('hot')")
-        assert " s" in await attack.locator(".cd").inner_text()                 # the counter window is open: seconds left
-        assert await page.locator('#actions .act[data-cmd=domain]').count() == 1
-        assert await page.locator('#actions .act[data-cmd=power1] b').inner_text() == "Poder 1"    # as yourself: generic
-        await page.select_option("#as", "Kuro")                                 # as a character: its own powers
-        assert await page.locator('#actions .act[data-cmd=power1] b').inner_text() == "Rayo"
-        assert "100" in await page.locator('#actions .act[data-cmd=power1] .cd').inner_text()
-        assert "ready" in await page.locator('#actions .act[data-cmd=power1]').get_attribute("class")
-        assert "⏱" in await page.locator('#actions .act[data-cmd=power2] .cd').inner_text()          # on cooldown
-        # a QTE: parry is locked while the parry cooldown runs, and saving while there are no saves left
-        window = {"evade": [0.0, 4.0], "parry": [0.2, 3.0], "bf": None}
-        await hub.qte_start(qte(hub, 1, me, windows=window))
-        await hub.qte_start(qte(hub, 2, "999", target={"id": "999", "name": "Luis"}))
-        await settle_after(page, 2)
-        await page.uncheck("#float-parry")
-        await hub.qte_end("1")
-        await hub.qte_start(qte(hub, 3, me, windows=window))
-        await settle_after(page, 2)
-        parry = page.locator('.qcard[data-id="3"] .act[data-cmd=parry]')
-        assert await parry.is_disabled() and "⏱" in await parry.locator(".cd").inner_text()
-        save = page.locator('.qcard[data-id="2"] .act[data-cmd=save]')
-        assert await save.is_disabled() and "⏱" in await save.locator(".cd").inner_text()
-        await hub.broadcast({"t": "me", "me": {"charges": {"power1": 0, "power2": 0}, "cost": 100, "streak": 0, "saves": {"left": 2, "limit": 2, "until": None},
-                                              "parryUntil": None, "counterUntil": None, "powers": {}, "domain": False}})
-        await page.wait_for_function("!document.querySelector('.qcard[data-id=\"3\"] .act[data-cmd=parry]').disabled")
-        assert not await save.is_disabled() and "2/2" in await save.locator(".cd").inner_text()
-        assert await page.locator('#actions .act[data-cmd=domain]').count() == 0
-        if SHOTS:
-            await page.screenshot(path=str(Path(SHOTS) / "activity-cooldowns.png"))
+        counter = page.locator("[data-testid=counter-widget]")
+        await counter.wait_for()
+        assert "atacar" in (await counter.inner_text()).lower() and 3.0 <= float(await counter.locator(".qw-secs").inner_text()) <= 4.0
+        attack = page.locator("[data-testid=actions] .act[data-cmd=attack]")
+        assert "hot" in await attack.get_attribute("class")
+        await tap(counter.locator(".qw-btn"))
+        await wait_presses(acts, 1)
+        assert acts.pressed[0] == {"t": "press", "id": "", "command": "attack", "as": "me"}
+        # powers of the character you are playing as, with their cooldowns
+        assert (await page.locator("[data-testid=actions] .act[data-cmd=power1] b").inner_text()).lower() == "poder 1"       # as yourself: generic
+        await page.click("[data-testid=as-picker]")
+        await page.locator(".as-menu [role=option]", has_text="Kuro").click()
+        assert (await page.locator("[data-testid=actions] .act[data-cmd=power1] b").inner_text()).lower() == "rayo"
+        assert "ready" in await page.locator("[data-testid=actions] .act[data-cmd=power1]").get_attribute("class")
+        assert " s" in await page.locator("[data-testid=actions] .act[data-cmd=power2] small").inner_text()          # on cooldown
+        assert await page.locator("[data-testid=actions] .act[data-cmd=domain]").count() == 1
+        # the parry cooldown locks the parry button when it comes
+        await hub.qte_start(qte(hub, 1, page.me, ago=1.0))
+        await page.wait_for_function("document.querySelector('[data-testid=qte-widget]').dataset.phase === 'parry'")
+        locked = page.locator('[data-testid=qte-widget][data-qte="1"]')
+        assert await locked.get_attribute("data-state") == "locked" and await locked.locator(".qw-btn").is_disabled()
+        assert "s" in await locked.locator(".sub").inner_text()
+        await hub.broadcast({"t": "me", "now": hub.now_ms(), "me": {"charges": {"power1": 0, "power2": 0}, "cost": 100, "streak": 0,
+                                                                       "saves": {"left": 2, "limit": 2, "until": None}, "parryUntil": None, "counterUntil": None,
+                                                                       "powers": {}, "domain": False}})
+        await page.wait_for_function("document.querySelector('[data-testid=qte-widget]').dataset.state === 'live'")
+        await page.wait_for_selector("[data-testid=counter-widget]", state="detached")
+        assert page.errors == []
 
     asyncio.run(with_page(scenario, actions=True))
 
 
-def test_a_direction_qte_shows_the_arrow_and_a_pad_and_a_bf_chain_only_the_parry():
+def test_direction_combo_black_flash_chain_and_group_qtes_each_have_their_own_buttons():
     async def scenario(hub, browser, url):
-        page = await browser.new_page(viewport={"width": 1000, "height": 800})
-        await page.goto(f"{url}/?dev=Ana")
-        await page.wait_for_selector("body[data-state=connected]")
+        page = await open_page(browser, url, width=1100, height=800)
         acts = hub.test_actions
-        me = await page.evaluate("window.__eventos.you.id")
-        await hub.qte_start(qte(hub, 1, me, mode="direction", windows={"evade": [0.0, 4.0], "bf": None}, timeout=4.0, arrow="⬆️"))
-        card = page.locator('.qcard[data-id="1"]')
-        await card.wait_for()
-        await settle_after(page, 1)
-        assert "⬆️" in await card.locator(".dirhint").inner_text()
-        assert await card.locator(".act").count() == 4
-        await page.keyboard.press("ArrowDown")                                   # the opposite of the arrow shown
-        for _ in range(40):
-            if acts.pressed:
-                break
-            await asyncio.sleep(0.05)
-        assert acts.pressed[0]["command"] == "down" and acts.pressed[0]["id"] == "1"
+        me = page.me
+        # direction: the arrow shown and a pad; the answer is the opposite
+        await hub.qte_start(qte(hub, 1, me, mode="direction", windows={"evade": [0.0, 3.0], "bf": None}, timeout=3.0, arrow="⬆️"))
+        pad = page.locator(".qw-pad")
+        await pad.wait_for()
+        assert "OPUESTA" in await page.locator(".qw-hint").inner_text() and await pad.locator("button").count() == 4
+        await page.keyboard.press("ArrowDown")
+        await wait_presses(acts, 1)
+        assert (acts.pressed[0]["command"], acts.pressed[0]["id"]) == ("down", "1")
         await hub.qte_end("1")
-        await hub.qte_start(qte(hub, 2, me, mode="bf_chain", windows={"parry": [0.0, 3.0], "bf": [1.2, 1.5]}, timeout=3.0, chain=2))
-        await page.wait_for_selector(".float-parry", timeout=3000)
-        assert "BLACK FLASH" in await page.locator('.qcard[data-id="2"] .qhead strong').inner_text()
+        await page.wait_for_selector("[data-testid=qte-widget]", state="detached")
+
+        # combo: the step to do now, pips, and the next step arrives after each answer
+        await hub.qte_start(qte(hub, 2, me, mode="combo", windows=None, timeout=15.0,
+                                combo={"length": 3, "index": 0, "step": "parry", "limits": [5.0, 10.0, 15.0]}))
+        combo = page.locator('[data-testid=qte-widget][data-qte="2"]')
+        await combo.wait_for()
+        assert await combo.locator(".qw-pips i").count() == 3 and (await combo.locator(".qw-btn").inner_text()).lower() == "parry\np"
+        await tap(combo.locator(".qw-btn"))
+        await wait_presses(acts, 2)
+        assert (acts.pressed[1]["command"], acts.pressed[1]["id"]) == ("parry", "2")
+        await hub.send(next(iter(hub.conns.values())), {"t": "qte_step", "id": "2", "index": 1, "step": "evade"})
+        await page.wait_for_function("document.querySelector('[data-testid=qte-widget] .qw-btn').dataset.cmd === 'evade'")
+        assert await page.locator('[data-testid=qte-widget] .qw-pips i.done').count() == 1
+        await hub.qte_end("2")
+
+        # a fake QTE shows nothing
+        await hub.qte_start(qte(hub, 3, me, mode="combo", windows=None, target=None, commands=[]))
+        await asyncio.sleep(0.3)
+        assert await page.locator("[data-testid=qte-widget]").count() == 0 or all(w["id"] != "3" for w in await widgets(page))
+        await hub.qte_end("3")
+
+        # a Black Flash chain waits for its window and then offers only the parry
+        await hub.qte_start(qte(hub, 4, me, mode="bf_chain", windows={"parry": [0.7, 3.0], "bf": [1.2, 1.5]}, timeout=3.0, chain=2))
+        chain = page.locator('[data-testid=qte-widget][data-qte="4"]')
+        await chain.wait_for()
+        assert await chain.get_attribute("data-state") == "wait" and await chain.locator(".qw-btn").is_disabled()
+        await page.wait_for_function("document.querySelector('[data-qte=\"4\"]').dataset.state === 'live'")
+        assert await chain.get_attribute("data-kind") == "bf" and "black flash" in (await chain.locator(".qw-meta").inner_text()).lower()
+        await hub.qte_end("4")
+
+        # a group QTE: only evade, even though the frame came with a parry window
+        await hub.qte_start(qte(hub, 5, me, mode="group", target=None, participants=[me, "999"], windows={"evade": [0.0, 2.0], "bf": None}, commands=["evade"]))
+        group = page.locator('[data-testid=qte-widget][data-qte="5"]')
+        await group.wait_for()
+        await asyncio.sleep(1.0)
+        assert await group.get_attribute("data-phase") == "evade" and (await group.locator(".qw-btn").inner_text()).lower() == "esquivar\ne"
+        assert page.errors == []
+
+    asyncio.run(with_page(scenario, actions=True))
+
+
+def test_the_hud_shows_the_boss_the_players_hp_and_your_charges_and_flashes_when_you_are_hurt():
+    async def scenario(hub, browser, url):
+        page = await open_page(browser, url, width=1100, height=760)
+        me = page.me
+        assert await page.locator("[data-testid=boss]").count() == 0                      # nothing to show yet
+        hub.state = {"boss": {"name": "Sukuna", "hp": 650, "max": 1000}, "fight": True, "players": [
+            {"id": me, "name": "Ana", "hp": 20, "max": 100, "revenge": True}, {"id": "9", "name": "Luis", "hp": 90, "max": 100, "revenge": False}]}
+        await hub.broadcast({"t": "state", "s": hub.state})
+        await hub.broadcast({"t": "me", "now": hub.now_ms(), "me": {"charges": {"power1": 100.0, "power2": 30.0}, "cost": 100, "streak": 4, "powers": {}, "domain": False}})
+        await page.wait_for_selector("[data-testid=boss]")
+        boss = await page.locator("[data-testid=boss]").inner_text()
+        assert "Sukuna" in boss and "650 / 1000" in boss and "En combate" in boss
+        card = page.locator("[data-testid=me-card]")
+        assert "20/100" in await card.inner_text() and "REVENGE" in await card.inner_text() and "LISTO" in await card.inner_text() and "30 %" in await card.inner_text()
+        assert await card.locator(".bar > i[data-level=low]").count() == 1
+        assert await page.locator("[data-testid=players-panel] .player").count() == 2 and await page.locator("[data-testid=players-panel] .player.is-me").count() == 1
+        assert "4" in await card.locator(".streak").inner_text()
+        # losing HP flashes the screen; healing flashes it green
+        hub.state = {**hub.state, "players": [{**hub.state["players"][0], "hp": 12}, hub.state["players"][1]]}
+        await hub.broadcast({"t": "state", "s": hub.state})
+        await page.wait_for_selector(".fx-hit")
+        hub.state = {**hub.state, "players": [{**hub.state["players"][0], "hp": 60}, hub.state["players"][1]]}
+        await hub.broadcast({"t": "state", "s": hub.state})
+        await page.wait_for_selector(".fx-heal")
+        if SHOTS:
+            await page.screenshot(path=str(Path(SHOTS) / "activity-hud.png"))
+        phone = await open_page(browser, url, name="Luis", width=375, height=667, mobile=True)
+        await phone.wait_for_selector("[data-testid=mini-hud]")
+        assert await phone.evaluate("document.documentElement.scrollWidth <= window.innerWidth")
+        assert page.errors == [] and phone.errors == []
+
+    asyncio.run(with_page(scenario, actions=True))
+
+
+# ======================================================================================================================
+def test_settings_apply_at_once_are_remembered_and_sent_to_the_server():
+    async def scenario(hub, browser, url):
+        page = await open_page(browser, url, width=1100, height=800)
+        acts = hub.test_actions
+        await page.click("[data-testid=settings-button]")
+        await page.wait_for_selector("[data-testid=page]")
+        root = "document.documentElement"
+        await page.locator(".segmented[aria-label=Tema] button", has_text="Muy oscuro").click()
+        assert await page.evaluate(f"{root}.dataset.theme") == "oled"
+        await page.locator(".segmented[aria-label=Paleta] button", has_text="Daltonismo").click()
+        assert await page.evaluate(f"{root}.dataset.palette") == "cb"
+        await page.locator(".segmented[aria-label=Espaciado] button", has_text="Compacto").click()
+        assert float(await page.evaluate(f"getComputedStyle({root}).getPropertyValue('--density')")) < 1
+        slider = page.locator("input[aria-label='Tamaño del texto']")
+        await slider.evaluate("el => { el.value = 120; el.dispatchEvent(new Event('input', { bubbles: true })); }")
+        assert await page.evaluate(f"{root}.style.getPropertyValue('--text-scale')") == "1.2"
+        await page.locator(".segmented[aria-label=Animaciones] button", has_text="Reducidas").click()
+        assert await page.evaluate(f"{root}.dataset.motion") == "reduced"
+        await page.locator(".segmented[aria-label=Posición] button", has_text="Abajo").click()
+        await page.locator("button[role=switch][aria-label='Mantener esquivar']").click()
+        await page.locator("button[role=switch][aria-label='Fotos de perfil']").click()
+        for _ in range(40):                                                            # sent to the server a moment after the last change
+            if acts.prefs:
+                break
+            await asyncio.sleep(0.1)
+        assert acts.prefs["theme"] == "oled" and acts.prefs["palette"] == "cb" and acts.prefs["textScale"] == 120 and acts.prefs["keepEvade"] is True
+        assert acts.prefs["buttonPlacement"] == "bottom" and acts.prefs["showAvatars"] is False and acts.prefs["motion"] == "reduced"
+        stored = await page.evaluate("JSON.parse(localStorage.getItem('eventos.prefs'))")
+        assert stored["theme"] == "oled" and stored["density"] == "compact"
+
+        # fixed at the bottom, with the small evade button kept in the parry phase, and the timer still moving with reduced motion
+        await page.click("[data-testid=back-button]")                                    # back to where the gear was pressed: the event
+        await page.wait_for_selector("[data-testid=composer]")
+        await hub.qte_start(qte(hub, 1, page.me, ago=1.0))
+        await page.wait_for_selector("[data-testid=qte-widget]")
+        await page.wait_for_function("document.querySelector('[data-testid=qte-widget]').dataset.phase === 'parry'")
+        box = (await widgets(page))[0]
+        area = await page.locator("[data-arena]").bounding_box()
+        assert box["y"] > area["y"] + area["height"] / 2                                   # low on the screen
+        assert abs((box["x"] + box["w"] / 2) - (area["x"] + area["width"] / 2)) < 30     # and centred
+        assert await page.locator(".qw-alt").count() == 1                                  # evade stays while its window is still open
+        duration = await page.locator(".qw-cursor").evaluate("el => getComputedStyle(el).animationDuration")
+        assert duration != "0.001s" and duration != "1e-3s"                                # reduced motion does not freeze the timer
+
+        # a reload keeps the look before the server even answers
+        await page.reload()
+        await page.wait_for_selector("[data-testid=composer]")
+        assert await page.evaluate(f"{root}.dataset.theme") == "oled"
+        assert page.errors == []
+
+    asyncio.run(with_page(scenario, actions=True))
+
+
+def test_the_latency_test_measures_the_connection_and_the_device_and_the_server_is_told():
+    async def scenario(hub, browser, url):
+        page = await open_page(browser, url, width=1000, height=760, init="window.__fastLatency = true")
+        acts = hub.test_actions
+        await page.click("[data-testid=menu-button]")
+        await page.click("[data-testid=tile-latency]")
+        await page.click("[data-testid=start-test]")
+        await page.wait_for_selector("[data-testid=net-result]", timeout=8000)
+        assert "tu conexión" in (await page.locator("[data-testid=net-result]").inner_text()).lower()
+        await page.click("[data-testid=start-tap]")
+        await page.wait_for_selector(".tap-target")
+        # tap along with each flash, like a person with a quick, accurate hand
+        deadline = asyncio.get_running_loop().time() + 8
+        seen = None
+        while asyncio.get_running_loop().time() < deadline and await page.locator("[data-testid=result-step]").count() == 0:
+            flash = await page.evaluate("document.querySelector('.tap-target')?.dataset.flash ?? null")
+            if flash in ("0", "1"):
+                token = (flash, await page.evaluate("performance.now() | 0") // 150)
+                if token != seen:
+                    seen = token
+                    # one call for looking and pressing: the circle vanishes by itself when the last flash is done
+                    await page.evaluate("document.querySelector('.tap-target')?.dispatchEvent(new PointerEvent('pointerdown', {bubbles: true, button: 0, pointerType: 'mouse'}))")
+            await asyncio.sleep(0.01)
+        await page.wait_for_selector("[data-testid=result-step]", timeout=4000)
+        assert acts.latency is not None and acts.latency["taps"] >= 4 and 0 <= acts.latency["device"] <= 150
+        assert acts.latency["median"] is not None and acts.latency["loss"] == 0
+        assert "ms" in await page.locator("[data-testid=adj-net]").inner_text()
+        assert await page.evaluate("window.__eventos.comp.device") == acts.latency["device"]          # the server's answer is applied
+        assert page.errors == []
+
+    asyncio.run(with_page(scenario, actions=True))
+
+
+def test_the_tutorial_teaches_with_a_practice_qte_that_never_reaches_the_server():
+    async def scenario(hub, browser, url):
+        acts = hub.test_actions
+        acts.tutorial_done = False
+        page = await open_page(browser, url, width=1100, height=760)
+        await page.wait_for_selector("[data-testid=tutorial]", timeout=6000)                # it starts by itself the first time
+        assert "bienvenido" in (await page.locator("[data-testid=tutorial]").inner_text()).lower()
+        await page.click("[data-testid=tutorial-next]")                                      # el canal
+        await page.click("[data-testid=tutorial-next]")                                      # escribir
+        await page.click("[data-testid=tutorial-next]")                                      # práctica: esquivar
+        await page.wait_for_selector('[data-testid=qte-widget][data-kind=evade]', timeout=3000)
+        await asyncio.sleep(0.2)
+        await tap(page.locator("[data-testid=qte-widget] .qw-btn"))
+        await page.wait_for_selector('[data-testid=tutorial-verdict].ok', timeout=3000)
+        assert "esquivar vale" in (await page.locator("[data-testid=tutorial-verdict]").inner_text()).lower()
+        await page.click("[data-testid=tutorial-next]")                                      # práctica: parry
+        await page.wait_for_selector('[data-testid=tutorial-verdict].bad', timeout=9000)    # let it run out: it says so, nobody is hurt
+        assert "se acabó" in (await page.locator("[data-testid=qte-widget] .qw-result").inner_text()).lower()
+        await page.locator("[data-testid=tutorial-verdict] button").click()                  # otra vez
+        await page.wait_for_selector('[data-testid=qte-widget][data-kind=parry]', timeout=4000)
+        await asyncio.sleep(0.2)
+        await tap(page.locator("[data-testid=qte-widget] .qw-btn"))
+        await page.wait_for_selector('[data-testid=tutorial-verdict].ok', timeout=3000)
+        assert acts.pressed == []                                                            # nothing was sent: it is practice
+        for _ in range(3):
+            await page.click("[data-testid=tutorial-next]")
+        await page.click("[data-testid=tutorial-finish]")
+        await page.wait_for_selector("[data-testid=tutorial]", state="detached")
+        for _ in range(40):
+            if acts.prefs:
+                break
+            await asyncio.sleep(0.1)
+        assert acts.prefs and acts.prefs["tutorialDone"] is True
+        # and it can be opened again from the menu
+        await page.click("[data-testid=menu-button]")
+        await page.click("[data-testid=tile-tutorial]")
+        await page.wait_for_selector("[data-testid=tutorial]")
+        await page.click("[data-testid=tutorial-close]")
+        assert page.errors == []
+
+    asyncio.run(with_page(scenario, actions=True))
+
+
+def test_keyboard_shortcuts_do_not_fire_while_typing_and_the_menu_pages_open_and_close():
+    async def scenario(hub, browser, url):
+        page = await open_page(browser, url)
+        acts = hub.test_actions
+        await hub.qte_start(qte(hub, 1, page.me, timeout=3.0))
+        await page.wait_for_selector("[data-testid=qte-widget]")
+        box = page.locator("[data-testid=composer] textarea")
+        await box.click()
+        await page.keyboard.type("aqe")                                                        # letters typed in the box are letters
+        assert len(acts.pressed) == 0 and await box.input_value() == "aqe"
+        await page.keyboard.press("Alt+e")                                                     # Alt + letter works even there
+        await wait_presses(acts, 1)
+        await page.keyboard.press("Escape")                                                    # leaves the box
+        assert await page.evaluate("document.activeElement.tagName") == "BODY"
+        await hub.qte_end("1")
+
+        await page.click("[data-testid=menu-button]")
+        assert "prueba de latencia" in (await page.locator(".tiles").inner_text()).lower()
+        await page.click("[data-testid=tile-help]")
+        text = await page.locator("[data-testid=page]").inner_text()
+        assert "reglas de los qte" in text.lower() and "espacio" in text.lower()
+        await page.keyboard.press("Escape")                                                    # help -> menu
+        await page.wait_for_selector(".tiles")
+        await page.keyboard.press("Escape")                                                    # menu -> event
+        await page.wait_for_selector("[data-testid=composer]")
+        assert await page.evaluate("window.__eventos.view") == "event"
+        assert page.errors == []
 
     asyncio.run(with_page(scenario, actions=True))

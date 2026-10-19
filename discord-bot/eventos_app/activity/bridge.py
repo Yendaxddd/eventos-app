@@ -15,7 +15,9 @@ from typing import Any, Callable
 import discord
 
 from .auth import AuthError
-from .hub import Conn, Hub
+from .hub import Conn, Hub, RpcError
+from .latency import CAP_MS, LatencyBook, compensation
+from .prefs import PrefsStore
 from .qte import COMMANDS, TIMED, ActivityInput, describe, response_seconds
 
 log = logging.getLogger("eventos_app.activity")
@@ -101,11 +103,15 @@ def serialize_message(message: Any, own_webhooks: set[int] | frozenset[int] = fr
 
 
 class ActivityBridge:
-    def __init__(self, hub: Hub, app: Any, pool: Callable[[], Any] | None = None, avatar_file: Path | None = None) -> None:
+    def __init__(self, hub: Hub, app: Any, pool: Callable[[], Any] | None = None, avatar_file: Path | None = None,
+                 prefs_file: Path | None = None, latency_file: Path | None = None) -> None:
         self.hub, self.app = hub, app        # app: the AdvancedQTEBot instance
         self.pool = pool or (lambda: None)   # the SenderPool, for webhook sends
         self._listeners: list[tuple[Any, str]] = []
         self.avatar_file = avatar_file
+        self.prefs = PrefsStore(prefs_file)          # display settings of each player
+        self.latency = LatencyBook(latency_file)     # tap-test result (device lag) of each player
+        self.cap_ms = CAP_MS                         # the most a latency adjustment may move an answer
         self.avatars: OrderedDict[str, str] = OrderedDict()   # the picture each character was last seen with
         self._load_avatars()
         self._warned_no_lane = False
@@ -123,6 +129,7 @@ class ActivityBridge:
         if hasattr(book, "on_start"):
             book.on_start, book.on_end = self._qte_started, self._qte_ended
         self.hub.loader = self.load_backlog
+        self.hub.on_tick = self.push_comps
         self.sync_channel()
         try:
             self._state_task = asyncio.get_running_loop().create_task(self._state_loop())
@@ -140,6 +147,7 @@ class ActivityBridge:
         if hasattr(book, "on_start"):
             book.on_start = book.on_end = None
         self.hub.loader = None
+        self.hub.on_tick = None
 
     def channel(self):
         channel_id = self.app.qte_channel_id
@@ -314,7 +322,7 @@ class ActivityBridge:
             me = self.me_of(conn.user_id)
             if me != conn.last_me:
                 conn.last_me = me
-                await self.hub.send(conn, {"t": "me", "me": me})
+                await self.hub.send(conn, {"t": "me", "me": me, "now": self.hub.now_ms()})
 
     async def _state_loop(self) -> None:
         while True:
@@ -325,6 +333,74 @@ class ActivityBridge:
                 await self.push_state()
             except Exception:  # noqa: BLE001 - a bad value in the game data must not stop the loop
                 log.exception("could not read the game state for the Activity")
+
+    # ---- settings, latency adjustment, permissions ---------------------------------------------------------
+    def rules(self) -> dict:
+        """The bot's QTE timings, so the tutorial's practice uses the real windows."""
+        app = self.app
+        times, timeouts = getattr(app, "qte_times", {}) or {}, getattr(app, "qte_timeout_durations", {}) or {}
+        return {
+            "times": {d: {"evade": t.get("evade_window"), "parry": list(t.get("parry_window") or (0, 0)), "perfect": t.get("perfect_parry"),
+                          "timeout": timeouts.get(d)} for d, t in times.items()},
+            "bfWindow": float(getattr(app, "bf_timing_window", 0.2)), "chainWindow": float(getattr(app, "bf_chain_timing_window", 0.15)),
+            "counterWindow": 5.0, "saveLimit": int(getattr(app, "save_limit", 2)), "saveWindow": float(getattr(app, "save_time_window", 60)),
+            "ultimateCost": float(getattr(app, "ultimate_cost", 100)),
+        }
+
+    def char_avatars(self, user_id: int) -> dict:
+        return {name: self.avatars[name] for name in self.characters_of(user_id) if self.avatars.get(name)}
+
+    def compensation_of(self, conn: Conn) -> dict:
+        return compensation(conn.net_ms, self.latency.device_ms(conn.user_id), self.cap_ms)
+
+    async def is_gm(self, conn: Conn) -> bool:
+        """May this connection use the game-master panel? The bot decides by role, every time it is asked."""
+        if conn.dev:
+            return conn.gm
+        member = await self.member_of(conn.user_id)
+        try:
+            return bool(member is not None and self.app.is_admin(member))
+        except Exception:  # noqa: BLE001
+            return False
+
+    async def welcome_extras(self, conn: Conn) -> dict:
+        comp = self.compensation_of(conn)
+        conn.comp_sent = comp
+        # prefs is None when the server knows nothing about this person yet: the client then keeps (and sends) the ones it has
+        return {"perms": {"gm": await self.is_gm(conn)}, "prefs": self.prefs.get(conn.user_id) if self.prefs.has(conn.user_id) else None,
+                "calib": self.latency.get(conn.user_id),
+                "comp": comp, "rules": self.rules(), "charAvatars": self.char_avatars(conn.user_id)}
+
+    async def save_prefs(self, conn: Conn, raw) -> dict:
+        return self.prefs.set(conn.user_id, raw)
+
+    async def save_latency(self, conn: Conn, raw) -> tuple[dict | None, dict]:
+        """The result of the player's latency test: kept, and the adjustment recomputed with it."""
+        result = self.latency.set(conn.user_id, raw)
+        comp = self.compensation_of(conn)
+        conn.comp_sent = comp
+        return result, comp
+
+    async def push_comps(self) -> None:
+        """Tell each player their adjustment again when the server's own measurement moved it by a few ms."""
+        for conn in list(self.hub.conns.values()):
+            comp = self.compensation_of(conn)
+            old = conn.comp_sent
+            if old is None or abs(comp["net"] - old["net"]) >= 3 or comp["device"] != old["device"] or comp["cap"] != old["cap"]:
+                conn.comp_sent = comp
+                await self.hub.send(conn, {"t": "comp", "comp": comp})
+
+    async def rpc(self, conn: Conn, op: str, args: dict):
+        """Requests from the player's screen that expect an answer (profile data, game-master actions...)."""
+        if not isinstance(args, dict):
+            raise RpcError("Petición inválida.")
+        handler = getattr(self, "rpc_" + op.replace(".", "_"), None) if op.replace(".", "_").replace("_", "").isalnum() else None
+        if handler is None:
+            raise RpcError("Esa acción no existe.")
+        return await handler(conn, args)
+
+    async def rpc_ping(self, conn: Conn, args: dict):
+        return {"pong": True, "serverTime": self.hub.now_ms()}
 
     # ---- who may come in -----------------------------------------------------------------------------
     async def member_of(self, user_id: int):
@@ -412,7 +488,7 @@ class ActivityBridge:
             if timed and self.app.active_qtes:
                 # typed answers have no button timing: measure from the QTE start, less the trip to the player
                 started = min((q["tGo"] for q in self.hub.qtes.values()), default=None)
-                seconds = None if started is None else max(0.0, self.hub.now_ms() - started - (conn.rtt_ms or 0) / 2) / 1000.0
+                seconds = None if started is None else max(0.0, self.hub.now_ms() - started - conn.net_ms) / 1000.0
                 await self.app.handle_qte_response(message, measured=seconds)
             else:
                 await self.app.bot.on_message(message)
@@ -454,7 +530,7 @@ class ActivityBridge:
         except (TypeError, ValueError):
             return "Tiempo inválido."
         elapsed = self.hub.now_ms() - entry["tGo"]
-        seconds = response_seconds(dt, conn.rtt_ms or 0.0, elapsed)
+        seconds = response_seconds(dt, conn.net_ms, elapsed, self.latency.device_ms(conn.user_id), self.cap_ms)
         if seconds is None:
             return "Esa pulsación no es creíble."
         key, data = next(((k, v) for k, v in self.app.active_qtes.items() if str(k) == qte_id), (None, None))

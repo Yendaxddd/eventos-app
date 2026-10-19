@@ -414,7 +414,9 @@ class BotRunner:
         hub = activity.Hub()
         auth = activity.DiscordAuth(client_id=client_id, client_secret=settings.activity_client_secret.strip())
         bridge = activity.ActivityBridge(hub, app, pool=lambda: self._pool,
-                                         avatar_file=paths.data_dir() / "character_avatars.json")
+                                         avatar_file=paths.data_dir() / "character_avatars.json",
+                                         prefs_file=paths.data_dir() / "activity_prefs.json",
+                                         latency_file=paths.data_dir() / "activity_latency.json")
         server = activity.ActivityServer(hub, auth=auth, authorize=bridge.authorize, client_id=client_id,
                                          web_dir=paths.resource_path("eventos_app", "activity", "web"),
                                          actions=bridge, media_dir=paths.app_home() / "cache" / "media",

@@ -1,51 +1,17 @@
 <!doctype html>
-<html lang="es">
+<html lang="es" data-theme="dark">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content">
+  <meta name="color-scheme" content="dark">
+  <meta name="theme-color" content="#090912">
   <title>Eventos</title>
-  <link rel="stylesheet" href="./style.css">
+  <link rel="icon" href="data:,">
+  <link rel="stylesheet" href="./app.css">
 </head>
 <body data-state="starting">
-  <header>
-    <div class="title"><strong id="channel">Evento</strong><span id="status">Conectando…</span></div>
-    <div class="sync" id="sync" title="Ida y vuelta al servidor y desfase del reloj">—</div>
-  </header>
-  <main>
-    <section id="board" aria-label="Tablero">
-      <h2>Jugadores</h2>
-      <ul id="players" class="bars"></ul>
-      <h2>Conectados</h2>
-      <ul id="users"></ul>
-      <p class="hint" id="hint"></p>
-    </section>
-    <section id="chat" aria-label="Canal del evento">
-      <div id="hud" hidden>
-        <div class="hud-boss" id="hud-boss" hidden><span id="boss-name"></span><div class="bar boss"><i id="boss-fill"></i><em id="boss-text"></em></div></div>
-        <div class="hud-me" id="hud-me" hidden>
-          <div class="bar hp"><i id="me-hp-fill"></i><em id="me-hp-text"></em></div>
-          <div class="charges"><div class="bar mini"><i id="ch1-fill"></i></div><div class="bar mini"><i id="ch2-fill"></i></div><span id="streak" title="Racha de evades"></span></div>
-        </div>
-      </div>
-      <div id="feed" role="log" aria-live="polite"></div>
-      <div id="dock">
-        <div id="qtes" aria-label="QTE en curso"></div>
-        <div id="legend" hidden><span class="lg evade">Evade</span><span class="lg parry">Parry</span><span class="lg bf">Black Flash</span></div>
-        <div id="actions"></div>
-        <div id="dockbar">
-          <span id="idle">Sin QTE ahora: los botones de respuesta aparecen aquí cuando te toque.</span>
-          <label id="float-opt" title="Solo el botón de Parry: aparece en un sitio al azar de la pantalla cuando se abre su ventana. Los demás botones no se mueven."><input type="checkbox" id="float-parry"> Parry flotante</label>
-        </div>
-      </div>
-      <div id="float" aria-hidden="true"></div>
-      <form id="composer" autocomplete="off">
-        <select id="as" aria-label="Escribir como" disabled></select>
-        <input id="input" type="text" maxlength="2000" placeholder="Conectando…" enterkeyhint="send" disabled>
-        <button id="send" type="submit" disabled>Enviar</button>
-      </form>
-    </section>
-  </main>
-  <div id="banner" hidden></div>
+  <div id="root"></div>
+  <noscript>Esta Actividad necesita JavaScript.</noscript>
   <script src="./app.js"></script>
 </body>
 </html>

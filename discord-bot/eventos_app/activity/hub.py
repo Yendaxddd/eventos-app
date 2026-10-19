@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import itertools
 import logging
+import statistics
 import time
 from collections import deque
 from dataclasses import dataclass, field
@@ -14,6 +15,12 @@ log = logging.getLogger("eventos_app.activity")
 
 BACKLOG = 60                 # messages kept to show to whoever joins
 RATE_PER_SECOND = 30.0       # frames a single connection may send per second (bursts of 2x)
+PING_EVERY = 2.0             # seconds between the server's own round-trip measurements of each player
+RTT_SAMPLES = 15             # how many of them are remembered
+
+
+class RpcError(Exception):
+    """A request the player can be told why it was refused (its message is shown as is)."""
 
 
 @dataclass
@@ -31,6 +38,10 @@ class Conn:
     last_say: float = 0.0                # monotonic time of the last message written from the Activity
     last_me: dict | None = None          # the private state this connection was last sent (see the bridge's state loop)
     presses: dict = field(default_factory=dict)   # QTE id -> how many times this connection pressed a button for it
+    rtts: deque = field(default_factory=lambda: deque(maxlen=RTT_SAMPLES))   # round trips (ms) measured by the server itself
+    sp_sent: dict = field(default_factory=dict)   # server ping number -> when it was sent (monotonic)
+    comp_sent: dict | None = None                 # the latency adjustment this connection was last told
+    gm: bool = False                              # may use the game-master panel (checked again on every action)
     _tokens: float = 2 * RATE_PER_SECOND
     _refilled: float = field(default_factory=time.monotonic)
 
@@ -47,8 +58,24 @@ class Conn:
     def public(self) -> dict:
         return {"id": str(self.user_id), "name": self.name, "avatar": self.avatar, "dev": self.dev}
 
+    @property
+    def net_ms(self) -> float:
+        """How long a frame takes to reach this player: half the typical round trip. What the server measured itself, until it
+        has enough of that, what the client reported."""
+        if len(self.rtts) >= 3:
+            return statistics.median(self.rtts) / 2.0
+        return (self.rtt_ms or 0.0) / 2.0
+
+    @property
+    def jitter_ms(self) -> float | None:
+        if len(self.rtts) < 3:
+            return None
+        middle = statistics.median(self.rtts)
+        return sum(abs(r - middle) for r in self.rtts) / len(self.rtts)
+
     def stats(self) -> dict:
         return {**self.public(), "rtt_ms": self.rtt_ms, "offset_ms": self.offset_ms,
+                "net_ms": round(self.net_ms, 1), "jitter_ms": None if self.jitter_ms is None else round(self.jitter_ms, 1),
                 "seconds": round(time.time() - self.joined)}
 
 
@@ -63,6 +90,9 @@ class Hub:
         self._loaded = False
         self.state: dict = {}                               # boss / players, as last broadcast
         self.qtes: dict[str, dict] = {}                    # QTE id -> the frame the clients were shown (still running)
+        self.on_tick: Callable[[], Any] | None = None       # async; called after each round of server pings (the bridge pushes latency changes)
+        self._pinger: asyncio.Task | None = None
+        self._ping_no = 0
 
     # ---- clock ---------------------------------------------------------------------------
     @staticmethod
@@ -76,6 +106,7 @@ class Hub:
 
     async def add(self, conn: Conn) -> None:
         self.conns[conn.id] = conn
+        self._ensure_pinger()
         await self.broadcast({"t": "users", "users": self.participants()})
         self._changed()
 
@@ -83,6 +114,45 @@ class Hub:
         if self.conns.pop(conn.id, None) is not None:
             await self.broadcast({"t": "users", "users": self.participants()})
             self._changed()
+
+    # ---- the server's own round-trip measurements -----------------------------------------------------
+    def _ensure_pinger(self) -> None:
+        if self._pinger is None or self._pinger.done():
+            try:
+                self._pinger = asyncio.get_running_loop().create_task(self._ping_loop())
+            except RuntimeError:                   # no loop yet (a test building a hub by hand)
+                self._pinger = None
+
+    async def _ping_loop(self) -> None:
+        while True:
+            await asyncio.sleep(PING_EVERY)
+            if not self.conns:
+                continue
+            self._ping_no += 1
+            for conn in list(self.conns.values()):
+                conn.sp_sent[self._ping_no] = time.monotonic()
+                for old in [n for n in conn.sp_sent if n < self._ping_no - 6]:
+                    conn.sp_sent.pop(old, None)
+                await self.send(conn, {"t": "sp", "n": self._ping_no})
+            if self.on_tick is not None:
+                try:
+                    await self.on_tick()
+                except Exception:  # noqa: BLE001 - measuring must never stop
+                    log.exception("hub.on_tick failed")
+
+    def note_sq(self, conn: Conn, n) -> None:
+        """The client answered a server ping: that is one round trip, measured on the server's own clock."""
+        try:
+            sent = conn.sp_sent.pop(int(n), None)
+        except (TypeError, ValueError):
+            return
+        if sent is not None:
+            conn.rtts.append((time.monotonic() - sent) * 1000.0)
+
+    async def close(self) -> None:
+        if self._pinger is not None:
+            self._pinger.cancel()
+            self._pinger = None
 
     def participants(self) -> list[dict]:
         seen: dict[int, dict] = {}
@@ -153,7 +223,7 @@ class Hub:
     # ---- QTEs ---------------------------------------------------------------------------------
     async def qte_start(self, frame: dict) -> None:
         self.qtes[frame["id"]] = frame
-        await self.broadcast({"t": "qte", "q": frame})
+        await self.broadcast({"t": "qte", "q": frame, "now": self.now_ms()})      # `now` lets a client tell how long ago it started
 
     async def qte_end(self, qte_id: str) -> None:
         if self.qtes.pop(qte_id, None) is not None:
