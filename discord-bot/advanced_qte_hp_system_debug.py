@@ -673,6 +673,14 @@ class AdvancedQTEBot:
             }
         }
 
+        # Seconds until an unanswered single/group QTE counts as failed (the Discord Activity draws its bar with these)
+        self.qte_timeout_durations = {
+            'easy': 6.75,
+            'medium': 5.0,
+            'hard': 5.75,
+            'impossible': 3.5
+        }
+
         # Difficulty emoji indicators
         self.difficulty_emoji = {
             'easy': '🟢',
@@ -8360,14 +8368,7 @@ Your response (1-2 sentences max):"""
             channel = self.bot.get_channel(self.qte_channel_id)
             
             # Total timeout based on difficulty (no intermediate emoji sends)
-            timeout_durations = {
-                'easy': 6.75,
-                'medium': 5.0,
-                'hard': 5.75,
-                'impossible': 3.5
-            }
-            
-            await asyncio.sleep(timeout_durations.get(difficulty, 5.0))
+            await asyncio.sleep(self.qte_timeout_durations.get(difficulty, 5.0))
             
             if qte_id in self.active_qtes:
                 await self.finish_qte_failure(qte_id, channel, mode, target)

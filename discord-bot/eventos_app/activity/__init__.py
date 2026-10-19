@@ -13,7 +13,7 @@ from .auth import AuthError, DiscordAuth, Identity
 from .bridge import ActivityBridge, serialize_message
 from .hub import Conn, Hub
 from .server import ActivityServer
-from .tunnel import Tunnel
+from .tunnel import NgrokTunnel, Tunnel
 
-__all__ = ["ActivityBridge", "ActivityServer", "AuthError", "Conn", "DiscordAuth", "Hub", "Identity", "Tunnel",
+__all__ = ["ActivityBridge", "ActivityServer", "AuthError", "Conn", "DiscordAuth", "Hub", "Identity", "NgrokTunnel", "Tunnel",
            "serialize_message"]

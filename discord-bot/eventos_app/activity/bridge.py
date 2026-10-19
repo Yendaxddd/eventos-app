@@ -6,8 +6,10 @@ from __future__ import annotations
 import asyncio
 import logging
 import re
+import json
 import time
 from collections import OrderedDict
+from pathlib import Path
 from typing import Any, Callable
 
 import discord
@@ -24,6 +26,8 @@ SAY_INTERVAL = 0.4          # seconds between two messages of the same person
 MAX_EMBEDS = 3
 MAX_PRESSES = 3             # button presses accepted per person and QTE (the engine ignores repeats anyway)
 BACKLOG_FETCH = 40
+STATE_INTERVAL = 1.0         # seconds between looks at the game state (HP, boss, charges); only changes are sent
+MAX_PLAYERS_SHOWN = 30
 AVATAR_MEMORY = 200
 TIMED_COMMANDS = ("evade", "parry")                  # answered against the clock of the QTE
 _TYPED_TIMED = re.compile(r"\*(evade|parry)\*", re.IGNORECASE)
@@ -97,12 +101,15 @@ def serialize_message(message: Any, own_webhooks: set[int] | frozenset[int] = fr
 
 
 class ActivityBridge:
-    def __init__(self, hub: Hub, app: Any, pool: Callable[[], Any] | None = None) -> None:
+    def __init__(self, hub: Hub, app: Any, pool: Callable[[], Any] | None = None, avatar_file: Path | None = None) -> None:
         self.hub, self.app = hub, app        # app: the AdvancedQTEBot instance
         self.pool = pool or (lambda: None)   # the SenderPool, for webhook sends
         self._listeners: list[tuple[Any, str]] = []
+        self.avatar_file = avatar_file
         self.avatars: OrderedDict[str, str] = OrderedDict()   # the picture each character was last seen with
+        self._load_avatars()
         self._warned_no_lane = False
+        self._state_task = None
 
     # ---- wiring ---------------------------------------------------------------------------------
     def start(self) -> None:
@@ -117,8 +124,15 @@ class ActivityBridge:
             book.on_start, book.on_end = self._qte_started, self._qte_ended
         self.hub.loader = self.load_backlog
         self.sync_channel()
+        try:
+            self._state_task = asyncio.get_running_loop().create_task(self._state_loop())
+        except RuntimeError:
+            self._state_task = None
 
     def stop(self) -> None:
+        if getattr(self, "_state_task", None) is not None:
+            self._state_task.cancel()
+            self._state_task = None
         for fn, name in self._listeners:
             self.app.bot.remove_listener(fn, name)
         self._listeners.clear()
@@ -143,14 +157,34 @@ class ActivityBridge:
             await self.hub.broadcast({"t": "reset", "channel": self.hub.channel_name,
                                       "backlog": await self.hub.load_backlog()})
 
+    def _load_avatars(self) -> None:
+        if self.avatar_file is not None and self.avatar_file.exists():
+            try:
+                data = json.loads(self.avatar_file.read_text(encoding="utf-8"))
+                self.avatars.update({str(k): str(v) for k, v in data.items()} if isinstance(data, dict) else {})
+            except (OSError, ValueError):
+                log.warning("could not read %s", self.avatar_file)
+
+    def _save_avatars(self) -> None:
+        if self.avatar_file is None:
+            return
+        try:
+            tmp = self.avatar_file.with_suffix(".tmp")
+            tmp.write_text(json.dumps(self.avatars, ensure_ascii=False), encoding="utf-8")
+            tmp.replace(self.avatar_file)
+        except OSError:
+            log.warning("could not save %s", self.avatar_file)
+
     def _frame(self, message) -> dict:
         frame = serialize_message(message, self.app.own_webhook_ids)
         author = frame["author"]
         if author["webhook"] and not author["ours"] and author["avatar"]:    # Tupperbox & co: remember the picture
-            self.avatars[author["name"]] = author["avatar"]
+            if self.avatars.get(author["name"]) != author["avatar"]:
+                self.avatars[author["name"]] = author["avatar"]
+                while len(self.avatars) > AVATAR_MEMORY:
+                    self.avatars.popitem(last=False)
+                self._save_avatars()
             self.avatars.move_to_end(author["name"])
-            while len(self.avatars) > AVATAR_MEMORY:
-                self.avatars.popitem(last=False)
         return frame
 
     # ---- bot -> Activity ---------------------------------------------------------------------------
@@ -185,7 +219,9 @@ class ActivityBridge:
         return list(reversed(frames))
 
     def _qte_started(self, qte_id, data) -> None:
-        frame = describe(qte_id, data, self.app.qte_times, self.hub.now_ms())
+        app = self.app
+        frame = describe(qte_id, data, app.qte_times, self.hub.now_ms(), timeouts=getattr(app, "qte_timeout_durations", None),
+                         bf_window=getattr(app, "bf_timing_window", 0.0), adjust=getattr(app, "get_adjusted_parry_window", None))
         self._spawn(self.hub.qte_start(frame))
 
     def _qte_ended(self, qte_id, data) -> None:
@@ -197,6 +233,64 @@ class ActivityBridge:
             asyncio.get_running_loop().create_task(coro)
         except RuntimeError:                  # no loop (the bot is shutting down)
             coro.close()
+
+    # ---- the game state: HP, boss, charges ---------------------------------------------------------------
+    @staticmethod
+    def _num(value, digits: int = 1):
+        try:
+            return round(float(value), digits)
+        except (TypeError, ValueError):
+            return 0
+
+    def snapshot(self) -> dict:
+        """What everybody sees: the boss and the HP of the players. Read straight from the bot's own data."""
+        app = self.app
+        boss = getattr(app, "active_boss", None)
+        boss_frame = None
+        if boss:
+            boss_frame = {"name": str(boss.get("name", "Jefe")), "hp": self._num(boss.get("hp_current"), 0),
+                          "max": self._num(boss.get("hp_max"), 0)}
+        hp = getattr(app, "player_hp", {}) or {}
+        players = []
+        for member in list(getattr(app, "qte_players", []) or [])[:MAX_PLAYERS_SHOWN]:
+            entry = hp.get(member.id)
+            if entry:
+                players.append({"id": str(member.id), "name": getattr(member, "display_name", None) or member.name,
+                                "hp": self._num(entry.get("current"), 0), "max": self._num(entry.get("max"), 0),
+                                "revenge": bool(entry.get("revenge_mode"))})
+        return {"boss": boss_frame, "fight": bool(getattr(app, "fight_active", False)), "players": players}
+
+    def me_of(self, user_id: int) -> dict:
+        """What only this player sees: their charges and streak."""
+        app = self.app
+        if user_id <= 0:
+            return {}
+        charges = (getattr(app, "power_charges", {}) or {}).get(user_id, {})
+        stats = (getattr(app, "player_stats", {}) or {}).get(user_id, {})
+        return {"charges": {"power1": self._num(charges.get("power1", 0)), "power2": self._num(charges.get("power2", 0))},
+                "cost": self._num(getattr(app, "ultimate_cost", 100), 0), "streak": int(stats.get("evade_streak", 0) or 0)}
+
+    async def push_state(self) -> None:
+        """Send what changed since the last look (nothing at all when nothing did)."""
+        snap = self.snapshot()
+        if snap != self.hub.state:
+            self.hub.state = snap
+            await self.hub.broadcast({"t": "state", "s": snap})
+        for conn in list(self.hub.conns.values()):
+            me = self.me_of(conn.user_id)
+            if me != conn.last_me:
+                conn.last_me = me
+                await self.hub.send(conn, {"t": "me", "me": me})
+
+    async def _state_loop(self) -> None:
+        while True:
+            await asyncio.sleep(STATE_INTERVAL)
+            if not self.hub.conns:
+                continue
+            try:
+                await self.push_state()
+            except Exception:  # noqa: BLE001 - a bad value in the game data must not stop the loop
+                log.exception("could not read the game state for the Activity")
 
     # ---- who may come in -----------------------------------------------------------------------------
     async def member_of(self, user_id: int):
@@ -273,12 +367,12 @@ class ActivityBridge:
             except discord.HTTPException as exc:
                 return f"Discord no dejó publicarlo ({exc.status})."
         if member is not None:
-            await self._run_typed(conn, member, channel, text)
+            await self._run_typed(conn, member, channel, text, None if as_name == "me" else as_name)
         return None
 
-    async def _run_typed(self, conn: Conn, member, channel, text: str) -> None:
+    async def _run_typed(self, conn: Conn, member, channel, text: str, character: str | None = None) -> None:
         """Hand a written message to the bot's own message handler, as if it had been typed in the channel."""
-        message = ActivityInput(member, channel, text, user_id=conn.user_id)
+        message = ActivityInput(member, channel, text, user_id=conn.user_id, character=character)
         timed = _TYPED_TIMED.search(text)
         try:
             if timed and self.app.active_qtes:
@@ -300,7 +394,11 @@ class ActivityBridge:
         channel = self.channel()
         if member is None or channel is None:
             return "No se pudo comprobar quién eres en el servidor del evento."
-        message = ActivityInput(member, channel, f"*{command}*", user_id=conn.user_id)
+        character = str(frame.get("as") or "me")
+        if character != "me" and character not in self.characters_of(conn.user_id):
+            return "Ese personaje no es tuyo."
+        message = ActivityInput(member, channel, f"*{command}*", user_id=conn.user_id,
+                                character=None if character == "me" else character)
 
         if command not in TIMED_COMMANDS:       # adapt / attack: the bot's normal handler, no clock involved
             await self.app.bot.on_message(message)

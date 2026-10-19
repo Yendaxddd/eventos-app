@@ -411,10 +411,11 @@ class BotRunner:
         client_id = app.bot.application_id or app.bot.user.id
         hub = activity.Hub()
         auth = activity.DiscordAuth(client_id=client_id, client_secret=settings.activity_client_secret.strip())
-        bridge = activity.ActivityBridge(hub, app, pool=lambda: self._pool)
+        bridge = activity.ActivityBridge(hub, app, pool=lambda: self._pool,
+                                         avatar_file=paths.data_dir() / "character_avatars.json")
         server = activity.ActivityServer(hub, auth=auth, authorize=bridge.authorize, client_id=client_id,
                                          web_dir=paths.resource_path("eventos_app", "activity", "web"),
-                                         actions=bridge)
+                                         actions=bridge, media_dir=paths.app_home() / "cache" / "media")
         try:
             port = await server.start()
         except OSError as exc:
@@ -422,10 +423,19 @@ class BotRunner:
             await auth.close()
             return
         bridge.start()
-        tunnel = activity.Tunnel(port, tools_dir=paths.app_home() / "tools")
+        tunnel = self._make_tunnel(settings, port)
         self._activity = types.SimpleNamespace(hub=hub, auth=auth, bridge=bridge, server=server, tunnel=tunnel)
         out.print(f"[green]✓ Servidor de la Actividad en el puerto {port}. Abriendo el túnel…[/green]")
         self._activity_task = asyncio.get_running_loop().create_task(self._open_tunnel())
+
+    @staticmethod
+    def _make_tunnel(settings: Settings, port: int):
+        """A fixed ngrok address when its account is filled in, the free Cloudflare quick tunnel otherwise."""
+        tools = paths.app_home() / "tools"
+        if settings.activity_ngrok_token.strip() and settings.activity_ngrok_domain.strip():
+            return activity.NgrokTunnel(port, token=settings.activity_ngrok_token, domain=settings.activity_ngrok_domain,
+                                        tools_dir=tools)
+        return activity.Tunnel(port, tools_dir=tools)
 
     async def _open_tunnel(self) -> dict:
         a, out = self._activity, console_bridge.console
@@ -460,7 +470,8 @@ class BotRunner:
         if a is None:
             return {"running": False}
         return {"running": True, "port": a.server.port, "tunnel": a.tunnel.state, "detail": a.tunnel.detail,
-                "url": a.tunnel.url, "users": a.hub.stats(), "secret_set": bool(a.auth.client_secret)}
+                "url": a.tunnel.url, "fixed": getattr(a.tunnel, "fixed", False), "users": a.hub.stats(),
+                "secret_set": bool(a.auth.client_secret)}
 
     def reopen_tunnel(self) -> concurrent.futures.Future:
         """A fresh tunnel (and a fresh address) without restarting the bot."""

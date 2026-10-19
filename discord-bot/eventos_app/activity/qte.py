@@ -51,6 +51,26 @@ class QteBook(dict):
         self._fire(self.on_end, key, value)
 
 
+class CharacterAuthor:
+    """The player's Member, but called by the name of the character they are playing as.
+
+    The bot resolves who acts (powers, characters, Tupperbox) from `message.author.display_name` looked up in its
+    character registry, so with this as the author a button or a typed command acts as that character."""
+
+    def __init__(self, member, name: str) -> None:
+        self._member = member
+        self.display_name = name
+
+    def __getattr__(self, attr):
+        return getattr(self._member, attr)
+
+    def __eq__(self, other):
+        return other == self._member or other is self
+
+    def __hash__(self):
+        return hash(self._member)
+
+
 class ActivityInput:
     """A button press dressed as the Discord message the bot's handlers know how to read.
 
@@ -68,8 +88,9 @@ class ActivityInput:
     pinned = False
     tts = False
 
-    def __init__(self, member, channel, content: str, *, user_id: int, created_at: datetime | None = None) -> None:
-        self.author = member
+    def __init__(self, member, channel, content: str, *, user_id: int, character: str | None = None,
+                 created_at: datetime | None = None) -> None:
+        self.author = CharacterAuthor(member, character) if character else member
         self.channel = channel
         self.guild = getattr(channel, "guild", None)
         self.content = content
@@ -91,16 +112,31 @@ class ActivityInput:
         return await self.channel.send(content, **{k: v for k, v in kwargs.items() if k != "mention_author"})
 
 
-def describe(qte_id, data: dict, times: dict, now_ms: float) -> dict:
-    """What a client needs to draw a QTE: who it is for and for how long. The windows stay on the server."""
-    timing = times.get(data.get("difficulty"), {})
-    timeout = max(float(timing.get("evade_window", 5.0)), float((timing.get("parry_window") or (0, 0))[1]))
-    target = data.get("target")
+def describe(qte_id, data: dict, times: dict, now_ms: float, *, timeouts: dict | None = None, bf_window: float = 0.0,
+             adjust: Callable[[str, int], tuple[float, float]] | None = None) -> dict:
+    """What a client needs to draw a QTE: who it is for, for how long, and the windows of the timing bar.
+
+    `times`: the bot's `qte_times`; `timeouts`: its `qte_timeout_durations`; `bf_window`: its Black Flash tolerance;
+    `adjust(difficulty, user_id)`: the parry window of a player (REVENGE mode moves and narrows it)."""
+    difficulty = data.get("difficulty")
+    timing = times.get(difficulty, {})
+    target = None if data.get("mode") == "fake" else data.get("target")    # a fake QTE does not say who it is for
+    evade = float(timing.get("evade_window", 5.0))
+    parry = tuple(timing.get("parry_window") or (0.0, 0.0))
+    if target is not None and adjust is not None:
+        try:
+            parry = tuple(adjust(difficulty, target.id))
+        except Exception:  # noqa: BLE001 - the base window is a fine answer
+            pass
+    center = (parry[0] + parry[1]) / 2
+    timeout = float((timeouts or {}).get(difficulty) or max(evade, parry[1]))
+    windows = {"evade": [0.0, evade], "parry": [round(parry[0], 3), round(parry[1], 3)],
+               "bf": [round(max(0.0, center - bf_window), 3), round(center + bf_window, 3)] if bf_window else None}
     return {
-        "id": str(qte_id), "mode": data.get("mode", "single"), "difficulty": data.get("difficulty", ""),
+        "id": str(qte_id), "mode": data.get("mode", "single"), "difficulty": difficulty or "",
         "target": {"id": str(target.id), "name": getattr(target, "display_name", None) or target.name} if target else None,
         "participants": [str(p) for p in (data.get("participants") or {})],
-        "tGo": now_ms, "timeout": timeout,
+        "tGo": now_ms, "timeout": timeout, "windows": windows if data.get("mode") in ("single", "group") else None,
         "commands": [c for c in COMMANDS if c != "attack"],
     }
 

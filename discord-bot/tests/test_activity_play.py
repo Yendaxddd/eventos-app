@@ -302,3 +302,96 @@ def test_a_typed_answer_is_timed_from_the_start_of_the_qte_and_empty_long_or_fas
     calls, long, fast = run(scenario())
     assert calls[0][0] == "*evade*" and 0.2 < calls[0][1] < 1.5
     assert "2000" in long["reason"] and "rápido" in fast["reason"]
+
+
+# ---- characters --------------------------------------------------------------------------------------------------------
+def test_a_command_acts_as_the_chosen_character_and_only_one_of_the_players_own():
+    from eventos_app.activity.qte import CharacterAuthor
+
+    async def scenario():
+        async with Rig() as rig:
+            seen = []
+
+            async def on_message(message):
+                seen.append((message.content, message.author.display_name, message.author.id))
+
+            rig.app.bot.on_message = on_message
+            ws, _ = await rig.login()
+            await ws.send_json({"t": "press", "id": "", "command": "adapt", "as": "Kuro"})
+            await frame(ws, "qte_result")
+            await ws.send_json({"t": "press", "id": "", "command": "attack"})                      # as themselves
+            await frame(ws, "qte_result")
+            await ws.send_json({"t": "press", "id": "", "command": "attack", "as": "Gojo"})        # not theirs
+            refused = await frame(ws, "error")
+            await ws.send_json({"t": "say", "text": "*power1*", "as": "Shiro"})
+            await asyncio.sleep(0.3)
+            return seen, refused
+
+    seen, refused = run(scenario())
+    assert seen == [("*adapt*", "Kuro", 111), ("*attack*", "Ana", 111), ("*power1*", "Shiro", 111)]
+    assert "no es tuyo" in refused["reason"]
+    member = NS(id=5, display_name="Ana", mention="<@5>")
+    author = CharacterAuthor(member, "Kuro")
+    assert author.display_name == "Kuro" and author.id == 5 and author.mention == "<@5>" and author == member
+
+
+def test_the_pictures_of_characters_are_remembered_between_runs(tmp_path):
+    file = tmp_path / "avatars.json"
+    app = NS(own_webhook_ids=set(), bot=NS(), qte_channel_id=1)
+    first = ActivityBridge(Hub(), app, avatar_file=file)
+    from datetime import datetime, timezone
+
+    message = NS(id=1, channel=NS(id=1), webhook_id=77, clean_content="hola", created_at=datetime(2026, 1, 1, tzinfo=timezone.utc),
+                 edited_at=None, attachments=[], embeds=[],
+                 author=NS(id=9, display_name="Kuro", name="kuro", bot=True, color=NS(value=0), display_avatar=NS(url="https://cdn/kuro.png")))
+    first._frame(message)
+    second = ActivityBridge(Hub(), app, avatar_file=file)           # a new run of the app
+    assert second.avatars == {"Kuro": "https://cdn/kuro.png"}
+
+
+# ---- the bar's windows and the game state -----------------------------------------------------------------------------------
+def test_the_bar_gets_the_windows_of_this_player_the_real_timeout_and_a_fake_qte_does_not_say_who_it_is_for():
+    times = {"hard": {"evade_window": 4.0, "parry_window": (2.5, 4.5), "perfect_parry": 3.5}}
+    target = NS(id=5, display_name="Ana", name="ana")
+    data = {"difficulty": "hard", "mode": "single", "target": target, "participants": {}}
+    plain = describe(1, data, times, 0.0, timeouts={"hard": 5.75}, bf_window=0.2)
+    assert plain["timeout"] == 5.75 and plain["windows"] == {"evade": [0.0, 4.0], "parry": [2.5, 4.5], "bf": [3.3, 3.7]}
+    revenge = describe(1, data, times, 0.0, timeouts={"hard": 5.75}, bf_window=0.2, adjust=lambda d, u: (2.0, 3.0) if u == 5 else (2.5, 4.5))
+    assert revenge["windows"]["parry"] == [2.0, 3.0] and revenge["windows"]["bf"] == [2.3, 2.7]
+    no_timeouts = describe(1, data, times, 0.0)
+    assert no_timeouts["timeout"] == 4.5 and no_timeouts["windows"]["bf"] is None
+    combo = describe(2, {**data, "mode": "combo"}, times, 0.0)
+    assert combo["windows"] is None and combo["mode"] == "combo"
+    fake = describe(3, {**data, "mode": "fake"}, times, 0.0)
+    assert fake["target"] is None and fake["participants"] == []
+
+
+def test_the_game_state_is_sent_when_it_changes_and_only_to_the_person_it_belongs_to():
+    async def scenario():
+        async with Rig() as rig:
+            app = rig.app
+            app.active_boss = {"name": "Sukuna", "hp_current": 700, "hp_max": 1000}
+            app.fight_active = True
+            app.qte_players = [NS(id=111, display_name="Ana", name="ana"), NS(id=222, display_name="Luis", name="luis")]
+            app.player_hp = {111: {"current": 80, "max": 100, "revenge_mode": True}, 222: {"current": 40, "max": 100}}
+            app.power_charges = {111: {"power1": 45.0, "power2": 100.0}, 222: {"power1": 7.0}}
+            app.player_stats = {111: {"evade_streak": 3}}
+            app.ultimate_cost = 100
+            ws, welcome = await rig.login()
+            await ws.send_json({"t": "ping", "c": 1})
+            await frame(ws, "pong")
+            app.active_boss["hp_current"] = 650
+            app.player_stats[111]["evade_streak"] = 4
+            await rig.bridge.push_state()
+            state, me = await frame(ws, "state"), await frame(ws, "me")
+            await rig.bridge.push_state()                             # nothing changed: nothing is sent
+            await ws.send_json({"t": "ping", "c": 2})
+            quiet = await frame(ws)
+            return welcome, state, me, quiet
+
+    welcome, state, me, quiet = run(scenario())
+    assert welcome["state"]["boss"] == {"name": "Sukuna", "hp": 700, "max": 1000} and welcome["state"]["fight"]
+    assert [p["name"] for p in welcome["state"]["players"]] == ["Ana", "Luis"] and welcome["state"]["players"][0]["revenge"]
+    assert welcome["me"] == {"charges": {"power1": 45.0, "power2": 100.0}, "cost": 100, "streak": 3}
+    assert state["s"]["boss"]["hp"] == 650 and me["me"]["streak"] == 4
+    assert quiet["t"] == "pong"                                       # no repeated state frame

@@ -1,11 +1,11 @@
-# Actividad de Discord (beta, fase 1)
+# Actividad de Discord (beta)
 
 Una **Actividad** es una pantalla web que Discord abre dentro de la app (PC y móvil). Es el tablero de los QTE: botones grandes
 con el tiempo medido **en tu pantalla** (sin depender de mensajes ni reacciones), el canal del evento a la vista y una caja
 para escribir, para no cambiar de canal en pleno timing.
 
-**Versión 0.6.0 (fase 1):** se puede **escribir** desde la Actividad y **responder QTE con botones**. Los QTE siguen funcionando
-también por el chat de siempre, para quien no use la Actividad.
+**Versión 0.7.0:** se puede **escribir** y **responder QTE con botones** (con la barra de tiempo y sus ventanas), ver el **HP, el
+jefe y tus cargas**, y las imágenes salen por la propia app. Los QTE siguen funcionando también por el chat de siempre.
 
 ## Cómo funciona
 - La app abre un servidor web en tu PC (puerto 8765) dentro del mismo proceso del bot.
@@ -31,6 +31,14 @@ también por el chat de siempre, para quien no use la Actividad.
 - **Por ahora solo** los QTE normales (individual y de grupo). Combo, dirección, falso, Cadena BF, poderes y dominio siguen
   por el chat (también puedes escribirlos en la caja: `*power1*`, etc. pasan por el mismo camino que el chat, pero sin la
   medición del cliente).
+- **Barra de tiempo:** muestra todo el QTE con sus zonas: verde = evade (hasta el límite), naranja = parry, oscuro = ventana de
+  Black Flash (solo es la ventana: luego hay una tirada de suerte), y un cursor que arranca donde va el reloj del motor.
+  Respeta el modo REVENGE (ventana de parry movida).
+- **Estado:** barra del jefe, HP de los jugadores, tu HP, tus cargas de Power 1 y 2 (brillan al llegar al 100 %) y tu racha de evades.
+- **Personajes:** el selector de abajo es tu *personaje activo*: lo que escribes y los botones actúan como ese personaje
+  (poderes, registro, etc.), no solo cambia el nombre. La foto de cada personaje se recuerda entre sesiones, sin peticiones extra.
+  Tupperbox sigue sirviendo para el chat normal; la Actividad no lo usa (publica con su webhook: un mensaje por mensaje).
+- Combo, dirección, falso y Cadena BF **muestran el panel pero se responden por el chat** (un aviso lo dice).
 - El espejo muestra ahora respuestas, reacciones, stickers y embeds completos (imagen, GIF de Tenor/Klipy como clip silencioso,
   campos, pie).
 
@@ -39,11 +47,22 @@ En <https://discord.com/developers/applications> → tu aplicación (la del bot 
 1. **Activities**: actívalas («Enable Activities»). Discord crea el comando de entrada «Launch».
 2. **OAuth2 → Redirects**: añade `https://127.0.0.1` (lo pide el flujo de autorización).
 3. **Activities → URL Mappings**: en la raíz `/` pon la dirección del túnel **sin** `https://` (la app la muestra y tiene el
-   botón «Copiar dirección»). Añade también `/cdn` → `cdn.discordapp.com` y `/media` → `media.discordapp.net` (imágenes).
+   botón «Copiar dirección»). **Ya no hace falta** añadir `/cdn` ni `/media`: las imágenes pasan por la propia app. Solo
+   la aplicación del **bot principal** necesita la Actividad; los bots auxiliares no se tocan.
 4. **OAuth2 → Client Secret**: «Reset Secret», cópialo y pégalo en *Configuración → Actividad de Discord → Client Secret*.
 5. **App Testers**: mientras la app no esté verificada, solo la ven tú, tu equipo y los *testers* (hasta 100), y solo en
    servidores de **menos de 25 miembros**. Añade a cada jugador como tester (debe aceptar la invitación y activar el ajuste de
    pruebas de Actividades en su Discord).
+
+## Dirección fija con ngrok (opcional, recomendado)
+El túnel de Cloudflare cambia de dirección cada vez, y Discord no tiene API para cambiar los URL Mappings, así que habría que
+pegarla a mano en cada inicio. Con una cuenta **gratuita** de ngrok tienes **un dominio fijo**: se pega una sola vez.
+1. Crea la cuenta en <https://ngrok.com>, copia tu **Authtoken** (Your Authtoken) y tu **dominio gratuito**
+   (Domains, algo como `nombre.ngrok-free.dev`).
+2. En la app: *Configuración → Actividad de Discord* → pega el authtoken y el dominio, guarda e inicia el bot.
+3. Pega `nombre.ngrok-free.dev` en URL Mappings `/` (solo esta vez). Si el authtoken o el dominio están vacíos se usa Cloudflare.
+La app descarga `ngrok.exe` a `tools\` la primera vez. **Sin comprobar contra el servicio real:** si ngrok muestra su página
+de aviso a los visitantes con navegador, o cambia el nombre de alguna bandera, dímelo; el túnel de Cloudflare sigue de respaldo.
 
 ## Cada evento
 1. En la app: marca *Activar la Actividad*, guarda e inicia el bot. Espera a ver «● Túnel listo: …».
@@ -65,13 +84,13 @@ En <https://discord.com/developers/applications> → tu aplicación (la del bot 
 
 ## Fases previstas
 0. Prototipo y puerta de decisión (0.5.0): servidor, túnel, autenticación, reloj, espejo de solo lectura.
-1. **Escribir + QTE básico** (0.6.0, esta versión): caja de escribir con identidad, botones evade/parry/adapt/ataque con tiempo
+1. **Escribir + QTE básico** (0.6.0): caja de escribir con identidad, botones evade/parry/adapt/ataque con tiempo
    medido en el cliente, render mejorado del espejo.
-2. Paneles de HP/jefe y estado del jugador.
-3. Resto de modos (combo, dirección, falso, Cadena BF…) y paleta de poderes con medición propia.
+2. **Estado, barra con ventanas, personajes, imágenes y enlace fijo** (0.7.0).
+3. Resto de modos (combo, dirección, falso, Cadena BF…) y botones de poderes con medición propia.
 4. Pulido, antitrampas y documentación.
 
 ## Qué falta comprobar en esta versión
 - Que escribir con webhook salga con el nombre/foto correctos y sin duplicar mensajes, y cómo se siente el teclado en móvil.
 - Que los resultados de un QTE respondido con botón coincidan con lo esperado (compáralo con un QTE respondido por el chat).
-- Los GIF de otros sitios (Klipy/Tenor) llegan por el proxy de Discord; si alguno no se ve dentro de la Actividad, dímelo.
+- Imágenes y GIF (avatares, adjuntos, Klipy/Tenor): ahora salen por la app; si algo sigue sin verse, dímelo.

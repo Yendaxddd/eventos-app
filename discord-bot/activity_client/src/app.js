@@ -1,6 +1,6 @@
 // Eventos Activity client: mirrors the event channel, lets the player write and answer QTEs with buttons whose
 // timing is measured here, on the player's own screen.
-import { DiscordSDK, patchUrlMappings } from "@discord/embedded-app-sdk";
+import { DiscordSDK } from "@discord/embedded-app-sdk";
 
 const params = new URLSearchParams(location.search);
 const inDiscord = params.has("frame_id");           // Discord adds frame_id when it loads the Activity
@@ -9,7 +9,7 @@ const base = inDiscord ? "/.proxy" : "";            // Discord forwards /.proxy/
 
 const $ = (id) => document.getElementById(id);
 const state = { you: null, users: [], rtt: null, offset: null, messages: new Map(), samples: [], ws: null, retry: 0,
-  canWrite: false, characters: [], qte: null, qteResult: null };
+  canWrite: false, characters: [], qte: null, qteResult: null, game: null, me: null };
 window.__eventos = state;                           // handy for tests and for debugging from the console
 
 // ---- status ----------------------------------------------------------------------------------------------
@@ -24,23 +24,22 @@ function banner(text) {
   el.textContent = text || "";
 }
 
-// ---- images through Discord's proxy ------------------------------------------------------------------------
+// ---- pictures ---------------------------------------------------------------------------------------------------
+// Discord's own pictures come through the app's server (/media), so the Developer Portal needs no extra URL Mappings.
+const MEDIA_HOST = /^https:\/\/(cdn\.discordapp\.com|media\.discordapp\.net|images-ext-\d+\.discordapp\.net)\//;
 function cdn(url) {
-  if (!inDiscord || !url) return url;
-  return url
-    .replace(/^https:\/\/cdn\.discordapp\.com\//, "/.proxy/cdn/")
-    .replace(/^https:\/\/media\.discordapp\.net\//, "/.proxy/media/");
+  return url && MEDIA_HOST.test(url) ? `${base}/media?u=${encodeURIComponent(url)}` : url;
 }
 
 // A picture, or the person's initial on a coloured disc when there is none (or it does not load).
 function avatar(url, name) {
   const disc = document.createElement("span");
   disc.className = "avatar";
-  disc.textContent = (name || "?").trim().charAt(0).toUpperCase();
+  disc.textContent = (Array.from((name || "?").trim())[0] || "?").toUpperCase();   // Array.from: names in maths letters are surrogate pairs
   disc.style.background = `hsl(${[...(name || "?")].reduce((h, c) => (h * 31 + c.charCodeAt(0)) % 360, 7)} 45% 40%)`;
   if (url) {
     const img = document.createElement("img");
-    img.className = "avatar"; img.alt = ""; img.loading = "lazy"; img.src = cdn(url);
+    img.className = "avatar"; img.alt = ""; img.src = cdn(url);   // not lazy: it is detached until it has loaded, and a lazy image outside the page never loads
     img.onload = () => disc.replaceWith(img);
   }
   return disc;
@@ -210,6 +209,51 @@ function renderUsers(users) {
   }
 }
 
+// ---- game state: boss, HP, charges ---------------------------------------------------------------------------
+const level = (hp, max) => (max && hp / max <= 0.25 ? "low" : max && hp / max <= 0.5 ? "mid" : "ok");
+
+function paintGame() {
+  const game = state.game || { boss: null, fight: false, players: [] };
+  const boss = game.boss;
+  $("hud-boss").hidden = !boss;
+  if (boss) {
+    $("boss-name").textContent = `${game.fight ? "⚔ " : ""}${boss.name}`;
+    $("boss-fill").style.width = `${boss.max ? Math.max(0, Math.min(100, boss.hp / boss.max * 100)) : 0}%`;
+    $("boss-text").textContent = `${boss.hp} / ${boss.max}`;
+  }
+  const mine = state.you && game.players.find((p) => p.id === state.you.id);
+  const me = state.me;
+  $("hud-me").hidden = !(mine || (me && me.charges));
+  if (mine) {
+    const fill = $("me-hp-fill");
+    fill.style.width = `${mine.max ? Math.max(0, Math.min(100, mine.hp / mine.max * 100)) : 0}%`;
+    fill.dataset.level = level(mine.hp, mine.max);
+    $("me-hp-text").textContent = `${mine.hp} / ${mine.max}${mine.revenge ? " · REVENGE" : ""}`;
+  }
+  if (me && me.charges) {
+    for (const [i, key] of [[1, "power1"], [2, "power2"]]) {
+      const pct = Math.max(0, Math.min(100, me.charges[key] / (me.cost || 100) * 100));
+      $(`ch${i}-fill`).style.width = `${pct}%`;
+      $(`ch${i}-fill`).parentElement.classList.toggle("ready", pct >= 100);
+      $(`ch${i}-fill`).parentElement.title = `Poder ${i}: ${me.charges[key]}%`;
+    }
+    $("streak").textContent = me.streak > 1 ? `🔥 ${me.streak}` : "";
+  }
+  $("hud").hidden = $("hud-boss").hidden && $("hud-me").hidden;
+  const list = $("players");
+  list.replaceChildren();
+  for (const p of game.players) {
+    const li = document.createElement("li");
+    if (state.you && p.id === state.you.id) li.className = "you";
+    const nm = document.createElement("span");
+    nm.className = "nm"; nm.append(Object.assign(document.createElement("span"), { textContent: p.name }), `${p.hp}/${p.max}`);
+    const bar = document.createElement("div"); bar.className = "bar";
+    const fill = document.createElement("i");
+    fill.style.width = `${p.max ? Math.max(0, Math.min(100, p.hp / p.max * 100)) : 0}%`; fill.dataset.level = level(p.hp, p.max);
+    bar.append(fill); li.append(nm, bar); list.append(li);
+  }
+}
+
 // ---- clock synchronisation ----------------------------------------------------------------------------------
 // The server's clock minus ours, estimated NTP-style: of several ping/pong round trips the fastest ones are the
 // most symmetric, so the offset is the median over the three quickest. Later phases show things at an absolute
@@ -286,8 +330,27 @@ function paintActions() {
   const open = state.canWrite && !!state.you;
   for (const button of document.querySelectorAll(".act")) {
     const timed = button.dataset.cmd === "evade" || button.dataset.cmd === "parry";
-    button.disabled = !open || (timed && !(q && involved(q.q) && !q.pressed));
+    button.disabled = !open || (timed && !(q && q.q.windows && involved(q.q) && !q.pressed));   // only single and group QTEs have buttons
   }
+}
+
+const MODE_LABEL = { combo: "COMBO", direction: "DIRECCIÓN", fake: "", bf_chain: "BLACK FLASH" };
+
+// The bar is the QTE's whole time; the coloured stretches are where each answer counts. The cursor starts where the
+// engine's clock really is (the server's start time on our synchronised clock), so a late frame does not skew it.
+function drawTrack(q) {
+  const track = $("qte-track"), w = q.windows;
+  track.hidden = !w;
+  $("qte-legend").hidden = !w;
+  if (!w) return;
+  const place = (id, range) => {
+    const el = $(id);
+    el.hidden = !range;
+    if (!range) return;
+    el.style.left = `${Math.min(100, range[0] / q.timeout * 100)}%`;
+    el.style.width = `${Math.max(0.5, Math.min(100, range[1] / q.timeout * 100) - range[0] / q.timeout * 100)}%`;
+  };
+  place("z-evade", w.evade); place("z-parry", w.parry); place("z-bf", w.bf);
 }
 
 function startQte(q) {
@@ -296,15 +359,24 @@ function startQte(q) {
   state.qte = { q, seen: null, pressed: false };
   const box = $("qte");
   box.dataset.active = "true"; box.dataset.result = "";
-  $("qte-title").textContent = `⚡ QTE ${String(q.difficulty).toUpperCase()}`;
-  $("qte-sub").textContent = q.target ? (involved(q) ? "¡Es para ti!" : `Debe responder ${q.target.name}`) : (involved(q) ? "¡Responde todo el grupo!" : "QTE de grupo");
-  const fill = $("qte-fill");
-  fill.style.transition = "none"; fill.style.transform = "scaleX(1)";
+  const label = q.mode in MODE_LABEL ? MODE_LABEL[q.mode] : "";
+  $("qte-title").textContent = `⚡ ${label ? label + " " : ""}QTE ${String(q.difficulty).toUpperCase()}`;
+  const manual = q.mode === "combo" || q.mode === "direction" || q.mode === "bf_chain";
+  $("qte-sub").textContent = manual ? "Este modo todavía se responde por el chat."
+    : q.target ? (involved(q) ? "¡Es para ti!" : `Debe responder ${q.target.name}`)
+    : q.mode === "fake" ? "" : (involved(q) ? "¡Responde todo el grupo!" : "QTE de grupo");
+  drawTrack(q);
+  const cursor = $("qte-cursor");
+  cursor.style.transition = "none"; cursor.style.left = "0%";
   paintActions();
-  requestAnimationFrame((now) => {                     // painted: from here on the player can see it
+  requestAnimationFrame(() => {                        // painted: from here on the player can see it
     if (!state.qte || state.qte.q !== q) return;
     state.qte.seen = performance.now();
-    fill.style.transition = `transform ${q.timeout}s linear`; fill.style.transform = "scaleX(0)";
+    const gone = Math.max(0, (Date.now() + (state.offset || 0) - q.tGo) / 1000);
+    cursor.style.left = `${Math.min(100, gone / q.timeout * 100)}%`;
+    void cursor.offsetWidth;                           // apply the start before animating
+    cursor.style.transition = `left ${Math.max(0, q.timeout - gone)}s linear`;
+    cursor.style.left = "100%";
     if (navigator.vibrate && involved(q)) navigator.vibrate(40);
   });
 }
@@ -312,7 +384,7 @@ function startQte(q) {
 function idle() {
   const box = $("qte");
   box.dataset.active = "false"; box.dataset.result = "";
-  $("qte-fill").style.transition = "none";
+  $("qte-cursor").style.transition = "none";
   $("qte-title").textContent = "Sin QTE por ahora";
   $("qte-sub").textContent = "Los botones se activan cuando te toque responder.";
 }
@@ -320,7 +392,7 @@ function idle() {
 function endQte(replacing = false) {
   state.qte = null;
   $("qte").dataset.active = "false";
-  $("qte-fill").style.transition = "none";
+  $("qte-cursor").style.transition = "none";
   if (!replacing && !$("qte").dataset.result) idle();      // a verdict on screen stays a moment (see showResult)
   paintActions();
 }
@@ -342,10 +414,10 @@ function press(cmd) {
   if (timed) {
     if (!q || q.pressed || !involved(q.q) || q.seen === null) return;
     q.pressed = true;
-    send({ t: "press", id: q.q.id, command: cmd, dt: Math.round(performance.now() - q.seen) });
+    send({ t: "press", id: q.q.id, command: cmd, as: $("as").value, dt: Math.round(performance.now() - q.seen) });
     paintActions();
   } else {
-    send({ t: "press", id: q ? q.q.id : "", command: cmd });
+    send({ t: "press", id: q ? q.q.id : "", command: cmd, as: $("as").value });
   }
 }
 
@@ -376,9 +448,6 @@ async function login() {
   if (inDiscord) {
     const sdk = new DiscordSDK(config.clientId);
     await sdk.ready();
-    try {
-      patchUrlMappings([{ prefix: "/cdn", target: "cdn.discordapp.com" }, { prefix: "/media", target: "media.discordapp.net" }]);
-    } catch (e) { console.warn("patchUrlMappings", e); }
     const { code } = await sdk.commands.authorize({
       client_id: config.clientId, response_type: "code", state: "", prompt: "none", scope: ["identify"],
     });
@@ -414,6 +483,8 @@ function connect(hello) {
         for (const m of frame.backlog) addMessage(m);
         $("feed").scrollTop = $("feed").scrollHeight;
         startSync();
+        state.game = frame.state && frame.state.players ? frame.state : null; state.me = frame.me && frame.me.charges ? frame.me : null;
+        paintGame();
         const running = (frame.qtes || [])[0];
         if (running) startQte(running); else endQte();
         break;
@@ -427,6 +498,8 @@ function connect(hello) {
       case "msg": addMessage(frame.m); break;
       case "edit": addMessage(frame.m, { replace: true }); break;
       case "del": removeMessage(frame.id); break;
+      case "state": state.game = frame.s; paintGame(); break;
+      case "me": state.me = frame.me; paintGame(); break;
       case "qte": startQte(frame.q); break;
       case "qte_end": if (state.qte && state.qte.q.id === frame.id) endQte(); break;
       case "qte_result": showResult(frame); break;

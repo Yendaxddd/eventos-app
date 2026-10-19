@@ -29,6 +29,7 @@ class Conn:
     offset_ms: float | None = None       # server clock minus client clock, as estimated by the client
     joined: float = field(default_factory=time.time)
     last_say: float = 0.0                # monotonic time of the last message written from the Activity
+    last_me: dict | None = None          # the private state this connection was last sent (see the bridge's state loop)
     presses: dict = field(default_factory=dict)   # QTE id -> how many times this connection pressed a button for it
     _tokens: float = 2 * RATE_PER_SECOND
     _refilled: float = field(default_factory=time.monotonic)
@@ -60,6 +61,7 @@ class Hub:
         self.on_change: Callable[[], None] | None = None   # the app's window refreshes who is connected
         self.loader: Callable[[], Any] | None = None       # async () -> list of message frames, for the first joiner
         self._loaded = False
+        self.state: dict = {}                               # boss / players, as last broadcast
         self.qtes: dict[str, dict] = {}                    # QTE id -> the frame the clients were shown (still running)
 
     # ---- clock ---------------------------------------------------------------------------

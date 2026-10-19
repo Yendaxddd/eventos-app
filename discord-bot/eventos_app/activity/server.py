@@ -7,15 +7,22 @@ magic prefix `/.proxy` (which Discord strips before forwarding, and which is acc
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import json
 import logging
+import mimetypes
+import re
+import shutil
+import tempfile
 import time
 import zlib
 from pathlib import Path
 from typing import Awaitable, Callable
+from urllib.parse import urlsplit
 
 import aiohttp
 from aiohttp import web
+from yarl import URL
 
 from .auth import AuthError, DiscordAuth
 from .hub import Conn, Hub
@@ -25,6 +32,14 @@ log = logging.getLogger("eventos_app.activity")
 DEFAULT_PORT = 8765
 HELLO_TIMEOUT = 10.0
 MAX_FRAME = 64 * 1024
+# Pictures and clips the mirror shows come through this server (no URL Mappings needed in the Developer Portal),
+# and only from Discord's own hosts.
+MEDIA_HOSTS = re.compile(r"^(cdn\.discordapp\.com|media\.discordapp\.net|images-ext-\d+\.discordapp\.net)$")
+MAX_MEDIA = 25 * 1024 * 1024
+MEDIA_CACHE_LIMIT = 200 * 1024 * 1024
+MEDIA_REDIRECTS = 3
+_EXTENSIONS = {"image/png": ".png", "image/jpeg": ".jpg", "image/gif": ".gif", "image/webp": ".webp", "video/mp4": ".mp4", "video/webm": ".webm"}
+Fetch = Callable[[str], Awaitable[tuple[str, bytes]]]   # url -> (content type, body); raises ValueError / OSError
 Authorize = Callable[[int], Awaitable[dict]]   # user id -> {"name": ..., "avatar": ...}; raises AuthError
 
 _FALLBACK = ("<!doctype html><meta charset=utf-8><title>Eventos App</title><body style='font:16px sans-serif;"
@@ -44,7 +59,8 @@ def is_local_request(request: web.Request) -> bool:
 
 class ActivityServer:
     def __init__(self, hub: Hub, *, auth: DiscordAuth, authorize: Authorize, web_dir: Path, client_id: int,
-                 host: str = "127.0.0.1", port: int = DEFAULT_PORT, allow_dev: bool = True, actions=None) -> None:
+                 host: str = "127.0.0.1", port: int = DEFAULT_PORT, allow_dev: bool = True, actions=None,
+                 media_dir: Path | None = None, media_fetch: Fetch | None = None) -> None:
         self.hub, self.auth, self.authorize = hub, auth, authorize
         self.actions = actions     # what the players can do (write, press a QTE button): see ActivityBridge.say / press
         self.web_dir = Path(web_dir)
@@ -52,6 +68,11 @@ class ActivityServer:
         self.host, self.port = host, port
         self.allow_dev = allow_dev
         self._runner: web.AppRunner | None = None
+        self.media_dir = Path(media_dir) if media_dir else None
+        self._media_fetch = media_fetch or self._download
+        self._media_locks: dict[str, asyncio.Lock] = {}
+        self._media_session: aiohttp.ClientSession | None = None
+        self._media_writes = 0
 
     # ---- lifecycle ----------------------------------------------------------------------------
     def _app(self) -> web.Application:
@@ -61,6 +82,7 @@ class ActivityServer:
             app.router.add_post(f"{prefix}/api/token", self._token)
             app.router.add_get(f"{prefix}/ws", self._ws)
             app.router.add_get(f"{prefix}/healthz", self._health)
+            app.router.add_get(f"{prefix}/media", self._media)
             app.router.add_get(f"{prefix}/", self._index)
         for prefix in ("/.proxy/", "/"):
             if self.web_dir.is_dir():
@@ -93,6 +115,9 @@ class ActivityServer:
         if self._runner is not None:
             await self._runner.cleanup()
             self._runner = None
+        if self._media_session is not None:
+            await self._media_session.close()
+            self._media_session = None
 
     # ---- plain endpoints ---------------------------------------------------------------------------
     async def _health(self, request: web.Request) -> web.Response:
@@ -101,6 +126,82 @@ class ActivityServer:
     async def _config(self, request: web.Request) -> web.Response:
         return web.json_response({"clientId": str(self.client_id), "channel": self.hub.channel_name,
                                   "dev": self.allow_dev and is_local_request(request)})
+
+    # ---- pictures from Discord's CDN ---------------------------------------------------------------------
+    @staticmethod
+    def _media_allowed(url: str) -> bool:
+        parts = urlsplit(url)
+        return parts.scheme == "https" and bool(parts.hostname) and bool(MEDIA_HOSTS.match(parts.hostname)) and not parts.username
+
+    async def _download(self, url: str) -> tuple[str, bytes]:
+        if self._media_session is None:
+            self._media_session = aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=20))
+        for _ in range(MEDIA_REDIRECTS + 1):
+            if not self._media_allowed(url):
+                raise ValueError("host")
+            async with self._media_session.get(url, allow_redirects=False) as response:
+                if response.status in (301, 302, 303, 307, 308) and response.headers.get("Location"):
+                    url = str(response.url.join(URL(response.headers["Location"])))
+                    continue
+                if response.status != 200:
+                    raise OSError(f"HTTP {response.status}")
+                kind = response.headers.get("Content-Type", "").split(";")[0].strip().lower()
+                if not kind.startswith(("image/", "video/")):
+                    raise ValueError("type")
+                body = bytearray()
+                async for chunk in response.content.iter_chunked(1 << 16):
+                    body += chunk
+                    if len(body) > MAX_MEDIA:
+                        raise ValueError("size")
+                return kind, bytes(body)
+        raise OSError("too many redirects")
+
+    def _media_path(self, key: str) -> Path | None:
+        if self.media_dir is None:
+            self.media_dir = Path(tempfile.mkdtemp(prefix="eventos-media-"))
+        self.media_dir.mkdir(parents=True, exist_ok=True)
+        found = next((f for f in self.media_dir.glob(key + ".*") if f.suffix != ".part"), None)
+        return found
+
+    def _media_prune(self) -> None:
+        files = sorted((f for f in self.media_dir.iterdir() if f.is_file()), key=lambda f: f.stat().st_mtime)
+        total = sum(f.stat().st_size for f in files)
+        for old in files:
+            if total <= MEDIA_CACHE_LIMIT:
+                break
+            total -= old.stat().st_size
+            old.unlink(missing_ok=True)
+
+    async def _media(self, request: web.Request) -> web.StreamResponse:
+        url = request.query.get("u", "")
+        if not url.startswith("https://"):
+            return web.Response(status=400, text="falta la dirección https")
+        if not self._media_allowed(url):
+            return web.Response(status=403, text="solo imágenes de Discord")
+        key = hashlib.sha256(url.encode()).hexdigest()[:40]
+        path = self._media_path(key)
+        if path is None:
+            async with self._media_locks.setdefault(key, asyncio.Lock()):
+                path = self._media_path(key)          # another request may have fetched it while we waited
+                if path is None:
+                    try:
+                        kind, body = await self._media_fetch(url)
+                    except ValueError as exc:
+                        return web.Response(status=415 if str(exc) == "type" else 413 if str(exc) == "size" else 403, text="no permitido")
+                    except (OSError, aiohttp.ClientError, asyncio.TimeoutError):
+                        return web.Response(status=502, text="Discord no respondió")
+                    ext = _EXTENSIONS.get(kind) or mimetypes.guess_extension(kind) or (".mp4" if kind.startswith("video/") else ".png")
+                    path = self.media_dir / f"{key}{ext}"
+                    partial = path.with_suffix(".part")
+                    partial.write_bytes(body)
+                    partial.replace(path)
+                    self._media_writes += 1
+                    if self._media_writes % 20 == 0:
+                        self._media_prune()
+            self._media_locks.pop(key, None)
+        else:
+            path.touch()
+        return web.FileResponse(path, headers={"Cache-Control": "public, max-age=86400"})
 
     async def _index(self, request: web.Request) -> web.StreamResponse:
         index = self.web_dir / "index.html"
@@ -150,13 +251,16 @@ class ActivityServer:
                 return ws
             conn = Conn(self.hub.new_id(), user_id, name, avatar, ws, dev=dev)
             backlog = await self.hub.load_backlog()
+            if self.actions is not None and hasattr(self.actions, "push_state"):
+                await self.actions.push_state()                  # so the welcome carries the game as it is right now
             users = self.hub.participants()
             if not any(u["id"] == str(user_id) for u in users):
                 users.append(conn.public())          # you are in the list you are first shown
             characters = self.actions.characters_of(user_id) if self.actions is not None else []
             await ws.send_json({"t": "welcome", "you": conn.public(), "serverTime": self.hub.now_ms(),
                                 "channel": self.hub.channel_name, "users": users, "backlog": backlog,
-                                "characters": characters, "qtes": list(self.hub.qtes.values()),
+                                "characters": characters, "qtes": list(self.hub.qtes.values()), "state": self.hub.state,
+                                "me": self.actions.me_of(user_id) if self.actions is not None and not dev else {},
                                 "canWrite": self.actions is not None})
             await self.hub.add(conn)
             async for message in ws:

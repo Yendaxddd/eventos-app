@@ -63,6 +63,13 @@ def classify(method: str, url: str) -> tuple[str, int]:
     return "other", 0
 
 
+def route_of(method: str, url: str) -> str:
+    """'PUT /guilds/{id}/commands': the request without ids and tokens, to say WHAT was rate limited."""
+    path = re.sub(r"^/api/v\d+", "", URL(url).raw_path)
+    path = _TOKEN_IN_URL.sub(r"\1{token}", path)
+    return f"{method} " + re.sub(r"\d{15,}", "{id}", path)
+
+
 def _float(value) -> float | None:
     try:
         return float(value)
@@ -139,6 +146,8 @@ class RequestTracer:
             elapsed = time.perf_counter() - getattr(ctx, "started", time.perf_counter())
             event = {"t": round(time.time(), 3), "mono": time.monotonic(), "bot": bot, "kind": kind, "channel": channel,
                      "phase": self.phase, "status": 0, "ms": _ms(elapsed), "conn": getattr(ctx, "conn", "")}
+            if kind == "other":
+                event["route"] = route_of(method, url)
             if kind.startswith("w"):
                 event["webhook"] = ident
             if getattr(ctx, "connect_ms", None) is not None:
@@ -284,6 +293,8 @@ def explain_429(event: dict, *, limit: int = 5) -> str:
     if wait is None:  # Retry-After is rounded up to whole seconds, so it is only the fallback
         wait = event["retry_after_ms"] if "retry_after_ms" in event else _ms(event.get("retry_after"))
     ours = (event.get("ours") or {}).get("reservas")
+    if event.get("route"):
+        kind += f" ({event['route']})"
     text = f"{kind} de {short_name(event['bot'])}: Discord pidió esperar {wait if wait is not None else '?'} ms"
     if event.get("global"):
         text += " (límite GLOBAL de la cuenta)"

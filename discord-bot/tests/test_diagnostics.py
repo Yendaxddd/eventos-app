@@ -225,3 +225,13 @@ def test_the_report_names_a_slow_request_and_its_connection():
                                      "status": 200, "conn": "new", "connect_ms": 3012}]}}
     text = "\n".join(benchmark.format_report(report))
     assert "2 nuevas (2 en ráfaga 2)" in text and "3647 ms" in text and "3012 ms solo en conectar" in text
+
+
+def test_a_429_on_an_unclassified_request_says_which_route_it_was():
+    url = "https://discord.com/api/v10/guilds/1408268774720667658/commands"
+    assert diagnostics.route_of("PUT", url) == "PUT /guilds/{id}/commands"
+    hook = "https://discord.com/api/v10/webhooks/1408268774720667658/SECRET-token_1/messages/1408268774720667659"
+    assert diagnostics.route_of("GET", hook) == "GET /webhooks/{id}/SECRET-token_1/messages/{id}".replace("SECRET-token_1", "{token}")
+    text = diagnostics.explain_429({"kind": "other", "bot": "Bot#1", "reset_after_ms": 30000, "scope": "shared",
+                                    "route": "PUT /guilds/{id}/commands"})
+    assert "otra petición (PUT /guilds/{id}/commands)" in text and "30000 ms" in text

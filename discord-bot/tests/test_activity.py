@@ -503,3 +503,98 @@ def test_the_runner_starts_and_stops_the_activity_and_reports_it_to_the_window(m
     assert alive and info["users"] == [] and info["port"] >= 8765
     text = "\n".join(lines)
     assert "Servidor de la Actividad" in text and "quiet-lake-42.trycloudflare.com" in text and "URL Mappings" in text
+
+
+# ---- the fixed ngrok address -------------------------------------------------------------------------------------------------------
+def ngrok(tmp_path, body: str, name: str, **kwargs):
+    script = fake_cloudflared(tmp_path, body, name)
+    tunnel = tunnel_module.NgrokTunnel(8765, token="tok", domain="https://Mi-Sitio.ngrok-free.dev/", tools_dir=None,
+                                       command=lambda b, port, flag: [sys.executable, str(script), flag], **kwargs)
+    tunnel.find_binary = lambda: Path(sys.executable)
+    return tunnel
+
+
+def test_the_ngrok_address_is_the_fixed_domain_and_an_old_ngrok_is_tried_with_the_other_flag(tmp_path):
+    tunnel = ngrok(tmp_path, """
+        import sys, time
+        if sys.argv[1] == "url":
+            print("unknown flag: --url", flush=True); sys.exit(2)
+        print('{"lvl":"info","msg":"starting web service"}', flush=True)
+        print('{"lvl":"info","msg":"started tunnel","url":"https://mi-sitio.ngrok-free.dev"}', flush=True)
+        time.sleep(30)
+    """, "ngrok_old")
+
+    async def scenario():
+        url = await tunnel.start()
+        state, fixed = tunnel.state, tunnel.fixed
+        await tunnel.stop()
+        return url, state, fixed
+
+    url, state, fixed = run(scenario())
+    assert url == "https://mi-sitio.ngrok-free.dev" and state == "up" and fixed      # scheme and slash of what was typed are cleaned
+
+
+def test_ngrok_problems_are_explained_in_spanish(tmp_path):
+    bad_token = ngrok(tmp_path, """
+        print('{"lvl":"eror","msg":"command failed","err":"authentication failed: ERR_NGROK_105"}', flush=True)
+    """, "ngrok_token")
+    taken = ngrok(tmp_path, """
+        print('{"lvl":"eror","msg":"command failed","err":"failed to start tunnel: ERR_NGROK_334 endpoint is already online"}', flush=True)
+    """, "ngrok_taken")
+    empty = tunnel_module.NgrokTunnel(1, token="", domain="x.ngrok-free.dev")
+
+    async def scenario():
+        out = []
+        for t in (bad_token, taken, empty):
+            try:
+                await t.start()
+            except tunnel_module.TunnelError as exc:
+                out.append((str(exc), t.state))
+        return out
+
+    (token_msg, s1), (taken_msg, s2), (empty_msg, s3) = run(scenario())
+    assert "authtoken" in token_msg and "ya está en uso" in taken_msg and "Faltan" in empty_msg
+    assert s1 == s2 == s3 == "error"
+
+
+# ---- pictures through our own server -------------------------------------------------------------------------------------------------
+PNG = b"\x89PNG\r\n\x1a\n" + b"0" * 64
+
+
+def test_pictures_come_through_the_server_only_from_discord_hosts_and_are_cached(tmp_path):
+    calls = []
+
+    async def fetch(url):
+        calls.append(url)
+        if url.endswith("big.png"):
+            raise ValueError("size")
+        if url.endswith("page.png"):
+            raise ValueError("type")
+        if url.endswith("down.png"):
+            raise OSError("HTTP 500")
+        return "image/png", PNG
+
+    async def scenario():
+        async with Rig() as rig:
+            rig.server._media_fetch = fetch
+            rig.server.media_dir = tmp_path / "cache"
+            out = {}
+            good = "https://cdn.discordapp.com/avatars/1/a.png"
+            for name, u in (("ok", good), ("again", good), ("ext", "https://images-ext-1.discordapp.net/external/x/y.png"),
+                            ("evil", "https://evil.example/a.png"), ("lookalike", "https://cdn.discordapp.com.evil.example/a.png"),
+                            ("http", "http://cdn.discordapp.com/a.png"), ("creds", "https://u:p@cdn.discordapp.com/a.png"),
+                            ("big", "https://cdn.discordapp.com/big.png"), ("page", "https://cdn.discordapp.com/page.png"),
+                            ("down", "https://cdn.discordapp.com/down.png")):
+                async with rig.http.get(rig.url("/media"), params={"u": u}) as r:
+                    out[name] = (r.status, r.headers.get("Content-Type"), await r.read())
+            async with rig.http.get(rig.url("/.proxy/media"), params={"u": good}, headers={"Range": "bytes=0-3"}) as r:
+                out["range"] = (r.status, await r.read())
+            return out
+
+    out = run(scenario())
+    assert out["ok"] == (200, "image/png", PNG) and out["again"][2] == PNG and out["ext"][0] == 200
+    assert [c for c in calls if c.endswith("a.png")] == ["https://cdn.discordapp.com/avatars/1/a.png"]      # the second came from disk
+    assert out["evil"][0] == out["lookalike"][0] == out["creds"][0] == 403 and out["http"][0] == 400
+    assert (out["big"][0], out["page"][0], out["down"][0]) == (413, 415, 502)
+    assert out["range"] == (206, PNG[:4])                                    # Safari needs ranges to play a clip
+    assert all("evil" not in c and "http://" not in c for c in calls)

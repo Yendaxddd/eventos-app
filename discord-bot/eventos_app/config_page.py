@@ -55,6 +55,8 @@ class ConfigPage(ctk.CTkFrame):
             "use_webhooks": tk.BooleanVar(value=s.use_webhooks),
             "activity_enabled": tk.BooleanVar(value=s.activity_enabled),
             "activity_client_secret": tk.StringVar(value=s.activity_client_secret),
+            "activity_ngrok_token": tk.StringVar(value=s.activity_ngrok_token),
+            "activity_ngrok_domain": tk.StringVar(value=s.activity_ngrok_domain),
             "auto_start": tk.BooleanVar(value=s.auto_start),
         }
         self._build_token(0)
@@ -529,16 +531,22 @@ class ConfigPage(ctk.CTkFrame):
         box = self._section("Actividad de Discord (beta)", row)
         self._note(box, 1, "Una Actividad es una pantalla del juego dentro de Discord (PC y móvil) que muestra el canal del "
                            "evento, deja escribir y responder los QTE con botones midiendo los tiempos en la pantalla del jugador, "
-                           "sin depender de los mensajes. Funciona desde este PC con un túnel "
-                           "gratuito de Cloudflare cuya dirección cambia cada vez. Pasos en docs/ACTIVIDAD.md.")
+                           "sin depender de los mensajes. Funciona desde este PC con un túnel gratuito: el de Cloudflare "
+                           "cambia de dirección en cada inicio; con un dominio fijo de ngrok (opcional, abajo) la pegas una sola "
+                           "vez en el Developer Portal. Pasos en docs/ACTIVIDAD.md.")
         ctk.CTkCheckBox(box, text="Activar la Actividad al iniciar el bot", variable=self.vars["activity_enabled"],
                         fg_color=ACCENT, hover_color=ACCENT).grid(row=2, column=0, columnspan=4, padx=18, pady=(2, 6), sticky="w")
         self.activity_secret_entry = self._field(box, 3, "Client Secret", "activity_client_secret", show="•")
         self._note(box, 4, "Developer Portal → tu aplicación → OAuth2 → «Client Secret». Se guarda solo en este equipo.", pady=(0, 6))
+        self.activity_ngrok_token_entry = self._field(box, 5, "ngrok authtoken", "activity_ngrok_token", show="•")
+        self.activity_ngrok_domain_entry = self._field(box, 6, "ngrok dominio", "activity_ngrok_domain")
+        self._note(box, 7, "Opcional, para una dirección que no cambia: crea una cuenta gratis en ngrok.com, copia tu Authtoken y tu "
+                           "dominio gratuito (Domains, tipo algo.ngrok-free.dev). Si dejas esto vacío se usa el túnel de Cloudflare.",
+                   pady=(0, 6))
         self.activity_status = ctk.CTkLabel(box, text="", text_color=MUTED, anchor="w", justify="left", wraplength=640)
-        self.activity_status.grid(row=5, column=0, columnspan=4, padx=18, pady=(2, 6), sticky="w")
+        self.activity_status.grid(row=8, column=0, columnspan=4, padx=18, pady=(2, 6), sticky="w")
         buttons = ctk.CTkFrame(box, fg_color="transparent")
-        buttons.grid(row=6, column=0, columnspan=4, padx=14, pady=(0, 14), sticky="w")
+        buttons.grid(row=9, column=0, columnspan=4, padx=14, pady=(0, 14), sticky="w")
         self.activity_buttons = {}
         for text, command in (("Copiar dirección", self._copy_activity_url), ("Nueva dirección", self._reopen_tunnel),
                               ("Probar en este PC", self._test_activity), ("Abrir Developer Portal", self._open_portal)):
@@ -589,7 +597,8 @@ class ConfigPage(ctk.CTkFrame):
         lines = []
         if info["tunnel"] == "up":
             lines.append(f"● Túnel listo: {info['url'].removeprefix('https://')}")
-            lines.append("En el Developer Portal → Activities → URL Mappings pon esa dirección en la raíz «/» (cambia en cada inicio).")
+            lines.append("En el Developer Portal → Activities → URL Mappings pon esa dirección en la raíz «/» " +
+                         ("(es fija: solo la primera vez)." if info.get("fixed") else "(cambia en cada inicio)."))
         elif info["tunnel"] == "error":
             lines.append(f"✗ Túnel: {info['detail']}")
         else:

@@ -3,8 +3,10 @@
 Skipped when the client has not been built (`npm run build` in activity_client/) or Playwright's Chromium is missing.
 """
 import asyncio
+import base64
 import os
 import sys
+import tempfile
 from pathlib import Path
 
 import pytest
@@ -18,6 +20,8 @@ pytestmark = pytest.mark.skipif(not (WEB / "app.js").exists(), reason="activity 
 
 from eventos_app.activity import ActivityServer, DiscordAuth, Hub  # noqa: E402
 
+WIN = {"evade": [0.0, 4.0], "parry": [2.5, 4.5], "bf": [3.3, 3.7]}
+PIXEL = base64.b64decode("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==")
 SHOTS = os.environ.get("ACTIVITY_SHOTS")     # a folder: screenshots are saved there when set
 
 
@@ -45,6 +49,9 @@ class Actions:
     def characters_of(self, user_id):
         return ["Kuro", "Shiro"]
 
+    def me_of(self, user_id):
+        return {}
+
     async def say(self, conn, frame):
         self.said.append(frame)
 
@@ -57,8 +64,13 @@ async def with_page(scenario, actions: bool = False):
     hub = Hub()
     hub.channel_name = "qte-evento"
     acts = Actions(hub) if actions else None
+    async def media(url):                       # Discord's CDN, replaced by one real 1x1 picture
+        hub.media_requests.append(url)
+        return "image/png", PIXEL
+
+    hub.media_requests = []
     server = ActivityServer(hub, auth=DiscordAuth(client_id=1, client_secret="x"), authorize=None, web_dir=WEB,
-                            client_id=1, port=0, actions=acts)
+                            client_id=1, port=0, actions=acts, media_fetch=media, media_dir=Path(tempfile.mkdtemp()))
     hub.test_actions = acts
     port = await server.start()
     try:
@@ -183,7 +195,7 @@ def test_the_player_writes_with_the_chosen_identity_and_answers_a_qte_with_a_tim
         # a QTE for this player: press Evade with the keyboard; the screen's own stopwatch is what is sent
         me = await page.evaluate("window.__eventos.you.id")
         await hub.qte_start({"id": "6", "mode": "single", "difficulty": "easy", "target": {"id": me, "name": "Ana"},
-                             "participants": [], "tGo": hub.now_ms(), "timeout": 6.0, "commands": ["evade", "parry", "adapt"]})
+                             "participants": [], "tGo": hub.now_ms(), "timeout": 6.0, "windows": WIN, "commands": ["evade", "parry", "adapt"]})
         await page.wait_for_function("window.__eventos.qte && window.__eventos.qte.seen !== null")
         assert not await page.locator('.act[data-cmd=evade]').is_disabled()
         await asyncio.sleep(0.35)
@@ -242,7 +254,7 @@ def test_the_phone_layout_keeps_the_buttons_and_the_writing_box_on_screen():
         await phone.wait_for_selector("body[data-state=connected]")
         me = await phone.evaluate("window.__eventos.you.id")
         await hub.qte_start({"id": "1", "mode": "single", "difficulty": "hard", "target": {"id": me, "name": "Ana"},
-                             "participants": [], "tGo": hub.now_ms(), "timeout": 5.0, "commands": ["evade", "parry", "adapt"]})
+                             "participants": [], "tGo": hub.now_ms(), "timeout": 5.0, "windows": WIN, "commands": ["evade", "parry", "adapt"]})
         await phone.wait_for_selector("#qte[data-active=true]")
         assert await phone.evaluate("document.documentElement.scrollWidth <= window.innerWidth")
         for selector in ("#qte", "#actions", "#input", "#send", '.act[data-cmd=evade]'):
@@ -255,3 +267,86 @@ def test_the_phone_layout_keeps_the_buttons_and_the_writing_box_on_screen():
             await phone.screenshot(path=str(Path(SHOTS) / "activity-phone-qte.png"))
 
     asyncio.run(with_page(scenario, actions=True))
+
+
+def test_the_time_bar_shows_the_windows_and_the_cursor_starts_where_the_engine_is():
+    async def scenario(hub, browser, url):
+        page = await browser.new_page(viewport={"width": 900, "height": 700})
+        await page.goto(f"{url}/?dev=Ana")
+        await page.wait_for_selector("body[data-state=connected]")
+        me = await page.evaluate("window.__eventos.you.id")
+        windows = {"evade": [0.0, 4.0], "parry": [2.5, 4.5], "bf": [3.3, 3.7]}
+        await hub.qte_start({"id": "1", "mode": "single", "difficulty": "hard", "target": {"id": me, "name": "Ana"}, "participants": [],
+                             "tGo": hub.now_ms() - 2000, "timeout": 5.0, "windows": windows, "commands": ["evade", "parry", "adapt"]})
+        await page.wait_for_function("window.__eventos.qte && window.__eventos.qte.seen !== null")
+        assert await page.locator("#qte-track").is_visible() and await page.locator("#qte-legend").is_visible()
+        boxes = {}
+        for name in ("evade", "parry", "bf"):
+            boxes[name] = await page.locator(f"#z-{name}").evaluate("e => [e.style.left, e.style.width]")
+        assert boxes["evade"] == ["0%", "80%"] and boxes["parry"] == ["50%", "40%"] and boxes["bf"][0] == "66%"
+        first = float(await page.locator("#qte-cursor").evaluate("e => parseFloat(getComputedStyle(e).left) / e.parentElement.clientWidth * 100"))
+        assert first >= 38                                      # 2 s of the 5 s had already gone by when the frame arrived
+        await asyncio.sleep(0.6)
+        later = float(await page.locator("#qte-cursor").evaluate("e => parseFloat(getComputedStyle(e).left) / e.parentElement.clientWidth * 100"))
+        assert later > first + 5
+        if SHOTS:
+            await page.screenshot(path=str(Path(SHOTS) / "activity-bar.png"))
+        await hub.qte_end("1")
+        await hub.qte_start({"id": "2", "mode": "combo", "difficulty": "easy", "target": {"id": me, "name": "Ana"}, "participants": [],
+                             "tGo": hub.now_ms(), "timeout": 15.0, "windows": None, "commands": []})
+        await page.wait_for_selector("#qte[data-active=true]")
+        assert not await page.locator("#qte-track").is_visible()
+        assert "chat" in await page.locator("#qte-sub").inner_text() and await page.locator('.act[data-cmd=evade]').is_disabled()
+
+    asyncio.run(with_page(scenario, actions=True))
+
+
+def test_the_hud_shows_the_boss_the_players_hp_and_your_charges():
+    async def scenario(hub, browser, url):
+        page = await browser.new_page(viewport={"width": 900, "height": 700})
+        await page.goto(f"{url}/?dev=Ana")
+        await page.wait_for_selector("body[data-state=connected]")
+        me = await page.evaluate("window.__eventos.you.id")
+        assert await page.locator("#hud").is_hidden()          # nothing to show yet
+        hub.state = {"boss": {"name": "Sukuna", "hp": 650, "max": 1000}, "fight": True, "players": [
+            {"id": me, "name": "Ana", "hp": 20, "max": 100, "revenge": True}, {"id": "9", "name": "Luis", "hp": 90, "max": 100, "revenge": False}]}
+        await hub.broadcast({"t": "state", "s": hub.state})
+        await hub.broadcast({"t": "me", "me": {"charges": {"power1": 100.0, "power2": 30.0}, "cost": 100, "streak": 4}})
+        await page.wait_for_selector("#hud:not([hidden])")
+        assert await page.locator("#boss-text").inner_text() == "650 / 1000" and "Sukuna" in await page.locator("#boss-name").inner_text()
+        assert "20 / 100 · REVENGE" == await page.locator("#me-hp-text").inner_text()
+        assert await page.locator("#me-hp-fill").get_attribute("data-level") == "low"
+        assert await page.locator("#players li").count() == 2 and await page.locator("#players li.you").count() == 1
+        assert "ready" in await page.locator("#ch1-fill").evaluate("e => e.parentElement.className")
+        assert "ready" not in await page.locator("#ch2-fill").evaluate("e => e.parentElement.className")
+        assert "4" in await page.locator("#streak").inner_text()
+        if SHOTS:
+            await page.screenshot(path=str(Path(SHOTS) / "activity-hud.png"))
+        phone = await browser.new_page(viewport={"width": 375, "height": 667}, is_mobile=True, has_touch=True)
+        await phone.goto(f"{url}/?dev=Luis")
+        await phone.wait_for_selector("body[data-state=connected]")
+        await phone.wait_for_selector("#hud:not([hidden])")
+        assert await phone.evaluate("document.documentElement.scrollWidth <= window.innerWidth")
+        assert await phone.locator("#players").is_hidden()      # the phone keeps the compact strip only
+
+    asyncio.run(with_page(scenario, actions=True))
+
+
+def test_pictures_load_through_the_app_and_a_name_in_maths_letters_keeps_its_first_letter():
+    async def scenario(hub, browser, url):
+        hub.backlog.append(message("1", "con foto", name="Ana", **{}))
+        hub.backlog[-1]["author"]["avatar"] = "https://cdn.discordapp.com/avatars/1/a.png"
+        hub.backlog[-1]["attachments"] = [{"url": "https://cdn.discordapp.com/attachments/1/2/x.png", "name": "x.png", "image": True}]
+        hub.backlog.append(message("2", "sin foto", name="𝙋𝙖𝙣𝙘𝙤𝙣𝙦𝙪𝙚𝙨𝙤"))
+        page = await browser.new_page(viewport={"width": 900, "height": 700})
+        await page.goto(f"{url}/?dev=Ana")
+        await page.wait_for_selector("body[data-state=connected]")
+        await page.wait_for_function("document.querySelectorAll('#feed img.avatar, #feed .attach img').length === 2 && "
+                                     "[...document.querySelectorAll('#feed img.avatar, #feed .attach img')].every(i => i.complete && i.naturalWidth > 0)")
+        sources = await page.locator("#feed img").evaluate_all("els => els.map(e => e.getAttribute('src'))")
+        assert all(src.startswith("/media?u=https%3A%2F%2Fcdn.discordapp.com%2F") for src in sources), sources
+        assert len(hub.media_requests) == 2
+        letter = await page.locator("#feed .msg:nth-child(2) .avatar").inner_text()
+        assert letter == "𝙋"                                     # not the broken half of a surrogate pair
+
+    asyncio.run(with_page(scenario))
