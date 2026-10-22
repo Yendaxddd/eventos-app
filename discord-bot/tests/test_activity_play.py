@@ -363,7 +363,7 @@ def test_the_pictures_of_characters_are_remembered_between_runs(tmp_path):
 
 
 # ---- the bar's windows and the game state -----------------------------------------------------------------------------------
-def test_the_bar_gets_the_windows_of_this_player_the_real_timeout_and_a_fake_qte_does_not_say_who_it_is_for():
+def test_the_bar_gets_the_windows_of_this_player_the_real_timeout_and_a_fake_qte_looks_real_to_its_target():
     times = {"hard": {"evade_window": 4.0, "parry_window": (2.5, 4.5), "perfect_parry": 3.5}}
     target = NS(id=5, display_name="Ana", name="ana")
     data = {"difficulty": "hard", "mode": "single", "target": target, "participants": {}}
@@ -376,7 +376,8 @@ def test_the_bar_gets_the_windows_of_this_player_the_real_timeout_and_a_fake_qte
     combo = describe(2, {**data, "mode": "combo"}, times, 0.0)
     assert combo["windows"] is None and combo["mode"] == "combo"
     fake = describe(3, {**data, "mode": "fake"}, times, 0.0)
-    assert fake["target"] is None and fake["participants"] == []
+    assert fake["target"] is not None and fake["participants"] == []                          # shown to its hidden target as a real evade
+    assert fake["commands"] == ["evade", "parry"] and fake["windows"]["evade"][1] == fake["timeout"]
 
 
 def test_the_game_state_is_sent_when_it_changes_and_only_to_the_person_it_belongs_to():

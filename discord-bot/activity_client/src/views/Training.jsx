@@ -10,6 +10,8 @@ import { backToConfig, loadBest, pauseTraining, startTraining, stopTraining, tra
 const KIND_HINT = {
   single: "Esquivar y, si se abre, parry.", group: "Solo esquivar.", direction: "Pulsa la flecha opuesta.",
   combo: "Una secuencia de esquives y parries.", bf_chain: "Parry dentro de la ventana; antes, rompe la cadena.",
+  flick: "Desliza hacia donde apunta la flecha (o pulsa esa flecha).", drag: "Lleva la ficha a la diana (o muévela con las flechas y pulsa Enter).",
+  mash: "Toca el botón (o la barra espaciadora) las veces que pide.", fake: "Parece un esquive de verdad: no lo pulses.",
 };
 const COUNT_LABEL = { 10: "10", 25: "25", 50: "50", 100: "100", 0: "Sin fin" };
 const REASON = {

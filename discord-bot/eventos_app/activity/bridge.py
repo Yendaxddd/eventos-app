@@ -27,6 +27,7 @@ from .audio_rpc import AudioRpc
 from .cinema import CinemaBook, CinemaDirector
 from .cinema_rpc import CinemaRpc
 from .fx import FxBook, FxDirector
+from .arena import ArenaQtes
 from .fx_rpc import FxRpc
 from .quick_rpc import QuickRpc
 from .latency import CAP_MS, LatencyBook, compensation
@@ -136,6 +137,7 @@ class ActivityBridge(PanelRpc, GmRpc, TupperRpc, AudioRpc, CinemaRpc, FxRpc, Qui
         self._init_panel()                           # the player dashboards (panel_rpc.py)
         self._init_tupper(files, char_images_file)   # the pictures kept on this PC (tupper_rpc.py)
         self.audio = AudioDirector(hub, AudioLibrary(files, audio_file))      # the sounds, the music and the cues (audio.py)
+        self.arena = ArenaQtes(self)                                          # swipe, drag and tap QTEs (arena.py)
         self.fx = FxDirector(hub, FxBook(fx_file), self.audio)                 # the looks of powers and events (fx.py)
         self.cinema = CinemaDirector(hub, CinemaBook(cinema_file, self.audio.library), post=self._cinema_post)     # the scripts and their playing (cinema.py)
         self.gm = GmPanel(app, GmLog(gm_log_file), data_dir, values_file)       # the game-master panel (gm/, gm_rpc.py)
@@ -168,6 +170,7 @@ class ActivityBridge(PanelRpc, GmRpc, TupperRpc, AudioRpc, CinemaRpc, FxRpc, Qui
         for fn, name in self._listeners:
             self.app.bot.remove_listener(fn, name)
         self._listeners.clear()
+        self.arena.stop_all()
         book = getattr(self.app, "active_qtes", None)
         if hasattr(book, "on_start"):
             book.on_start = book.on_end = None
@@ -570,6 +573,8 @@ class ActivityBridge(PanelRpc, GmRpc, TupperRpc, AudioRpc, CinemaRpc, FxRpc, Qui
     async def press(self, conn: Conn, frame: dict) -> str | None:
         """A QTE button. The player's screen measured `dt` (ms between seeing the QTE and pressing)."""
         command = str(frame.get("command", ""))
+        if str(frame.get("id") or "").startswith("a"):           # a QTE of the Activity's own (swipe, drag, tap)
+            return await self.arena.answer(conn, frame)
         if command not in COMMANDS:
             return "Botón desconocido."
         member = await self.member_of(conn.user_id)
@@ -611,6 +616,8 @@ class ActivityBridge(PanelRpc, GmRpc, TupperRpc, AudioRpc, CinemaRpc, FxRpc, Qui
         quiet = getattr(self.app, "feedback_quiet", None)
         message.mirror_to = None if (quiet is not None and quiet(conn.user_id)) else (data.get("message") if data else None)
         await self.app.handle_qte_response(message, measured=seconds, only=key)         # this QTE, not the first that takes it
+        if entry.get("mode") == "fake":                         # a fake QTE: whoever answers it falls for it
+            message.reactions[:] = ["❌"]
         await self._verdict(conn, qte_id, message, seconds)
         if entry.get("mode") == "combo" and key in self.app.active_qtes:               # the next step is shown only to who earned it
             now = self.app.active_qtes[key]

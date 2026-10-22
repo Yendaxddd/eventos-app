@@ -9,6 +9,7 @@ import logging
 
 from .gm import GmPanel
 from .hub import Conn, RpcError
+from .arena import MODES as ARENA_MODES
 
 log = logging.getLogger("eventos_app.activity")
 
@@ -46,6 +47,9 @@ class GmRpc:
 
     async def rpc_gm_launch(self, conn: Conn, args: dict):
         actor = await self._gm(conn)
+        if str(args.get("mode")) in ARENA_MODES:
+            await self.arena.gm_launch(actor, str(args.get("mode")), str(args.get("difficulty")), args.get("target"))
+            return self.gm.state()
         await self.gm.launch(actor, str(args.get("mode")), str(args.get("difficulty")), args.get("target"))
         return self.gm.state()
 

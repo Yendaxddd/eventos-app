@@ -131,7 +131,7 @@ def describe(qte_id, data: dict, times: dict, now_ms: float, *, timeouts: dict |
     difficulty = data.get("difficulty")
     mode = data.get("mode", "single")
     timing = times.get(difficulty, {})
-    target = None if mode == "fake" else data.get("target")    # a fake QTE does not say who it is for
+    target = data.get("target")                                # a fake QTE is shown to its (hidden) target as if it were real
     evade = float(timing.get("evade_window", 5.0))
     parry = tuple(timing.get("parry_window") or (0.0, 0.0))
     if target is not None and adjust is not None and mode in ("single", "bf_chain"):
@@ -166,7 +166,10 @@ def describe(qte_id, data: dict, times: dict, now_ms: float, *, timeouts: dict |
     elif mode == "bf_chain":
         timeout, windows, commands, window = 3.0, {"parry": [round(parry[0], 3), round(parry[1], 3)]}, ["parry"], chain_window
         extra["chain"] = int(data.get("chain_level", 1))
-    else:                                                          # fake, or one the Activity does not know
+    elif mode == "fake":                                           # looks like a real evade to the one it is for: answering it is falling for it
+        timeout = float((timeouts or {}).get(difficulty) or timing.get("timeout", 3.0))
+        windows, commands, window = {"evade": [0.0, round(timeout, 3)]}, ["evade", "parry"], 0.0
+    else:                                                          # one the Activity does not know
         timeout, windows, commands = float(timing.get("timeout", 3.0)), None, []
     if windows is not None:
         windows["bf"] = [round(max(0.0, center - window), 3), round(center + window, 3)] if window and "parry" in windows else None

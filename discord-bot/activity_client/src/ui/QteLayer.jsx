@@ -1,9 +1,10 @@
 import { useEffect, useRef, useState } from "preact/hooks";
 import {
-  ArrowDown, ArrowLeft, ArrowRight, ArrowUp, Check, Crosshair, Hourglass, Lock, Shield, ShieldPlus, Swords, X, Zap,
+  ArrowDown, ArrowLeft, ArrowRight, ArrowUp, Check, Crosshair, Hand, Hourglass, Lock, Shield, ShieldPlus, Swords, X, Zap,
 } from "lucide-preact";
 import { qtes, prefs, me, rules, canWrite } from "../state.js";
-import { byUrgency, canPress, elapsedSeconds, leadOf, phaseAt } from "../qte-model.js";
+import { GESTURE_MODES, byUrgency, canPress, elapsedSeconds, leadOf, phaseAt } from "../qte-model.js";
+import { DragPad, FlickPad, MashButton } from "./Gestures.jsx";
 import { press, context } from "../qte-store.js";
 import { pickSpotFit, clampSpot, packAll, anyOverlap } from "../layout.js";
 import { pressCommand } from "./Actions.jsx";
@@ -28,6 +29,8 @@ function baseSize() {
 const LEAD = 1.14;
 function boxFor(kind, size, lead) {
   const s = size * (lead ? LEAD : 1);
+  if (kind === "flick") return { w: Math.round(s * 1.6 + 36), h: Math.round(s * 1.6 + 28 + 8 + 8 + 44) };
+  if (kind === "drag") return { w: Math.round(s * 2.4 + 36), h: Math.round(s * 1.6 + 28 + 8 + 8 + 44) };
   if (kind === "arrows") { const pad = s * 0.58 * 3 + 12; return { w: Math.round(pad + 36), h: Math.round(pad + 28 + 8 + 44 + 8 + 8 + 44) }; }   // pad + timer + hint + meta
   return { w: Math.round(s + 36), h: Math.round(s + 28 + 8 + 8 + 44) };
 }
@@ -86,6 +89,7 @@ function visual(entry, phase, ctx) {
     return { kind: isParry ? "parry" : "evade", icon: isParry ? Swords : Shield, label: CMD[phase.cmd] || phase.cmd, key: KEYS[phase.cmd] };
   }
   if (phase.kind === "arrows") return { kind: "arrows" };
+  if (phase.kind === "flick" || phase.kind === "drag" || phase.kind === "mash") return { kind: phase.kind, icon: Hand, label: MODE[phase.kind], key: "" };
   if (phase.kind === "wait") return { kind: q.mode === "bf_chain" ? "bf" : "parry", icon: Hourglass, label: q.mode === "bf_chain" ? "Prepárate" : "Espera", key: "" };
   return { kind: "parry", icon: X, label: "Tarde", key: "" };
 }
@@ -95,6 +99,7 @@ function metaText(entry, rank) {
   const diff = DIFFICULTY[q.difficulty] || q.difficulty;
   if (q.mode === "combo") return `Combo · ${diff}`;
   if (q.mode === "bf_chain") return `Black Flash ×${q.chain || 1}`;
+  if (q.mode === "fake") return diff;                                // a fake one must look like any other
   return `${MODE[q.mode] === "Individual" ? "" : MODE[q.mode] + " · "}${diff}`;
 }
 
@@ -145,7 +150,11 @@ function Widget({ entry, phase, rank, lead, spot, size, ctx }) {
           {Array.from({ length: q.combo.length }, (_, i) => <i key={i} class={i < (entry.step ? entry.step.index : 0) ? "done" : i === (entry.step ? entry.step.index : 0) ? "now" : ""} />)}
         </div>
       )}
-      {phase.kind === "arrows" ? (
+      {(phase.kind === "flick" || phase.kind === "drag" || phase.kind === "mash" || (GESTURE_MODES.includes(q.mode) && state !== "live")) && GESTURE_MODES.includes(q.mode) ? (
+        q.mode === "flick" ? <FlickPad entry={entry} live={state === "live"} lead={lead} />
+          : q.mode === "drag" ? <DragPad entry={entry} live={state === "live"} lead={lead} />
+            : <MashButton entry={entry} live={state === "live"} lead={lead} />
+      ) : phase.kind === "arrows" ? (
         <>
           <div class="qw-hint">Flecha: {GLYPH[arrowName(q.arrow)]} — pulsa la <b>OPUESTA</b></div>
           <div class="qw-pad">
@@ -226,7 +235,7 @@ function RescueChip({ entry, ctx }) {
 // ---- where every widget goes ----------------------------------------------------------------------------------------------------
 // Widgets that already have a place keep it (nothing moves under a finger); new ones get a free place, made smaller if the
 // screen is crowded; and if even that cannot keep them apart, everybody is laid out again in rows.
-const kindOf = (it) => (it.phase.kind === "arrows" ? "arrows" : "button");
+const kindOf = (it) => (it.phase.kind === "arrows" ? "arrows" : it.entry.q.mode === "flick" ? "flick" : it.entry.q.mode === "drag" ? "drag" : "button");
 const asBox = (s) => ({ x: s.x, y: s.y, w: s.w, h: s.h });
 
 function allocate({ items, counterShown, area, avoid, spots, lastSpot, size, placement }) {

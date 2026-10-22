@@ -2,7 +2,7 @@
 // rules can be tested on their own; the clock that spawns them is in training.js and the page in views/Training.jsx.
 import { clamp } from "./util.js";
 
-export const KINDS = ["single", "group", "direction", "combo", "bf_chain"];
+export const KINDS = ["single", "group", "direction", "combo", "bf_chain", "flick", "drag", "mash", "fake"];
 export const DIFFICULTIES = ["easy", "medium", "hard", "impossible"];
 export const COUNTS = [10, 25, 50, 100, 0];             // 0 = until the player stops
 
@@ -33,8 +33,8 @@ export function sanitizeConfig(raw) {
 export const PRESETS = [
   ["warmup", "Calentamiento", { kinds: ["single", "group"], difficulties: ["easy"], count: 10, gapMin: 2.5, gapMax: 5, simultaneous: 1, speed: 100, suddenDeath: false }],
   ["normal", "Normal", { ...DEFAULT_CONFIG }],
-  ["intense", "Intenso", { kinds: ["single", "group", "direction", "combo", "bf_chain"], difficulties: ["medium", "hard"], count: 50, gapMin: 1, gapMax: 2.5, simultaneous: 2, speed: 115, suddenDeath: false }],
-  ["chaos", "Caos", { kinds: ["single", "group", "direction", "combo", "bf_chain"], difficulties: ["hard", "impossible"], count: 0, gapMin: 0.5, gapMax: 1.5, simultaneous: 3, speed: 130, suddenDeath: true }],
+  ["intense", "Intenso", { kinds: ["single", "group", "direction", "combo", "bf_chain", "flick", "drag", "mash"], difficulties: ["medium", "hard"], count: 50, gapMin: 1, gapMax: 2.5, simultaneous: 2, speed: 115, suddenDeath: false }],
+  ["chaos", "Caos", { kinds: ["single", "group", "direction", "combo", "bf_chain", "flick", "drag", "mash", "fake"], difficulties: ["hard", "impossible"], count: 0, gapMin: 0.5, gapMax: 1.5, simultaneous: 3, speed: 130, suddenDeath: true }],
 ];
 
 // ---- what to throw next -----------------------------------------------------------------------------------------------
@@ -50,6 +50,7 @@ export function nextSpec(config, rng = Math.random, last = null) {
   if (mode === "direction") extra.arrow = pickOf(ARROWS, rng);
   if (mode === "combo") extra.sequence = Array.from({ length: config.comboLength }, () => (rng() < 0.5 ? "evade" : "parry"));
   if (mode === "bf_chain") { extra.chain = 1 + Math.floor(rng() * 3); extra.from = 0.8 + rng() * 0.7; extra.len = 1.1; }
+  if (mode === "flick" || mode === "drag" || mode === "mash") extra.random = rng;
   return { mode, difficulty, extra };
 }
 

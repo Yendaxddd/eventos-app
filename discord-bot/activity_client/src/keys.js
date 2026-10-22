@@ -1,6 +1,6 @@
 // Keyboard shortcuts. The letter keys do nothing while typing in a box (Alt + the letter still works there).
 import { qtes, view, back, sheet } from "./state.js";
-import { byUrgency, canPress, elapsedSeconds, leadOf, phaseAt } from "./qte-model.js";
+import { GESTURE_MODES, byUrgency, canPress, elapsedSeconds, leadOf, phaseAt } from "./qte-model.js";
 import { context, press } from "./qte-store.js";
 import { pressCommand } from "./ui/Actions.jsx";
 
@@ -37,6 +37,8 @@ export function installKeys() {
     if (target && target.tagName === "BUTTON" && (event.code === "Space" || event.code === "Enter")) return;      // a focused button answers for itself
     let cmd = MAP[event.code];
     if (!cmd) return;
+    const leading = leadOf(qtes.value, performance.now());
+    if (leading && GESTURE_MODES.includes(leading.q.mode) && (TIMED.has(cmd) || cmd === "lead")) return;      // its widget reads the keys
     if (cmd === "lead") {                                     // Space: whatever the most urgent QTE needs right now
       const now = performance.now();
       const lead = leadOf(qtes.value, now);

@@ -9,8 +9,10 @@ import { useDo, useDraft, useLive } from "./hooks.js";
 const MODES = [
   ["single", "Individual", "Un QTE para una persona."], ["group", "Grupal", "Un QTE para todo el grupo."], ["combo", "Combo", "Cinco QTE seguidos para una persona."],
   ["direction", "Dirección", "Hay que responder con la flecha contraria."], ["fake", "Falso", "Sin aviso: cualquier respuesta falla al instante."],
+  ["flick", "Deslizar", "Solo en la Actividad: deslizar hacia la flecha."], ["drag", "Arrastrar", "Solo en la Actividad: llevar la ficha a la diana."],
+  ["mash", "Machacar", "Solo en la Actividad: tocar muchas veces seguidas."],
 ];
-const MODE_TEXT = { single: "individual", group: "grupal", combo: "de combo", direction: "de dirección", fake: "falso" };
+const MODE_TEXT = { single: "individual", group: "grupal", combo: "de combo", direction: "de dirección", fake: "falso", flick: "de deslizar", drag: "de arrastrar", mash: "de machacar" };
 const QTE_MODES = [["standard", "Normal", "Solo QTE normales."], ["combo", "Combo", "Solo combos."], ["direction", "Dirección", "Solo de dirección."], ["random", "Al azar", "Según las probabilidades de abajo."]];
 const VARIANT = { standard: "Normal", combo: "Combo", direction: "Dirección", fake: "Falso" };
 

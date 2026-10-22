@@ -112,3 +112,25 @@
 
 @media (max-width: 720px) { .qw { --btn-base: 94px; } }
 @media (pointer: coarse) { .qw { --btn-base: 108px; } .rescue-chip { min-height: 48px; } }
+
+/* ---- the Activity's own QTEs: swipe, drag, tap ---- */
+.qw[data-kind="flick"] { --c: #38bdf8; --c-deep: #0369a1; --glow: rgb(56 189 248 / .5); width: calc(var(--size) * 1.6 + 36px); }
+.qw[data-kind="drag"] { --c: #a3e635; --c-deep: #4d7c0f; --glow: rgb(163 230 53 / .45); width: calc(var(--size) * 2.4 + 36px); }
+.qw[data-kind="mash"] { --c: #f97316; --c-deep: #c2410c; --glow: rgb(249 115 22 / .5); }
+.gx-pad { position: relative; width: calc(var(--size) * 1.6); height: calc(var(--size) * 1.6); border-radius: var(--r-lg); background: radial-gradient(circle at 50% 40%, color-mix(in srgb, var(--c) 30%, rgb(8 8 16 / .85)), rgb(8 8 16 / .88)); border: 2px solid color-mix(in srgb, var(--c) 70%, transparent); box-shadow: 0 14px 40px -6px var(--glow); display: grid; place-items: center; touch-action: none; user-select: none; -webkit-user-select: none; animation: qw-pop .3s var(--ease-spring) both; cursor: grab; }
+.gx-drag { width: calc(var(--size) * 2.4); cursor: default; }
+.gx-arrow { width: 52%; height: 52%; color: var(--c); filter: drop-shadow(0 0 14px var(--glow)); animation: gx-nudge .7s ease-in-out infinite; }
+.gx-flick[data-dir="up"] .gx-arrow { --nx: 0; --ny: -8px; } .gx-flick[data-dir="down"] .gx-arrow { --nx: 0; --ny: 8px; }
+.gx-flick[data-dir="left"] .gx-arrow { --nx: -8px; --ny: 0; } .gx-flick[data-dir="right"] .gx-arrow { --nx: 8px; --ny: 0; }
+@keyframes gx-nudge { 50% { transform: translate(var(--nx, 0), var(--ny, 0)); } }
+.gx-label { position: absolute; bottom: 8px; left: 0; right: 0; text-align: center; font: 700 .6875rem/1 var(--font-display); letter-spacing: .14em; text-transform: uppercase; color: var(--text-dim); pointer-events: none; }
+.gx-trail { position: absolute; left: 50%; top: 50%; width: 26px; height: 26px; margin: -13px; border-radius: 50%; background: var(--c); box-shadow: 0 0 20px var(--c); opacity: .8; pointer-events: none; }
+.gx-goal { position: absolute; width: calc(var(--tol) * 2 * 100% * 0.66); aspect-ratio: 1; transform: translate(-50%, -50%); border-radius: 50%; border: 3px dashed var(--c); display: grid; place-items: center; color: var(--c); pointer-events: none; }
+.gx-goal[data-near="true"] { background: color-mix(in srgb, var(--c) 30%, transparent); border-style: solid; }
+.gx-goal svg { width: 50%; height: 50%; }
+.gx-token { position: absolute; width: calc(var(--size) * .52); height: calc(var(--size) * .52); transform: translate(-50%, -50%); border-radius: 50%; border: 0; background: radial-gradient(circle at 32% 26%, #fff, var(--c) 45%, var(--c-deep)); box-shadow: 0 0 0 3px rgb(255 255 255 / .2), 0 8px 24px -4px var(--glow); color: #0b0b12; display: grid; place-items: center; cursor: grab; touch-action: none; }
+.gx-token svg { width: 45%; height: 45%; }
+.gx-mash { --pct: 0; }
+.gx-mash .gx-ring { position: absolute; inset: -8px; border-radius: 50%; background: conic-gradient(var(--c) calc(var(--pct) * 360deg), rgb(255 255 255 / .1) 0); -webkit-mask: radial-gradient(circle, transparent calc(50% - 6px), #000 calc(50% - 5px)); mask: radial-gradient(circle, transparent calc(50% - 6px), #000 calc(50% - 5px)); pointer-events: none; }
+.gx-mash:active:not(:disabled) { transform: scale(.95); }
+.qw.calm .gx-arrow { animation: none; }

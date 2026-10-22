@@ -11,11 +11,12 @@
 //   bf_chain                 wait for the parry window (pressing early ends the chain), then PARRY
 //   single, for somebody else  RESCATAR (save) until the evade window closes
 
-export const TIMED_CMDS = ["evade", "parry", "save", "up", "down", "left", "right"];
+export const TIMED_CMDS = ["evade", "parry", "save", "up", "down", "left", "right", "gesture"];
+export const GESTURE_MODES = ["flick", "drag", "mash"];        // QTEs only the Activity has (arena.py on the server)
 export const ARROW_CMDS = ["up", "down", "left", "right"];
 
 export function roleOf(q, youId) {
-  if (!youId || !q || q.mode === "fake") return null;
+  if (!youId || !q) return null;
   if (q.mode === "group") return (q.participants || []).includes(youId) ? "target" : null;
   if (q.target && q.target.id === youId) return "target";
   if (q.mode === "single" && q.target && (q.commands || []).includes("save")) return "rescuer";
@@ -62,6 +63,7 @@ export function phaseAt(entry, t) {
       if (t <= parryTo) return live("parry", "parry", parry[0], parryTo, { bf: bfBand(w.bf, parry[0], parryTo), evadeEnd: evEnd });
       return { kind: "late", cmd: null, from: parryTo, to: timeout, state: "late", of: "parry" };
     }
+    case "fake":                         // looks exactly like an evade: answering it is falling for it
     case "group":
       return t <= evEnd ? live("evade", "evade", 0, evEnd) : { kind: "late", cmd: null, from: evEnd, to: timeout, state: "late" };
     case "direction":
@@ -80,6 +82,8 @@ export function phaseAt(entry, t) {
       if (t <= parryTo) return live("bf", "parry", parry[0], parryTo, { bf: bfBand(w.bf, parry[0], parryTo), chain: q.chain });
       return { kind: "late", cmd: null, from: parryTo, to: timeout, state: "late", of: "parry", chain: q.chain };
     }
+    case "flick": case "drag": case "mash":
+      return t <= timeout ? live(q.mode, "gesture", 0, timeout) : { kind: "late", cmd: null, from: timeout, to: timeout, state: "late" };
     default:
       return { kind: "none", cmd: null, from: 0, to: 0, state: "late" };
   }
@@ -137,12 +141,16 @@ export function canPress(entry, cmd, t, ctx = {}) {
   return false;
 }
 
+const WHY = { wrong_dir: "Dirección equivocada", missed: "Fuera del blanco", short: "Te faltaron toques", late: "Tarde", timeout: "Se acabó el tiempo" };
+const GESTURE_OK = { flick: "¡Deslizado!", drag: "¡En el blanco!", mash: "¡Hecho!" };
+
 // What to call the answer once the server says how it went.
 export function verdictOf(entry, res) {
   const cmd = entry.pressedCmd;
   const ms = res.ms;
   if (res.ok === null || res.ok === undefined) return { ok: null, label: "Enviado", sub: "" };
-  if (!res.ok) return { ok: false, label: "Fallaste", sub: ms != null ? `${(ms / 1000).toFixed(2)} s` : "" };
+  if (entry.q.mode === "fake") return res.ok ? { ok: true, label: "¡Era falso!", sub: "no caíste" } : { ok: false, label: "¡Era falso!", sub: "caíste en la trampa" };
+  if (!res.ok) return { ok: false, label: WHY[res.why] || "Fallaste", sub: ms != null ? `${(ms / 1000).toFixed(2)} s` : "" };
   const q = entry.q;
   if (res.bf) return { ok: true, bf: true, label: "¡Black Flash!", sub: ms != null ? `${(ms / 1000).toFixed(2)} s` : "" };
   const sub = ms != null ? `${(ms / 1000).toFixed(2)} s` : "";
@@ -152,6 +160,7 @@ export function verdictOf(entry, res) {
     return { ok: true, label: perfect ? "¡Parry perfecto!" : "¡Parry!", sub, perfect: !!perfect };
   }
   if (cmd === "save") return { ok: true, label: "¡Rescate!", sub };
+  if (cmd === "gesture") return { ok: true, label: GESTURE_OK[q.mode] || "¡Bien!", sub };
   if (ARROW_CMDS.includes(cmd)) return { ok: true, label: "¡Correcto!", sub };
   if (q.mode === "combo") return { ok: true, label: res.done ? "¡Combo completo!" : "¡Bien!", sub };
   return { ok: true, label: "¡Esquivado!", sub };

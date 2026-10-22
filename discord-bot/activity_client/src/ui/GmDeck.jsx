@@ -11,7 +11,7 @@ import { useLive } from "../views/gm/hooks.js";
 import { PRESETS } from "../fx-model.js";
 import { cx } from "../util.js";
 
-const MODES = [["single", "Individual"], ["group", "Grupal"], ["combo", "Combo"], ["direction", "Dirección"]];
+const MODES = [["single", "Individual"], ["group", "Grupal"], ["combo", "Combo"], ["direction", "Dirección"], ["flick", "Deslizar"], ["drag", "Arrastrar"], ["mash", "Machacar"], ["fake", "Falso"]];
 
 function Block({ icon: Icon, title, children, testid }) {
   return (

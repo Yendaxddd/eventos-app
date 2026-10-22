@@ -39,7 +39,9 @@ export function startQte(frame, { practice = false, ago = 0 } = {}) {
   if (practice) {                                    // a practice QTE the player lets run out says so, as the real one would hurt
     setTimeout(() => {
       const open = find(id);
-      if (open && !open.pressed) { settle(open, null, { ok: false, label: "Se acabó el tiempo", sub: "no se pulsó nada" }); }
+      if (open && !open.pressed) {
+        settle(open, null, open.q.mode === "fake" ? { ok: true, label: "¡Era falso!", sub: "no caíste" } : { ok: false, label: "Se acabó el tiempo", sub: "no se pulsó nada" });
+      }
     }, (frame.timeout || 5) * 1000 + 60);
   }
 }
@@ -53,6 +55,13 @@ export function expirePractice(id, label = "Se acabó el tiempo", sub = "no se p
 export function endQte(id) {
   const entry = find(id);
   if (!entry) return;
+  if (entry.q.mode === "fake" && entry.role === "target" && !entry.pressed && !entry.result) {     // it ended and nobody fell for it
+    const verdict = { ok: true, label: "¡Era falso!", sub: "no caíste" };
+    replace(entry.id, { ended: true, endedAt: performance.now(), pressed: true, result: verdict });
+    playVerdict(verdict);
+    remove(entry.id, 1700);
+    return;
+  }
   replace(entry.id, { ended: true, endedAt: performance.now() });
   remove(entry.id, entry.pressed ? 1700 : 450);
 }
@@ -80,7 +89,7 @@ export function context() {
   };
 }
 
-export function press(id, cmd) {
+export function press(id, cmd, data = undefined) {
   const entry = find(id);
   if (!entry) return false;
   const now = performance.now();
@@ -90,7 +99,7 @@ export function press(id, cmd) {
 
   vibrate(18);
   if (entry.practice) {
-    const res = judge(entry.q, cmd, t, { index: entry.step ? entry.step.index : 0 });
+    const res = judge(entry.q, cmd, t, { index: entry.step ? entry.step.index : 0, data });
     settle(entry, cmd, res, { ms: Math.round(t * 1000) });
     return true;
   }
@@ -99,7 +108,7 @@ export function press(id, cmd) {
   const combo = entry.q.mode === "combo";
   replace(entry.id, { pressed: !combo, busy: combo, pressedCmd: cmd, pressedAt: now });
   if (document.activeElement && document.activeElement.blur && document.activeElement.closest && document.activeElement.closest(".qw, .rescue-chip")) document.activeElement.blur();
-  if (sendFrame({ t: "press", id: entry.id, command: cmd, as: activeAs.value, dt }) === false) {      // the socket is down: nothing was sent
+  if (sendFrame({ t: "press", id: entry.id, command: cmd, as: activeAs.value, dt, ...(data ? { data } : {}) }) === false) {      // the socket is down: nothing was sent
     replace(entry.id, { pressed: false, busy: false, pressedCmd: null });
     toast("Sin conexión: no se envió. Se está reconectando…", "bad");
     return false;
@@ -134,7 +143,7 @@ export function onResult(frame) {
   const entry = find(frame.id);
   if (!entry) return;
   const bf = (frame.reactions || []).includes("❗");
-  const res = { ok: frame.ok, ms: frame.ms, bf, done: frame.done };
+  const res = { ok: frame.ok, ms: frame.ms, bf, done: frame.done, why: frame.why };
   if (res.ok === null || res.ok === undefined) {                 // an answer the game did not judge (e.g. parry on cooldown): the buttons come back
     replace(entry.id, { pressed: false, busy: false, pressedCmd: null });
     return;

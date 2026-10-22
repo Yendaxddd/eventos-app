@@ -8,6 +8,7 @@ export const CMD = {
 export const DIFFICULTY = { easy: "Fácil", medium: "Media", hard: "Difícil", impossible: "Imposible" };
 
 export const MODE = {
+  flick: "Deslizar", drag: "Arrastrar", mash: "Machacar",
   single: "Individual", group: "Grupal", combo: "Combo", direction: "Dirección", bf_chain: "Cadena Black Flash", fake: "Falso",
 };
 

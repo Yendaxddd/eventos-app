@@ -153,3 +153,80 @@ def test_several_at_once_can_be_on_screen_together_and_leaving_the_page_ends_the
         assert page.errors == []
 
     asyncio.run(with_page(scenario, actions=True))
+
+
+async def do_gesture(page, keyboard=False):
+    """Answers the gesture QTE on screen like a person would: a real swipe, a real drag, real taps (or the keys)."""
+    q = await page.evaluate("(() => { const e = window.__eventos.qtes.find((x) => x.practice && !x.pressed && !x.ended); return e ? { mode: e.q.mode, arena: e.q.arena } : null; })()")
+    if not q or q["mode"] not in ("flick", "drag", "mash"):
+        return False
+    if q["mode"] == "flick":
+        if keyboard:
+            await page.keyboard.press({"up": "ArrowUp", "down": "ArrowDown", "left": "ArrowLeft", "right": "ArrowRight"}[q["arena"]["dir"]])
+            return True
+        box = await page.locator(".gx-flick").first.bounding_box()
+        cx, cy = box["x"] + box["width"] / 2, box["y"] + box["height"] / 2
+        dx, dy = {"up": (0, -70), "down": (0, 70), "left": (-70, 0), "right": (70, 0)}[q["arena"]["dir"]]
+        await page.mouse.move(cx, cy)
+        await page.mouse.down()
+        await page.mouse.move(cx + dx, cy + dy, steps=4)
+        await page.mouse.up()
+    elif q["mode"] == "drag":
+        pad = await page.locator(".gx-drag").first.bounding_box()
+        token = await page.locator(".gx-token").first.bounding_box()
+        gx, gy = q["arena"]["to"]
+        await page.mouse.move(token["x"] + token["width"] / 2, token["y"] + token["height"] / 2)
+        await page.mouse.down()
+        await page.mouse.move(pad["x"] + gx * pad["width"], pad["y"] + gy * pad["height"], steps=6)
+        await page.mouse.up()
+    else:
+        for _ in range(q["arena"]["count"]):
+            if keyboard:
+                await page.keyboard.press("Space")
+            else:
+                await page.locator(".gx-mash").first.click()
+            await asyncio.sleep(0.09)
+    return True
+
+
+@pytest.mark.parametrize("kind", ["flick", "drag", "mash"])
+def test_the_new_gesture_qtes_are_answered_with_a_real_swipe_drag_or_taps(kind):
+    async def scenario(hub, browser, url):
+        page = await open_training(browser, url, {"kinds": [kind], "difficulties": ["easy"], "count": 2})
+        await page.click("[data-testid=training-start]")
+        loop = asyncio.get_running_loop()
+        end = loop.time() + 30
+        while loop.time() < end and await page.locator("[data-testid=training-done]").count() == 0:
+            if await page.locator(f"[data-testid=gesture-{kind}]").count():
+                await do_gesture(page)
+            await asyncio.sleep(0.1)
+        await page.wait_for_selector("[data-testid=training-done]")
+        assert (await page.locator("[data-testid=sum-ok]").inner_text()).strip() == "2 / 2", kind
+        assert page.errors == []
+
+    asyncio.run(with_page(scenario, actions=True))
+
+
+@pytest.mark.parametrize("kind", ["flick", "mash"])
+def test_the_gesture_qtes_can_be_answered_with_the_keyboard(kind):
+    async def scenario(hub, browser, url):
+        page = await open_training(browser, url, {"kinds": [kind], "difficulties": ["easy"], "count": 1})
+        await page.click("[data-testid=training-start]")
+        await page.wait_for_selector(f"[data-testid=gesture-{kind}]", timeout=8000)
+        await do_gesture(page, keyboard=True)
+        await page.wait_for_selector("[data-testid=training-done]", timeout=8000)
+        assert (await page.locator("[data-testid=sum-ok]").inner_text()).strip() == "1 / 1"
+        assert page.errors == []
+
+    asyncio.run(with_page(scenario, actions=True))
+
+
+def test_a_fake_qte_is_won_by_not_touching_it():
+    async def scenario(hub, browser, url):
+        page = await open_training(browser, url, {"kinds": ["fake"], "difficulties": ["easy"], "count": 1, "speed": 200})
+        await page.click("[data-testid=training-start]")
+        await page.wait_for_selector("[data-testid=training-done]", timeout=15000)
+        assert (await page.locator("[data-testid=sum-ok]").inner_text()).strip() == "1 / 1"
+        assert page.errors == []
+
+    asyncio.run(with_page(scenario, actions=True))
