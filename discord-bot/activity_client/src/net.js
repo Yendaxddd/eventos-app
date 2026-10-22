@@ -6,9 +6,10 @@ import { inDiscord, devName, devGm, devHost, base, store } from "./util.js";
 import { SyncEstimator, qualityOf } from "./clock.js";
 import {
   conn, banner, you, perms, channelName, users, canWrite, version, messages, game, me, characters, charAvatars, activeAs,
-  rules, link, comp, calib, prefs, toast, flash, myHp,
+  rules, link, comp, calib, prefs, toast, flash, myHp, sayRefused,
 } from "./state.js";
 import { DEFAULT_PREFS, sanitizePrefs, saveLocalPrefs } from "./prefs.js";
+import { flushPrefs } from "./settings-actions.js";
 import {
   bindSender, startQte, endQte, clearQtes, onResult, onStep, onPressError, netMs,
 } from "./qte-store.js";
@@ -46,6 +47,7 @@ window.addEventListener("unhandledrejection", (e) => report("error", (e.reason &
 let ws = null;
 let retry = 0;
 let welcomed = false;
+let everWelcomed = false;                // after the first welcome, a reconnection keeps the screen as it is (with a banner)
 let hello = null;
 export const sync = new SyncEstimator();
 let burstTimer = null, keepTimer = null;
@@ -176,7 +178,7 @@ function onFrame(frame, arrival) {
   switch (frame.t) {
     case "welcome": {
       report("conectado");
-      welcomed = true; retry = 0; sync.samples.length = 0;
+      welcomed = true; everWelcomed = true; retry = 0; sync.samples.length = 0;
       clearPanelCache();                                    // what the dashboards remembered may be from before a reconnect
       batch(() => {
         conn.value = { state: "connected", text: "Conectado", detail: "" };
@@ -198,7 +200,8 @@ function onFrame(frame, arrival) {
         setMobs(frame.mobs, arrival);
         comp.value = { ...comp.value, ...(frame.comp || {}) };
         calib.value = frame.calib || null;
-        if (frame.prefs) setPrefsFromServer(frame.prefs);
+        if (flushPrefs()) { /* this device changed settings while offline: they win over the server's copy */ }
+        else if (frame.prefs) setPrefsFromServer(frame.prefs);
         else if (frame.prefs === null && JSON.stringify(prefs.value) !== JSON.stringify(DEFAULT_PREFS)) send({ t: "prefs", prefs: prefs.value });   // the server knows nothing about this person yet: it learns from this device
         messages.value = trimMessages(frame.backlog || []);
         game.value = frame.state && frame.state.players ? frame.state : null;
@@ -261,13 +264,17 @@ function onFrame(frame, arrival) {
       break;
     }
     case "error":
-      if (frame.code === "auth") {
+      if (frame.code === "auth" && everWelcomed && hello && hello.token && !hello.fresh) {
+        accessToken = null;                                  // the session we kept expired: sign in again on the next try
+        ws.close();
+      } else if (frame.code === "auth") {
         conn.value = { state: "error", text: "No se pudo entrar", detail: frame.reason };
         retry = -1;
         ws.close();
       } else {
         toast(frame.reason, "bad");
         if (frame.code === "press" && frame.id) onPressError(String(frame.id), frame.reason);
+        if (frame.code === "say") sayRefused.value++;
       }
       break;
   }
@@ -278,7 +285,12 @@ function connect(helloFrame) {
   const proto = location.protocol === "https:" ? "wss" : "ws";
   ws = new WebSocket(`${proto}://${location.host}${base}/ws`);
   welcomed = false;
-  ws.onopen = () => { report("websocket abierto"); ws.send(JSON.stringify(hello)); conn.value = { state: "starting", text: "Entrando…", detail: "" }; };
+  ws.onopen = () => {
+    report("websocket abierto");
+    const { fresh, ...frame } = hello;
+    ws.send(JSON.stringify(frame));
+    if (!everWelcomed) conn.value = { state: "starting", text: "Entrando…", detail: "" };     // a reconnection keeps the screen
+  };
   ws.onmessage = (event) => {
     const arrival = performance.now();
     let frame;
@@ -292,13 +304,22 @@ function connect(helloFrame) {
       if (welcomed) banner.value = { text: `Conexión perdida. Reconectando en ${Math.round(wait / 1000)} s…`, kind: "bad" };
       else conn.value = { state: "error", text: "Sin conexión", detail: `Reintentando en ${Math.round(wait / 1000)} s…` };
     });
-    setTimeout(() => { login().then(connect).catch(fail); }, wait);
+    setTimeout(() => {
+      login().then(connect).catch((error) => {
+        if (!everWelcomed) { fail(error); return; }
+        report("reconexión fallida", (error && error.message) || String(error));      // no network yet: keep trying, the screen stays
+        ws.onclose();
+      });
+    }, wait);
   };
 }
 
 async function login() {
-  const config = await (await fetch(`${base}/api/config`)).json();
+  const reply = await fetch(`${base}/api/config`);
+  if (!reply.ok) throw new Error(`El servidor del evento respondió ${reply.status}.`);
+  const config = await reply.json();
   channelName.value = config.channel || "Evento";
+  if (inDiscord && accessToken) return { t: "hello", token: accessToken };        // a reconnection: the session we have still works
   if (inDiscord) {
     const discord = await initSdk(config.clientId);
     report("SDK de Discord listo");
@@ -313,7 +334,7 @@ async function login() {
     await discord.commands.authenticate({ access_token: data.access_token });
     afterAuth();
     accessToken = data.access_token;
-    return { t: "hello", token: data.access_token };
+    return { t: "hello", token: data.access_token, fresh: true };
   }
   if (devName && config.dev) return { t: "hello", dev: devName, gm: devGm, host: devHost };
   throw new Error("Esta página está pensada para abrirse desde Discord. Para probarla en este PC añade ?dev=TuNombre a la dirección.");

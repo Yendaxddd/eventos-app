@@ -1,6 +1,7 @@
 import { useState } from "preact/hooks";
 import { Copy, LifeBuoy } from "lucide-preact";
 import { comp, link, version, you, toast, rules } from "../state.js";
+import { DIFFICULTY } from "../terms.js";
 import { Page, Section } from "../ui/Controls.jsx";
 import { inDiscord } from "../util.js";
 
@@ -55,7 +56,7 @@ export function HelpPage() {
       <Section title="Para soporte">
         <div class="setting"><div class="info"><strong>Datos de tu conexión</strong><span>Si algo falla, copia esto y envíaselo a quien organiza el evento.</span></div>
           <button class="btn btn-sm" type="button" onClick={copy}><Copy size={14} /> {copied ? "Copiado" : "Copiar"}</button></div>
-        {rules.value && <p class="faint" style={{ fontSize: ".75rem" }}>Ventanas de esta partida: {Object.entries(rules.value.times || {}).map(([k, t]) => `${k} (esquivar ${t.evade} s, parry ${t.parry[0]}–${t.parry[1]} s)`).join(" · ")}</p>}
+        {rules.value && <p class="faint" style={{ fontSize: ".75rem" }}>Ventanas de esta partida: {Object.entries(rules.value.times || {}).map(([k, t]) => `${DIFFICULTY[k] || k} (esquivar ${t.evade} s, parry ${t.parry[0]}–${t.parry[1]} s)`).join(" · ")}</p>}
       </Section>
     </Page>
   );

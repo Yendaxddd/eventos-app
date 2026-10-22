@@ -91,3 +91,11 @@ test("when widgets cannot be placed one by one, laying them all out again always
   assert.equal(packAll(phone, Array.from({ length: 30 }, () => boxAt)), null);       // nobody can lay out thirty
   assert.equal(anyOverlap([{ x: 0, y: 0, w: 10, h: 10 }, { x: 5, y: 5, w: 10, h: 10 }]), true);
 });
+
+test("a widget bigger than the whole area is shrunk until it fits instead of spilling out", () => {
+  const small = { left: 0, top: 0, width: 260, height: 220 };
+  const boxAt = (k) => ({ w: Math.round(300 * k), h: Math.round(320 * k) });
+  const spot = pickSpotFit(small, [], boxAt, "random", seeded(4));
+  assert.ok(spot.k < 1 && spot.w <= small.width - 2 * EDGE && spot.h <= small.height - 2 * EDGE, JSON.stringify(spot));
+  assert.ok(spot.x >= EDGE && spot.y >= EDGE && spot.x + spot.w <= small.width - EDGE + 1 && spot.y + spot.h <= small.height - EDGE + 1);
+});

@@ -84,6 +84,7 @@
 .qw-pad .up { grid-area: 1 / 2; } .qw-pad .left { grid-area: 2 / 1; } .qw-pad .right { grid-area: 2 / 3; } .qw-pad .down { grid-area: 3 / 2; }
 .qw-pad .shown { grid-area: 2 / 2; display: grid; place-items: center; border-radius: 50%; background: rgb(8 8 16 / .86); border: 2px dashed var(--c); color: var(--c); }
 .qw-pad .shown svg { width: 55%; height: 55%; }
+.qw[data-kind="arrows"] .qw-hint { max-width: calc(var(--size) * 1.74 + 12px); }
 .qw-hint { max-width: 220px; text-align: center; font: 600 .75rem/1.25 var(--font-ui); color: #fff; padding: 4px 10px; border-radius: var(--r-md); background: rgb(8 8 16 / .78); pointer-events: none; }
 
 /* small second button: evade stays available while the parry window is open (setting) */

@@ -25,7 +25,7 @@ function Block({ icon: Icon, title, children, testid }) {
 
 function Boss({ d, run, busy }) {
   const boss = d.boss.active;
-  const [damage, setDamage] = useState(10);
+  const [damage, setDamage] = useState("10");
   if (!boss) {
     return (
       <div class="col" style={{ gap: "8px" }}>
@@ -53,8 +53,11 @@ function Boss({ d, run, busy }) {
         <button class="btn btn-sm" type="button" disabled={busy} onClick={() => run("gm.boss_hp", { action: "heal", amount: amount(10) })} data-testid="deck-heal"><Heart size={13} /> +10 %</button>
       </div>
       <div class="row" style={{ gap: "6px" }}>
-        <input class="input num" type="number" min={1} max={999999} value={damage} aria-label="Daño exacto" style={{ width: "92px" }} onInput={(e) => setDamage(Math.max(1, Number(e.currentTarget.value) || 1))} />
-        <button class="btn btn-sm grow" type="button" disabled={busy} onClick={() => run("gm.boss_hp", { action: "damage", amount: damage })} data-testid="deck-dmg-exact">Hacer {damage} de daño</button>
+        {/* the box keeps what is typed (an empty box while correcting the number stays empty); the button uses the number in it */}
+        <input class="input num" type="number" inputMode="numeric" min={1} max={999999} value={damage} aria-label="Daño exacto" style={{ width: "92px" }} onInput={(e) => setDamage(e.currentTarget.value)} />
+        <button class="btn btn-sm grow" type="button" disabled={busy || !(Math.round(Number(damage)) >= 1)} onClick={() => run("gm.boss_hp", { action: "damage", amount: Math.round(Number(damage)) })} data-testid="deck-dmg-exact">
+          {Math.round(Number(damage)) >= 1 ? `Hacer ${Math.round(Number(damage))} de daño` : "Escribe el daño"}
+        </button>
       </div>
       {(d.boss.abilities.length > 0 || d.boss.domain) && (
         <div class="deck-grid" data-testid="deck-abilities" aria-label="Habilidades del jefe">

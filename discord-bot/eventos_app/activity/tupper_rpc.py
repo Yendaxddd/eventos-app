@@ -25,6 +25,9 @@ log = logging.getLogger("eventos_app.activity")
 MAX_TUPPERS = 40                 # one import
 IMPORT_EVERY = 15.0              # seconds between two imports of the same player
 PARALLEL_DOWNLOADS = 3
+AVATAR_MAX = 3 * 1024 * 1024     # one character's picture (Tupperbox keeps them small)
+QUOTA = 60 * 1024 * 1024         # new pictures one player may add to the shared library per day: nobody fills it for everybody
+QUOTA_WINDOW = 24 * 3600.0
 
 
 class TupperRpc:
@@ -34,6 +37,7 @@ class TupperRpc:
         self.char_images: dict[str, str] = {}              # character -> «files/images/<hash>.<ext>»
         self.fetch_allow_private = False                    # only the tests serve pictures from this very machine
         self._imported_at: dict[int, float] = {}
+        self._quota: dict[int, list] = {}                   # player -> [since (monotonic), bytes of new pictures added]
         self._importing: set[int] = set()
         if images_file is not None and images_file.exists():
             try:
@@ -122,8 +126,16 @@ class TupperRpc:
         async def download(result: dict, url: str) -> None:
             async with gate:
                 try:
-                    data = await fetch_bytes(url, max_bytes=8 * 1024 * 1024, allow_private=self.fetch_allow_private)
+                    data = await fetch_bytes(url, max_bytes=AVATAR_MAX, allow_private=self.fetch_allow_private)
+                    used = self._quota.setdefault(user, [time.monotonic(), 0])
+                    if time.monotonic() - used[0] > QUOTA_WINDOW:
+                        used[:] = [time.monotonic(), 0]
+                    is_new = not self.files.exists(IMAGES, self.files.name_for(IMAGES, data))
+                    if is_new and used[1] + len(data) > QUOTA:
+                        raise MediaError("Ya subiste muchas imágenes hoy: usa las que tienes o pide a un GM que las suba.")
                     stored = self.files.save(IMAGES, data)
+                    if is_new:
+                        used[1] += len(data)
                 except (FetchError, MediaError) as exc:
                     result.update(image="error", note=str(exc))
                     return

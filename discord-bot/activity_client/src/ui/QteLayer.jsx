@@ -274,10 +274,18 @@ function allocate({ items, counterShown, area, avoid, spots, lastSpot, size, pla
 // finds it moved), and a late widget stays there too.
 const spotKey = (entry, phase) => (phase.kind === "none" ? null : `${entry.id}:fixed`);
 
+// What a screen reader says when a QTE comes (once: the timers and the redraws are not read out)
+function announce(lead) {
+  if (!lead) return "";
+  const q = lead.q;
+  if (lead.pressed || lead.ended) return "";
+  return `¡QTE ${(MODE[q.mode] || q.mode).toLowerCase()}! ${DIFFICULTY[q.difficulty] || ""}. Espacio para responder.`;
+}
+
 export function QteLayer() {
   const list = qtes.value;
   const counterAt = me.value ? me.value.counterAt : null;
-  const active = list.length > 0 || !!counterAt;
+  const active = list.length > 0 || (!!counterAt && counterAt > performance.now() - 200);      // an old counter does not keep the clock going
   useNow(100, active);                                   // redraws the countdown numbers
   const spots = useRef(new Map());                       // widget key -> where it is on screen
   const lastSpot = useRef(new Map());                    // entry id -> where its last widget was (a late widget stays there)
@@ -323,12 +331,13 @@ export function QteLayer() {
 
   return (
     <>
-      <div class="qlayer" data-testid="qte-layer" aria-live="assertive">
+      <div class="sr-only" aria-live="assertive" data-testid="qte-announce">{announce(leader)}</div>
+      <div class="qlayer" data-testid="qte-layer">
         {items.map((it) => (
           <Widget key={`${it.entry.id}:${it.phase.kind === "bf" ? "parry" : it.phase.kind === "none" ? "late" : it.phase.kind}:${it.entry.q.mode === "combo" && it.entry.step ? it.entry.step.index : ""}`}
             entry={it.entry} phase={it.phase} rank={it.rank} lead={it.lead} spot={it.spot} size={size} ctx={ctx} />
         ))}
-        {counterShown && <CounterWidget left={counterLeft} spot={spots.current.get("counter")} size={size} />}
+        {counterShown && <CounterWidget key={counterAt} left={counterLeft} spot={spots.current.get("counter")} size={size} />}
       </div>
       {queued > 0 && <div class="qqueue" data-testid="qte-queue">+{queued} en cola</div>}
       {rescues.length > 0 && <RescueRail rescues={rescues} ctx={ctx} />}
@@ -341,7 +350,7 @@ function RescueRail({ rescues, ctx }) {
   const shown = sorted.slice(0, 3);
   const area = playArea();
   return (
-    <div class="rescue-dock" data-testid="rescue-rail" style={{ left: `${area.left}px`, top: `${area.top + 10}px`, width: `${area.width}px` }}>
+    <div class="rescue-dock" data-avoid data-testid="rescue-rail" style={{ left: `${area.left}px`, top: `${area.top + 10}px`, width: `${area.width}px` }}>
       {shown.map((e) => <RescueChip key={e.id} entry={e} ctx={ctx} />)}
       {sorted.length > shown.length && <span class="chip">+{sorted.length - shown.length}</span>}
     </div>

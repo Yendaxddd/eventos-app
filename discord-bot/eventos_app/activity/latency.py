@@ -17,6 +17,8 @@ import logging
 import time
 from pathlib import Path
 
+from .later import SavesLater
+
 log = logging.getLogger("eventos_app.activity")
 
 NET_MAX_MS = 400.0          # one-way delay credited at most
@@ -51,7 +53,7 @@ def compensation(net_ms: float, device_ms: float, cap_ms: float = CAP_MS) -> dic
     return {"net": round(min(NET_MAX_MS, max(0.0, net_ms)), 1), "device": round(min(DEVICE_MAX_MS, max(0.0, device_ms)), 1), "cap": cap_ms}
 
 
-class LatencyBook:
+class LatencyBook(SavesLater):
     """The tap-test result of each player (and the game master's manual device override), by Discord user id."""
 
     def __init__(self, path: Path | None = None) -> None:
@@ -85,7 +87,7 @@ class LatencyBook:
             clean.update({"device": before["device"], "spread": before.get("spread"), "taps": before.get("taps", 0)})
         self._data[str(user_id)] = clean
         if user_id > 0:
-            self._save()
+            self._save_soon()
         return clean
 
     def clear(self, user_id: int) -> None:

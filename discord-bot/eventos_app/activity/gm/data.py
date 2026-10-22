@@ -55,16 +55,23 @@ class DataOps:
         return manager
 
     # ---- backups -------------------------------------------------------------------------------------------------------------
+    @staticmethod
+    def _backup_prefix(path: Path) -> str:
+        """The start of the names of a file's copies: its folder too, so an approved object, a pending one and a tree that share a
+        name never prune (or restore) each other's copies."""
+        return f"{path.parent.name}-{path.stem}"
+
     def _backup(self, path: Path) -> None:
         if not path.exists():
             return
         folder = self._need_dir() / "backups"
         folder.mkdir(parents=True, exist_ok=True)
         stamp = time.strftime("%Y%m%d-%H%M%S")
-        taken = [int(m.group(1)) for f in folder.glob(f"{path.stem}.{stamp}.*.json") if (m := re.fullmatch(r".+\.(\d+)\.json", f.name))]
-        target = folder / f"{path.stem}.{stamp}.{max(taken, default=0) + 1:04d}.json"      # the names sort in the order the copies were made, even within one second
+        prefix = self._backup_prefix(path)
+        taken = [int(m.group(1)) for f in folder.glob(f"{prefix}.{stamp}.*.json") if (m := re.fullmatch(r".+\.(\d+)\.json", f.name))]
+        target = folder / f"{prefix}.{stamp}.{max(taken, default=0) + 1:04d}.json"      # the names sort in the order the copies were made, even within one second
         shutil.copy2(path, target)
-        old = sorted(folder.glob(f"{path.stem}.*.json"))
+        old = sorted(folder.glob(f"{prefix}.*.json"))
         for stale in old[:-BACKUPS_KEPT]:
             stale.unlink(missing_ok=True)
 
@@ -80,7 +87,7 @@ class DataOps:
         folder = self._need_dir() / "backups"
         if not folder.is_dir():
             return []
-        found = sorted(folder.glob(f"{path.stem}.*.json"), reverse=True)[:BACKUPS_KEPT]
+        found = sorted(folder.glob(f"{self._backup_prefix(path)}.*.json"), reverse=True)[:BACKUPS_KEPT]
         return [{"name": f.name, "ts": int(f.stat().st_mtime * 1000), "size": f.stat().st_size} for f in found]
 
     # ---- the files that can be edited -------------------------------------------------------------------------------------------
@@ -167,7 +174,7 @@ class DataOps:
         path = self._file_path(key)
         folder = self._need_dir() / "backups"
         source = folder / str(name or "")
-        if source.parent != folder or not source.name.startswith(path.stem + ".") or not source.is_file():
+        if source.parent != folder or not source.name.startswith(self._backup_prefix(path) + ".") or not source.is_file():
             raise RpcError("Esa copia ya no existe.")
         out = self.file_save(actor, key, source.read_text(encoding="utf-8"))
         self.log.add(actor, f"Recuperó una copia de «{path.name}»")

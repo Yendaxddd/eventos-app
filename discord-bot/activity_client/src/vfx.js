@@ -17,7 +17,8 @@ const surface = () => {
   return host;
 };
 
-const root = () => document.getElementById("root");
+// what shakes and zooms: the page (chat, cards), never the QTE buttons, which sit outside it and must stay where the player aims
+const root = () => document.querySelector(".app") || document.getElementById("root");
 const rand = (lo, hi) => lo + Math.random() * (hi - lo);
 
 function add(className, style, keyframes, ms, easing = "ease-out") {

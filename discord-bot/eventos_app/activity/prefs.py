@@ -8,6 +8,8 @@ import logging
 from collections import OrderedDict
 from pathlib import Path
 
+from .later import SavesLater
+
 log = logging.getLogger("eventos_app.activity")
 
 DEFAULTS: dict = {
@@ -48,7 +50,7 @@ def sanitize(raw) -> dict:
     return out
 
 
-class PrefsStore:
+class PrefsStore(SavesLater):
     """Settings by Discord user id, in a JSON file (people testing from this PC, with negative ids, are kept in memory only)."""
 
     def __init__(self, path: Path | None = None) -> None:
@@ -76,7 +78,7 @@ class PrefsStore:
         while len(self._data) > MAX_PEOPLE:
             self._data.popitem(last=False)
         if user_id > 0:
-            self._save()
+            self._save_soon()
         return dict(clean)
 
     def _save(self) -> None:

@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "preact/hooks";
 import { Check, ChevronDown, SendHorizontal } from "lucide-preact";
-import { activeAs, canWrite, characters, charAvatars, you, view } from "../state.js";
+import { activeAs, canWrite, characters, charAvatars, lastSaid, sayRefused, toast, you, view } from "../state.js";
 import { send } from "../net.js";
 import { store } from "../util.js";
 import { Avatar } from "./Avatar.jsx";
@@ -53,6 +53,7 @@ function AsPicker() {
 
 export function Composer() {
   const [text, setText] = useState("");
+  useEffect(() => sayRefused.subscribe((n) => { if (n && lastSaid.value) { setText((now) => now || lastSaid.value); lastSaid.value = ""; } }), []);
   const box = useRef(null);
   const enabled = canWrite.value && !!you.value;
 
@@ -68,7 +69,11 @@ export function Composer() {
     event && event.preventDefault();
     const value = text.trim();
     if (!value || !enabled) return;
-    send({ t: "say", text: value.slice(0, MAX), as: activeAs.value });
+    if (!send({ t: "say", text: value.slice(0, MAX), as: activeAs.value })) {        // no connection: what was written stays in the box
+      toast("Sin conexión: tu mensaje sigue aquí, envíalo cuando vuelva.", "warn", 3000);
+      return;
+    }
+    lastSaid.value = value;                                      // if the server refuses it, it comes back to the box (net.js)
     setText("");
     if (box.current) box.current.focus();                       // keep the keyboard up on a phone
   };

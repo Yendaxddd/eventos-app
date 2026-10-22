@@ -186,7 +186,10 @@ function unlock() {
     const queued = pending.filter((x) => now - x.at < STALE_MS);
     pending = [];
     for (const { frame } of queued) playSound(frame);
-    if (track) play(track);
+    if (track) {                                     // the music went on without us: it joins at the second everybody else is at
+      if (track.el.readyState >= 1) seek(track);
+      if (track) play(track);
+    }
   }).catch(() => {});
 }
 if (typeof document !== "undefined") {

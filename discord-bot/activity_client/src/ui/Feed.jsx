@@ -91,7 +91,7 @@ export function Feed() {
   const list = messages.value;
   const box = useRef(null);
   const stick = useRef(true);
-  const seen = useRef(0);
+  const seen = useRef(null);                                    // the id of the newest message already counted
   const [unread, setUnread] = useState(0);
 
   const toBottom = () => { const el = box.current; if (el) el.scrollTop = el.scrollHeight; };
@@ -101,15 +101,21 @@ export function Feed() {
     if (stick.current && unread) setUnread(0);
   };
   useLayoutEffect(() => {
-    const added = list.length - seen.current;
-    seen.current = list.length;
+    // counted by the newest id, not by length: once the list is at its limit, a new message pushes an old one out and the length stays
+    const last = list.length ? list[list.length - 1].id : null;
+    let added = 0;
+    if (seen.current !== null && last !== seen.current) {
+      const at = list.findIndex((m) => m.id === seen.current);
+      added = at < 0 ? list.length : list.length - 1 - at;
+    }
+    seen.current = last;
     if (stick.current) toBottom();
     else if (added > 0) setUnread((n) => n + added);
   }, [list]);
 
   return (
     <div class="feed-wrap">
-      <div class="feed" ref={box} onScroll={onScroll} onLoadCapture={() => { if (stick.current) toBottom(); }} role="log" aria-live="polite" aria-label="Canal del evento" data-testid="feed">
+      <div class="feed" ref={box} onScroll={onScroll} onLoadCapture={() => { if (stick.current) toBottom(); }} role="log" aria-live="polite" aria-relevant="additions" aria-label="Canal del evento" data-testid="feed">
         {list.length === 0 && (
           <div class="feed-empty"><MessagesSquare size={32} /><strong>Todavía no hay mensajes</strong><span>Lo que pase en el canal del evento aparecerá aquí.</span></div>
         )}

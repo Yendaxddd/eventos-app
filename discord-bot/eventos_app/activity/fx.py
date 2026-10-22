@@ -179,13 +179,8 @@ class FxDirector:
     async def show(self, binding: dict, ctx: dict, user_ids: set[int] | None = None) -> None:
         """The effect on the screens of `user_ids` (everybody when None). The sound waits for the binding's delay, as the picture does."""
         frame = self.frame(binding, ctx)
-        for conn in list(self.hub.conns.values()):
-            if conn.hidden or (user_ids is not None and conn.user_id not in user_ids):
-                continue
-            try:
-                await self.hub.send(conn, frame)
-            except Exception:  # noqa: BLE001
-                log.exception("could not send an effect")
+        targets = [c for c in list(self.hub.conns.values()) if not c.hidden and (user_ids is None or c.user_id in user_ids)]
+        await asyncio.gather(*(self.hub.send(c, frame) for c in targets))
         if binding["sound"]:
             asyncio.get_running_loop().create_task(self._sound(binding, user_ids))
 

@@ -126,7 +126,7 @@ class FakeDiscord:
     # ---- endpoints ------------------------------------------------------------------
     def add_oauth_user(self, code: str, user_id: int, name: str = "player") -> str:
         """An Activity player: trading `code` gives an access token that belongs to `user_id`."""
-        token = f"bearer-{code}"
+        token = f"bearer-{code}-0123456789abcdef"            # about as long as a real one
         self.codes[code] = token
         self.bearer[token] = {"id": str(user_id), "username": name, "global_name": name.title(), "avatar": None}
         return token

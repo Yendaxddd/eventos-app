@@ -1,15 +1,16 @@
 """Download a picture from an address a player typed, without becoming a way into the host's own network.
 
 The Activity's server runs on the game master's PC, so an address like `http://192.168.1.1/` or `http://127.0.0.1:8765/` must never be
-fetched on a player's behalf. Every connection (and every redirect) goes through a resolver that refuses anything but public internet
-addresses, only web addresses (`https`, or the odd old `http` one) are accepted, and the size is capped while it downloads.
+fetched on a player's behalf. Redirects are followed by hand, each new address checked like the first; every connection goes through a
+resolver that refuses anything but public internet addresses (aiohttp does not ask the resolver about a bare IP, which `check_url`
+covers); only web addresses (`https`, or the odd old `http` one) are accepted, and the size is capped while it downloads.
 """
 from __future__ import annotations
 
 import asyncio
 import ipaddress
 import socket
-from urllib.parse import urlsplit
+from urllib.parse import urljoin, urlsplit
 
 import aiohttp
 from aiohttp.abc import AbstractResolver
@@ -74,17 +75,18 @@ async def fetch_bytes(url: str, *, max_bytes: int, timeout: float = 15.0, allow_
         connector = aiohttp.TCPConnector(resolver=None if allow_private else PublicOnlyResolver(), limit=4, force_close=True)
         session = aiohttp.ClientSession(connector=connector, timeout=aiohttp.ClientTimeout(total=timeout), headers={"User-Agent": USER_AGENT})
     try:
-        async with session.get(url, allow_redirects=True, max_redirects=MAX_REDIRECTS) as response:
-            if response.status != 200:
-                raise FetchError(f"El servidor de la imagen respondió {response.status}.")
-            if response.content_length is not None and response.content_length > max_bytes:
-                raise FetchError("La imagen pesa demasiado.")
-            body = bytearray()
-            async for chunk in response.content.iter_chunked(1 << 16):
-                body += chunk
-                if len(body) > max_bytes:
-                    raise FetchError("La imagen pesa demasiado.")
-            return bytes(body)
+        for _ in range(MAX_REDIRECTS + 1):
+            async with session.get(url, allow_redirects=False) as response:
+                if response.status in (301, 302, 303, 307, 308):
+                    target = response.headers.get("Location")
+                    if not target:
+                        raise FetchError(f"El servidor de la imagen respondió {response.status}.")
+                    url = urljoin(url, target)
+                    if not allow_private:
+                        url = check_url(url)
+                    continue
+                return await _body(response, max_bytes)
+        raise FetchError("El enlace redirige demasiadas veces.")
     except FetchError:
         raise
     except asyncio.TimeoutError as exc:
@@ -94,3 +96,16 @@ async def fetch_bytes(url: str, *, max_bytes: int, timeout: float = 15.0, allow_
     finally:
         if own:
             await session.close()
+
+
+async def _body(response, max_bytes: int) -> bytes:
+    if response.status != 200:
+        raise FetchError(f"El servidor de la imagen respondió {response.status}.")
+    if response.content_length is not None and response.content_length > max_bytes:
+        raise FetchError("La imagen pesa demasiado.")
+    body = bytearray()
+    async for chunk in response.content.iter_chunked(1 << 16):
+        body += chunk
+        if len(body) > max_bytes:
+            raise FetchError("La imagen pesa demasiado.")
+    return bytes(body)

@@ -86,6 +86,12 @@ class MediaStore:
             raise MediaError("Tipo de archivo desconocido.")
         return self.root / kind
 
+    @staticmethod
+    def name_for(kind: str, data: bytes) -> str:
+        """The name `save` would give these bytes ("" when they are not a file of that kind)."""
+        sniffed = sniff_image(data) if kind == IMAGES else sniff_audio(data)
+        return hashlib.sha256(data).hexdigest()[:24] + sniffed[1] if sniffed else ""
+
     def save(self, kind: str, data: bytes) -> StoredFile:
         """Keep a file. Raises MediaError (with the reason, in Spanish) for an empty, too big, wrong-kind or too-many files."""
         if not data:

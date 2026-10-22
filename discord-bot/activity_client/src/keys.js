@@ -21,6 +21,9 @@ function pickEntry(cmd) {
   return lead && can(lead) ? lead : null;
 }
 
+// On a Mac, Option + a letter writes a character (ñ, ´, ∑...): while typing, it only works as a shortcut for a QTE that is running.
+const MAC = typeof navigator !== "undefined" && /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent || "");
+
 export function installKeys() {
   document.addEventListener("keydown", (event) => {
     if (event.repeat || event.ctrlKey || event.metaKey) return;
@@ -50,7 +53,7 @@ export function installKeys() {
     if (TIMED.has(cmd)) {
       const entry = pickEntry(cmd);
       if (entry) { event.preventDefault(); press(entry.id, cmd); }
-    } else if (!typing || event.altKey) {
+    } else if (!typing || (event.altKey && !MAC)) {
       event.preventDefault();
       pressCommand(cmd);
     }

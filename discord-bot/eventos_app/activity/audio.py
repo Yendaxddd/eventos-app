@@ -6,6 +6,7 @@ server's clock, so somebody who comes in late hears the same point of the same t
 """
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 import re
@@ -279,13 +280,8 @@ class AudioDirector:
         return sound
 
     async def _send(self, frame: dict, user_ids: set[int] | None = None) -> int:
-        sent = 0
-        for conn in list(self.hub.conns.values()):
-            if user_ids is not None and conn.user_id not in user_ids:
-                continue
-            if await self.send_to(conn, frame):
-                sent += 1
-        return sent
+        targets = [c for c in list(self.hub.conns.values()) if user_ids is None or c.user_id in user_ids]
+        return sum(await asyncio.gather(*(self.send_to(c, frame) for c in targets)))           # at once: a slow screen holds up nobody
 
     async def stop_all(self) -> None:
         await self.hub.broadcast({"t": "audio", "op": "stop"})

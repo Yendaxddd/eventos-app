@@ -17,6 +17,9 @@ BACKLOG = 60                 # messages kept to show to whoever joins
 RATE_PER_SECOND = 30.0       # frames a single connection may send per second (bursts of 2x)
 PING_EVERY = 2.0             # seconds between the server's own round-trip measurements of each player
 RTT_SAMPLES = 15             # how many of them are remembered
+SEND_TIMEOUT = 2.0           # seconds a screen may take to take one frame
+MAX_PER_USER = 4             # windows of the same person at once (a fifth closes the oldest)
+CLIENT_RTT_MAX_MS = 300.0    # the most round trip believed from the client before the server has measured it
 
 
 class RpcError(Exception):
@@ -65,7 +68,7 @@ class Conn:
         has enough of that, what the client reported."""
         if len(self.rtts) >= 3:
             return statistics.median(self.rtts) / 2.0
-        return (self.rtt_ms or 0.0) / 2.0
+        return min(self.rtt_ms or 0.0, CLIENT_RTT_MAX_MS) / 2.0          # the client's own word counts for little until the server checks it
 
     @property
     def jitter_ms(self) -> float | None:
@@ -89,6 +92,8 @@ class Hub:
         self.on_change: Callable[[], None] | None = None   # the app's window refreshes who is connected
         self.loader: Callable[[], Any] | None = None       # async () -> list of message frames, for the first joiner
         self._loaded = False
+        self._loading: asyncio.Task | None = None     # the one read of the history, that everybody who comes in meanwhile waits for
+        self._generation = 0                          # goes up when the channel changes, so a read of the old one is thrown away
         self.state: dict = {}                               # boss / players, as last broadcast
         self.qtes: dict[str, dict] = {}                    # QTE id -> the frame the clients were shown (still running)
         self.on_tick: Callable[[], Any] | None = None       # async; called after each round of server pings (the bridge pushes latency changes)
@@ -175,9 +180,18 @@ class Hub:
     # ---- sending --------------------------------------------------------------------------
     @staticmethod
     async def send(conn: Conn, frame: dict) -> bool:
+        """One frame to one screen. A screen that stops reading would hold up everybody waiting behind it (a cue, an effect): after
+        SEND_TIMEOUT it is dropped, and it comes back by itself with a fresh connection."""
         try:
-            await conn.ws.send_json(frame)
+            await asyncio.wait_for(conn.ws.send_json(frame), SEND_TIMEOUT)
             return True
+        except asyncio.TimeoutError:
+            log.warning("dropping a connection that stopped reading (%s)", conn.name)
+            try:
+                asyncio.get_running_loop().create_task(conn.ws.close())
+            except Exception:  # noqa: BLE001
+                pass
+            return False
         except Exception:  # noqa: BLE001 - a dead socket is cleaned up by its own handler
             return False
 
@@ -191,19 +205,31 @@ class Hub:
     async def load_backlog(self) -> list[dict]:
         """The recent messages (read from Discord once, then kept up to date by the live events)."""
         if not self._loaded and self.loader is not None:
-            self._loaded = True
-            try:
-                for frame in await self.loader():
-                    self.backlog.append(frame)
-            except Exception:  # noqa: BLE001
-                log.exception("could not read the channel history")
-                self._loaded = False
+            if self._loading is None or self._loading.done():
+                self._loading = asyncio.ensure_future(self._read_history(self._generation))
+            await asyncio.shield(self._loading)
         return list(self.backlog)
+
+    async def _read_history(self, generation: int) -> None:
+        try:
+            history = await self.loader()
+        except Exception:  # noqa: BLE001
+            log.exception("could not read the channel history")
+            return
+        if generation != self._generation:            # the event moved to another channel while it was being read
+            return
+        live = list(self.backlog)                     # what arrived while it was being read goes after it, once
+        known = {f.get("id") for f in history}
+        self.backlog.clear()
+        self.backlog.extend(history)
+        self.backlog.extend(f for f in live if f.get("id") not in known)
+        self._loaded = True
 
     def reset_channel(self, name: str = "") -> None:
         """The event moved to another channel: forget the old messages."""
         self.backlog.clear()
         self._loaded = False
+        self._generation += 1
         self.channel_name = name
 
     async def push_message(self, frame: dict) -> None:

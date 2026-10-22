@@ -26,7 +26,7 @@ from yarl import URL
 
 from .. import __version__
 from .auth import AuthError, DiscordAuth
-from .hub import Conn, Hub, RpcError
+from .hub import MAX_PER_USER, Conn, Hub, RpcError
 from .media import AUDIO, CONTENT_TYPES, IMAGES, LIMITS, MediaStore
 
 log = logging.getLogger("eventos_app.activity")
@@ -52,6 +52,11 @@ _FALLBACK = ("<!doctype html><meta charset=utf-8><title>Eventos App</title><body
              "<code>activity_client/</code>; el instalador ya la incluye).</p>")
 
 
+def _log_late_failure(task: asyncio.Future) -> None:
+    if not task.cancelled() and task.exception() is not None and not isinstance(task.exception(), RpcError):
+        log.error("a slow request failed in the end", exc_info=task.exception())
+
+
 def dev_identity(name: str) -> tuple[int, str]:
     """The (made-up, negative) id and name of a test window opened on this PC."""
     clean = str(name).strip()[:32] or "Prueba"
@@ -64,7 +69,14 @@ def is_local_request(request: web.Request) -> bool:
     if any(headers.get(h) for h in ("CF-Connecting-IP", "Cf-Ray", "X-Forwarded-For", "Forwarded", "X-Real-IP")):
         return False
     host = request.host.rsplit(":", 1)[0].strip("[]")
-    return request.remote in ("127.0.0.1", "::1") and host in ("127.0.0.1", "localhost", "::1")
+    if not (request.remote in ("127.0.0.1", "::1") and host in ("127.0.0.1", "localhost", "::1")):
+        return False
+    # Any web page the host opens can also reach 127.0.0.1 (a WebSocket has no CORS check): the browser says which page asks, in Origin.
+    origin = headers.get("Origin")
+    return origin is None or bool(_LOCAL_ORIGIN.match(origin))
+
+
+_LOCAL_ORIGIN = re.compile(r"^https?://(127\.0\.0\.1|localhost|\[::1\])(:\d{1,5})?$")
 
 
 class ActivityServer:
@@ -266,24 +278,26 @@ class ActivityServer:
         key = hashlib.sha256(url.encode()).hexdigest()[:40]
         path = self._media_path(key)
         if path is None:
-            async with self._media_locks.setdefault(key, asyncio.Lock()):
-                path = self._media_path(key)          # another request may have fetched it while we waited
-                if path is None:
-                    try:
-                        kind, body = await self._media_fetch(url)
-                    except ValueError as exc:
-                        return web.Response(status=415 if str(exc) == "type" else 413 if str(exc) == "size" else 403, text="no permitido")
-                    except (OSError, aiohttp.ClientError, asyncio.TimeoutError):
-                        return web.Response(status=502, text="Discord no respondió")
-                    ext = _EXTENSIONS.get(kind) or mimetypes.guess_extension(kind) or (".mp4" if kind.startswith("video/") else ".png")
-                    path = self.media_dir / f"{key}{ext}"
-                    partial = path.with_suffix(".part")
-                    partial.write_bytes(body)
-                    partial.replace(path)
-                    self._media_writes += 1
-                    if self._media_writes % 20 == 0:
-                        self._media_prune()
-            self._media_locks.pop(key, None)
+            try:
+                async with self._media_locks.setdefault(key, asyncio.Lock()):
+                    path = self._media_path(key)          # another request may have fetched it while we waited
+                    if path is None:
+                        try:
+                            kind, body = await self._media_fetch(url)
+                        except ValueError as exc:
+                            return web.Response(status=415 if str(exc) == "type" else 413 if str(exc) == "size" else 403, text="no permitido")
+                        except (OSError, aiohttp.ClientError, asyncio.TimeoutError):
+                            return web.Response(status=502, text="Discord no respondió")
+                        ext = _EXTENSIONS.get(kind) or mimetypes.guess_extension(kind) or (".mp4" if kind.startswith("video/") else ".png")
+                        path = self.media_dir / f"{key}{ext}"
+                        partial = path.with_suffix(".part")
+                        partial.write_bytes(body)
+                        partial.replace(path)
+                        self._media_writes += 1
+                        if self._media_writes % 5 == 0:
+                            self._media_prune()
+            finally:
+                self._media_locks.pop(key, None)          # also when it failed: an address that never worked leaves nothing behind
         else:
             path.touch()
         return web.FileResponse(path, headers={"Cache-Control": "public, max-age=86400"})
@@ -441,6 +455,9 @@ class ActivityServer:
                 await ws.send_json({"t": "error", "code": "auth", "reason": "no llegó el saludo inicial"})
                 return ws
             conn = Conn(self.hub.new_id(), user_id, name, avatar, ws, dev=dev)
+            same = sorted((c for c in self.hub.conns.values() if c.user_id == user_id), key=lambda c: c.id)
+            for old in same[:max(0, len(same) - MAX_PER_USER + 1)]:          # one person, a handful of windows at most: the oldest goes
+                asyncio.get_running_loop().create_task(old.ws.close())
             conn.gm = bool(dev and hello.get("gm"))           # a test window on this PC may ask for the GM panel; Discord users never do
             conn.hidden = bool(dev and hello.get("host"))     # ...and, being the host's own window (the desktop app), not to be listed among the players
             backlog = await self.hub.load_backlog()
@@ -503,13 +520,17 @@ class ActivityServer:
             await conn.ws.send_json({"t": "comp", "comp": comp})
         elif kind == "rpc" and self.actions is not None and hasattr(self.actions, "rpc"):
             call_id = str(frame.get("id", ""))[:32]
+            # the work itself is never cut halfway (an import that already saved half its pictures, a boss already at 0 HP): past the
+            # timeout the person is told it goes on, and it finishes by itself
+            work = asyncio.ensure_future(self.actions.rpc(conn, str(frame.get("op", "")), frame.get("args") or {}))
             try:
-                data = await asyncio.wait_for(self.actions.rpc(conn, str(frame.get("op", "")), frame.get("args") or {}), RPC_TIMEOUT)
+                data = await asyncio.wait_for(asyncio.shield(work), RPC_TIMEOUT)
                 await conn.ws.send_json({"t": "rpc_ok", "id": call_id, "data": data})
             except RpcError as exc:
                 await conn.ws.send_json({"t": "rpc_err", "id": call_id, "reason": str(exc)})
             except asyncio.TimeoutError:
-                await conn.ws.send_json({"t": "rpc_err", "id": call_id, "reason": "El servidor tardó demasiado."})
+                work.add_done_callback(_log_late_failure)
+                await conn.ws.send_json({"t": "rpc_err", "id": call_id, "reason": "Está tardando: sigue en marcha y terminará por su cuenta. Vuelve a mirar en un momento."})
             except Exception:  # noqa: BLE001 - one bad request must not close the connection
                 log.exception("rpc %r failed", frame.get("op"))
                 await conn.ws.send_json({"t": "rpc_err", "id": call_id, "reason": "Algo falló al procesarlo; inténtalo otra vez."})

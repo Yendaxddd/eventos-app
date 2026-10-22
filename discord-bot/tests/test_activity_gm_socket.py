@@ -213,7 +213,7 @@ def test_content_files_are_checked_backed_up_and_loaded_into_the_running_bot_ove
                                                     "trigger": "manual", "reward": {}}
             saved = await rig.ask(ws, "gm.file_save", key="achievements", text=json.dumps(config))
             listed = await rig.ask(ws, "gm.achievements")
-            backups = [f.name for f in (rig.base / "data" / "backups").glob("achievements_config.*.json")]
+            backups = [f.name for f in (rig.base / "data" / "backups").glob("*-achievements_config.*.json")]
             return rig, data, current, broken, wrong, file_after_refusals, saved, listed, backups
 
     rig, data, current, broken, wrong, file_after_refusals, saved, listed, backups = run(scenario())

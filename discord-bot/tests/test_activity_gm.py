@@ -553,7 +553,7 @@ def test_achievements_are_created_changed_and_deleted_from_a_form(rig):
     assert any(a["id"] == "first_blood" and a["reward"]["points"] == 2 for a in out["achievements"]) and "first_blood" in app.achievements_config["achievements"]
     on_disk = json.loads((rig.data / "achievements" / "achievements_config.json").read_text(encoding="utf-8"))
     assert on_disk["achievements"]["first_blood"]["reward"] == {"skill_points": 2, "title": "Novato"} and on_disk["achievements"]["infinity"]["name"] == "Infinity"     # the rest is untouched
-    assert list((rig.data / "backups").glob("achievements_config.*.json"))                                  # the old file was kept
+    assert list((rig.data / "backups").glob("*-achievements_config.*.json"))                                  # the old file was kept
     gm.achievement_save("Gus", {**new, "name": "Primera sangre!", "reward": {"points": 0, "title": "", "domain": "infinite_void"}, "message": "¡{player}!"})
     changed = next(a for a in app.achievements_config["achievements"]["first_blood"].items() if a[0] == "announcement_message")
     assert changed[1] == "¡{player}!" and app.achievements_config["achievements"]["first_blood"]["reward"] == {"domain": "infinite_void"}
@@ -643,7 +643,7 @@ def test_new_trees_and_objects_never_overwrite_and_can_be_deleted_with_a_copy_ke
     with pytest.raises(RpcError, match="no se puede"):
         gm.file_create("Gus", "pending", "moon", json.dumps(obj))
     gm.file_delete("Gus", "object:moon_charm")
-    assert "moon_charm" not in app.special_objects_manager.objects and any((rig.data / "backups").glob("moon_charm.*.json"))
+    assert "moon_charm" not in app.special_objects_manager.objects and any((rig.data / "backups").glob("*-moon_charm.*.json"))
     with pytest.raises(RpcError, match="ya no existe"):
         gm.file_delete("Gus", "object:moon_charm")
     with pytest.raises(RpcError, match="no se puede borrar"):

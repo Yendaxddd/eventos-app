@@ -86,13 +86,18 @@ class GmLog:
         self.entries: deque[dict] = deque(maxlen=keep)
         if path is not None and path.exists():
             try:
-                for line in path.read_text(encoding="utf-8").splitlines()[-keep:]:
+                lines = path.read_text(encoding="utf-8").splitlines()
+                for line in lines[-keep:]:
                     try:
                         entry = json.loads(line)
                     except ValueError:
                         continue
                     if isinstance(entry, dict) and "action" in entry:
                         self.entries.append(entry)
+                if len(lines) > 4 * keep:                   # the file is cut back now and then, so it never grows without end
+                    tmp = path.with_suffix(".tmp")
+                    tmp.write_text("".join(json.dumps(e, ensure_ascii=False) + "\n" for e in self.entries), encoding="utf-8")
+                    tmp.replace(path)
             except OSError:
                 log.warning("could not read %s", path)
 

@@ -42,6 +42,8 @@ export const sheet = signal(null);                     // "players" | null (bott
 export const tutorial = signal({ active: false, step: 0 });
 export const pip = signal(false);                      // Discord shrank the Activity into a small floating window
 export const toasts = signal([]);
+export const lastSaid = signal("");                    // the last message sent from the box, until the server takes it
+export const sayRefused = signal(0);                   // goes up when the server refuses a message (it goes back to the box)
 export const fx = signal(null);                        // { kind: "hit" | "heal" | "bf", n }
 
 // Pages remember where you came from, so Back (and Esc) returns there: gear -> settings -> back is the event again,

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "preact/hooks";
-import { Gauge, Hand, Loader2, Play, RotateCcw, Smartphone, Wifi } from "lucide-preact";
+import { Gauge, Hand, Loader2, Play, RefreshCw, RotateCcw, Smartphone, Wifi } from "lucide-preact";
 import { calib, comp, go, link, toast } from "../state.js";
 import { ping, pongListeners, send } from "../net.js";
 import { deviceLag, qualityOf, tapSpread } from "../clock.js";
@@ -222,7 +222,12 @@ export function LatencyPage() {
         <>
           <div class="card-2 col" style={{ gap: "var(--sp-3)" }} data-testid="net-result">
             <div class="row"><Wifi size={20} /><strong class="grow">Tu conexión: {QUALITY[quality]}</strong></div>
-            {net.median === null ? <p class="bad">No llegó ninguna respuesta del servidor. Revisa tu conexión e inténtalo otra vez.</p> : (
+            {net.median === null ? (
+              <div class="col" style={{ gap: "var(--sp-2)" }}>
+                <p class="bad">No llegó ninguna respuesta del servidor. Revisa tu conexión e inténtalo otra vez.</p>
+                <button class="btn btn-primary" type="button" onClick={startNet} data-testid="net-retry"><RefreshCw size={16} /> Volver a medir</button>
+              </div>
+            ) : (
               <div class="metrics">
                 <div><span>Típico</span><b class="num">{Math.round(net.median)} ms</b></div>
                 <div><span>Mejor</span><b class="num">{Math.round(net.min)} ms</b></div>

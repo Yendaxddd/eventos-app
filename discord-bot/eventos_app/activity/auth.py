@@ -2,13 +2,21 @@
 
 from __future__ import annotations
 
+import re
 import time
+from collections import OrderedDict, deque
 from typing import NamedTuple
 
 import aiohttp
 
 API_BASE = "https://discord.com/api/v10"
 TOKEN_CACHE_SECONDS = 300
+CACHE_MAX = 4000                 # tokens remembered (good and bad): the oldest are forgotten first
+BAD_TOKEN_SECONDS = 600          # a token Discord refused is refused here for this long, without asking again
+# Discord bans an IP that sends 10 000 refused requests in 10 minutes, and that would take the bot down with it: at most this many
+# unknown tokens are taken to Discord per minute when they keep failing (a flood of made-up tokens gets "try again in a moment").
+FAILURES_PER_MINUTE = 40
+_TOKEN = re.compile(r"^[A-Za-z0-9._~+/=-]{20,200}$")
 
 
 class AuthError(Exception):
@@ -33,7 +41,9 @@ class DiscordAuth:
         self.api_base = api_base.rstrip("/")
         self._session = session
         self._own_session = session is None
-        self._cache: dict[str, tuple[float, Identity]] = {}
+        self._cache: OrderedDict[str, tuple[float, Identity]] = OrderedDict()
+        self._bad: OrderedDict[str, float] = OrderedDict()
+        self._failures: deque[float] = deque()
 
     async def _http(self) -> aiohttp.ClientSession:
         if self._session is None:
@@ -62,15 +72,33 @@ class DiscordAuth:
         except aiohttp.ClientError as exc:
             raise AuthError(f"No se pudo hablar con Discord: {exc}") from exc
 
+    def _refused(self, token: str, now: float) -> None:
+        self._bad[token] = now
+        self._bad.move_to_end(token)
+        while len(self._bad) > CACHE_MAX:
+            self._bad.popitem(last=False)
+        self._failures.append(now)
+
     async def identify(self, access_token: str) -> Identity:
+        now = time.monotonic()
         cached = self._cache.get(access_token)
-        if cached and time.monotonic() - cached[0] < TOKEN_CACHE_SECONDS:
+        if cached and now - cached[0] < TOKEN_CACHE_SECONDS:
             return cached[1]
+        if not _TOKEN.match(access_token or ""):
+            raise AuthError("Discord no reconoce tu sesión: cierra y vuelve a abrir la Actividad.")
+        refused_at = self._bad.get(access_token)
+        if refused_at is not None and now - refused_at < BAD_TOKEN_SECONDS:
+            raise AuthError("Discord no reconoce tu sesión: cierra y vuelve a abrir la Actividad.")
+        while self._failures and now - self._failures[0] > 60:
+            self._failures.popleft()
+        if len(self._failures) >= FAILURES_PER_MINUTE:
+            raise AuthError("Hay demasiados intentos de entrar ahora mismo: espera un momento y vuelve a abrir la Actividad.")
         session = await self._http()
         try:
             async with session.get(f"{self.api_base}/users/@me",
                                    headers={"Authorization": f"Bearer {access_token}"}) as response:
                 if response.status != 200:
+                    self._refused(access_token, now)
                     raise AuthError("Discord no reconoce tu sesión: cierra y vuelve a abrir la Actividad.")
                 data = await response.json(content_type=None)
         except aiohttp.ClientError as exc:
@@ -80,4 +108,7 @@ class DiscordAuth:
                   if data.get("avatar") else default_avatar(user_id))
         identity = Identity(user_id, data.get("global_name") or data.get("username") or str(user_id), avatar)
         self._cache[access_token] = (time.monotonic(), identity)
+        self._cache.move_to_end(access_token)
+        while len(self._cache) > CACHE_MAX:
+            self._cache.popitem(last=False)
         return identity

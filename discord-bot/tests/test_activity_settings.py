@@ -110,7 +110,7 @@ def test_a_new_player_is_welcomed_with_rules_adjustment_and_no_settings_and_a_ga
     assert gm["prefs"] is None                                                      # the server knows nothing about them yet: the client sends its own
     assert gm["comp"] == {"net": 0.0, "device": 0.0, "cap": CAP_MS} and gm["calib"] is None
     assert gm["rules"]["times"]["easy"] == {"evade": 6.0, "parry": [4.0, 7.0], "perfect": None, "timeout": 6.75}
-    assert gm["rules"]["bfWindow"] == 0.2 and gm["rules"]["counterWindow"] == 5.0 and gm["charAvatars"] == {}
+    assert gm["rules"]["bfWindow"] == 0.2 and gm["rules"]["counterWindow"] == 1.5 and gm["charAvatars"] == {}
     assert gm["version"] and gm["serverTime"] > 0
 
 
@@ -145,7 +145,7 @@ def test_the_latency_test_is_saved_answered_with_the_new_adjustment_and_used_on_
             calib, comp = await frame(ws, "calib"), await frame(ws, "comp")
             rig.start_qte(7)
             await frame(ws, "qte")
-            rig.hub.qtes["7"]["tGo"] -= 5000                                               # it has been running for 5 s
+            rig.hub.qtes["7"]["tGo"] -= 1000                                               # it has been running for 1 s
             await ws.send_json({"t": "press", "id": "7", "command": "evade", "dt": 1000})
             await frame(ws, "qte_result")
             return calib, comp, rig.calls

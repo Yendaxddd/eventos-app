@@ -16,6 +16,7 @@ UNTIMED = ("adapt", "attack", "power1", "power2", "domain")         # commands t
 COMMANDS = TIMED + UNTIMED
 HUMAN_MIN_MS = 80.0                                    # nobody reacts faster than this: a smaller `dt` is a script
 GRACE_MS = 150.0                                       # how far a claimed `dt` may exceed the real elapsed time
+SLACK_MS = 600.0                                       # how much sooner than the server saw it an answer may claim to be (jitter, a busy phone)
 
 
 class QteBook(dict):
@@ -187,12 +188,14 @@ def response_seconds(dt_ms: float, net_ms: float, elapsed_ms: float, device_ms: 
     `dt_ms`: the player's own stopwatch, from seeing the QTE to pressing. The QTE reached them about `net_ms` after the bot
     started it, so that is added back (a slow connection must not cost them the QTE); `device_ms` is the lag of their screen
     and touch, which delays what they measure and is taken off. The adjustment is at most `cap_ms` either way, and an answer
-    cannot have taken longer than the QTE has existed, nor less than a human can do.
+    cannot have taken longer than the QTE has existed, nor less than a human can do. Nor can it claim to be much earlier than the
+    server could have got it: the frame took about two trips (the QTE going, the answer coming back), and beyond that and some
+    slack, a "fast" claim is a client choosing its own time (a perfect parry every time), so it is taken as what the server saw.
     """
     if dt_ms != dt_ms or dt_ms < HUMAN_MIN_MS or dt_ms > 120_000:       # NaN, a script, or nonsense
         return None
     net = max(0.0, min(net_ms, NET_MAX_MS))
     device = max(0.0, min(device_ms, DEVICE_MAX_MS))
     shift = max(-cap_ms, min(cap_ms, net - device))
-    claimed = dt_ms + shift
+    claimed = max(dt_ms + shift, elapsed_ms - 2 * net - device - SLACK_MS)
     return max(0.001, min(claimed, elapsed_ms + GRACE_MS) / 1000.0)

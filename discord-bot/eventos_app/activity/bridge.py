@@ -118,6 +118,9 @@ def serialize_message(message: Any, own_webhooks: set[int] | frozenset[int] = fr
     }
 
 
+VERDICT_WAITS, VERDICT_STEP = 15, 0.02     # up to about a quarter of a second for the bot's verdict on an answer
+
+
 class ActivityBridge(PanelRpc, GmRpc, TupperRpc, AudioRpc, CinemaRpc, FxRpc, QuickRpc, MobsRpc):
     def __init__(self, hub: Hub, app: Any, pool: Callable[[], Any] | None = None, avatar_file: Path | None = None,
                  prefs_file: Path | None = None, latency_file: Path | None = None, data_dir: Path | None = None,
@@ -175,6 +178,8 @@ class ActivityBridge(PanelRpc, GmRpc, TupperRpc, AudioRpc, CinemaRpc, FxRpc, Qui
         self._listeners.clear()
         self.arena.stop_all()
         self.mobs.stop()
+        self.prefs.flush()
+        self.latency.flush()
         book = getattr(self.app, "active_qtes", None)
         if hasattr(book, "on_start"):
             book.on_start = book.on_end = None
@@ -398,7 +403,7 @@ class ActivityBridge(PanelRpc, GmRpc, TupperRpc, AudioRpc, CinemaRpc, FxRpc, Qui
             "times": {d: {"evade": t.get("evade_window"), "parry": list(t.get("parry_window") or (0, 0)), "perfect": t.get("perfect_parry"),
                           "timeout": timeouts.get(d)} for d, t in times.items()},
             "bfWindow": float(getattr(app, "bf_timing_window", 0.2)), "chainWindow": float(getattr(app, "bf_chain_timing_window", 0.15)),
-            "counterWindow": 5.0, "saveLimit": int(getattr(app, "save_limit", 2)), "saveWindow": float(getattr(app, "save_time_window", 60)),
+            "counterWindow": float(getattr(app, "counter_window", 1.5) or 1.5), "saveLimit": int(getattr(app, "save_limit", 2)), "saveWindow": float(getattr(app, "save_time_window", 60)),
             "ultimateCost": float(getattr(app, "ultimate_cost", 100)),
         }
 
@@ -517,6 +522,7 @@ class ActivityBridge(PanelRpc, GmRpc, TupperRpc, AudioRpc, CinemaRpc, FxRpc, Qui
     async def say(self, conn: Conn, frame: dict) -> str | None:
         """A message written in the Activity: it appears in the channel under the chosen name and the bot treats it
         like any chat message (so `*attack*`, trigger phrases... work from here). Returns why not, or None."""
+        arrived = self.hub.now_ms()                    # a typed *evade* is timed from here, not after the post to Discord
         text = str(frame.get("text", "")).strip()
         if not text:
             return None
@@ -556,19 +562,33 @@ class ActivityBridge(PanelRpc, GmRpc, TupperRpc, AudioRpc, CinemaRpc, FxRpc, Qui
             except discord.HTTPException as exc:
                 return f"Discord no dejó publicarlo ({exc.status})."
         if member is not None:
-            await self._run_typed(conn, member, channel, text, None if as_name == "me" else as_name)
+            await self._run_typed(conn, member, channel, text, None if as_name == "me" else as_name, arrived)
         return None
 
-    async def _run_typed(self, conn: Conn, member, channel, text: str, character: str | None = None) -> None:
+    def _typed_qte(self, user_id: int):
+        """The QTE a typed *evade*/*parry* is for: one aimed at this player (or that they take part in), the oldest first since it
+        ends first; failing that, the oldest of all. (QTE id, its frame), or (None, None)."""
+        mine = str(user_id)
+        running = [(k, e) for k, e in self.hub.qtes.items() if not str(k).startswith("a")]
+        own = [(k, e) for k, e in running if (e.get("target") or {}).get("id") == mine or mine in (e.get("participants") or [])]
+        pool = own or running
+        return min(pool, key=lambda ke: ke[1]["tGo"]) if pool else (None, None)
+
+    async def _run_typed(self, conn: Conn, member, channel, text: str, character: str | None = None, arrived: float | None = None) -> None:
         """Hand a written message to the bot's own message handler, as if it had been typed in the channel."""
         message = ActivityInput(member, channel, text, user_id=conn.user_id, character=character)
         timed = _TYPED_TIMED.search(text)
         try:
             if timed and self.app.active_qtes:
-                # typed answers have no button timing: measure from the QTE start, less the trip to the player
-                started = min((q["tGo"] for q in self.hub.qtes.values()), default=None)
-                seconds = None if started is None else max(0.0, self.hub.now_ms() - started - conn.net_ms) / 1000.0
-                await self.app.handle_qte_response(message, measured=seconds)
+                # typed answers have no button timing: measure from the start of the QTE it is for, less the trip to the player
+                qte_id, entry = self._typed_qte(conn.user_id)
+                at = self.hub.now_ms() if arrived is None else arrived
+                seconds = None if entry is None else max(0.0, at - entry["tGo"] - conn.net_ms) / 1000.0
+                key = next((k for k in self.app.active_qtes if str(k) == qte_id), None)
+                if key is not None:
+                    await self.app.handle_qte_response(message, measured=seconds, only=key)
+                else:
+                    await self.app.handle_qte_response(message, measured=seconds)
             else:
                 await self.app.bot.on_message(message)
         except Exception:  # noqa: BLE001 - the message is already in the channel; a handler failing is the bot's log
@@ -576,6 +596,7 @@ class ActivityBridge(PanelRpc, GmRpc, TupperRpc, AudioRpc, CinemaRpc, FxRpc, Qui
 
     async def press(self, conn: Conn, frame: dict) -> str | None:
         """A QTE button. The player's screen measured `dt` (ms between seeing the QTE and pressing)."""
+        arrived = self.hub.now_ms()                               # before anything that waits (asking Discord who this is) moves the clock on
         command = str(frame.get("command", ""))
         if str(frame.get("id") or "").startswith("a"):           # a QTE of the Activity's own (swipe, drag, tap)
             return await self.arena.answer(conn, frame)
@@ -610,7 +631,7 @@ class ActivityBridge(PanelRpc, GmRpc, TupperRpc, AudioRpc, CinemaRpc, FxRpc, Qui
             dt = float(frame.get("dt"))
         except (TypeError, ValueError):
             return "Tiempo inválido."
-        elapsed = self.hub.now_ms() - entry["tGo"]
+        elapsed = arrived - entry["tGo"]
         seconds = response_seconds(dt, conn.net_ms, elapsed, self.latency.device_ms(conn.user_id), self.cap_ms)
         if seconds is None:
             return "Esa pulsación no es creíble."
@@ -631,6 +652,11 @@ class ActivityBridge(PanelRpc, GmRpc, TupperRpc, AudioRpc, CinemaRpc, FxRpc, Qui
         return None
 
     async def _verdict(self, conn: Conn, qte_id: str, message: ActivityInput, seconds: float | None) -> None:
+        # the bot puts its ✅/❌ on the answer from a task of its own (add_reaction_to_response), a moment after handling it
+        for i in range(VERDICT_WAITS):
+            if message.reactions:
+                break
+            await asyncio.sleep(0 if i < 3 else VERDICT_STEP)
         ok = True if "✅" in message.reactions else False if "❌" in message.reactions else None
         await self.hub.send(conn, {"t": "qte_result", "id": qte_id, "ok": ok,
                                    "ms": None if seconds is None else round(seconds * 1000),

@@ -15,6 +15,8 @@ export function ConnBadge() {
 }
 
 // What the game masters are playing, with a button to silence the event's sound for this player (or, if the browser is waiting for a touch, to allow it).
+let blockedAtPress = false;      // the tap that unlocks the sound also ends with a click: that click must not turn it off
+
 function NowPlaying() {
   const m = music.value;
   const on = prefs.value.audio;
@@ -23,14 +25,15 @@ function NowPlaying() {
   return (
     <button class={`now-playing ${on ? "" : "is-off"} ${audioBlocked.value ? "is-blocked" : ""}`} type="button" data-testid="now-playing"
       title={audioBlocked.value ? "Toca para activar el sonido" : on ? `Suena: ${title}. Toca para silenciar` : "Sonido del evento apagado. Toca para activarlo"}
-      onClick={() => setPrefs({ audio: !on })}>
+      onPointerDown={() => { blockedAtPress = audioBlocked.value; }}
+      onClick={() => { if (blockedAtPress || audioBlocked.value) { blockedAtPress = false; if (!on) setPrefs({ audio: true }); return; } setPrefs({ audio: !on }); }}>
       {on ? (audioBlocked.value ? <Volume2 size={16} /> : <Music size={16} />) : <VolumeX size={16} />}
       <span class="ellipsis">{audioBlocked.value ? "Toca para activar el sonido" : title}</span>
     </button>
   );
 }
 
-const TITLES = { menu: "Menú", settings: "Ajustes", latency: "Prueba de latencia", help: "Ayuda y atajos", panel: "Mi panel", gm: "Panel del GM" };
+const TITLES = { menu: "Menú", settings: "Ajustes", latency: "Prueba de latencia", training: "Entrenamiento", help: "Ayuda y atajos", panel: "Mi panel", gm: "Panel del GM" };
 
 export function Topbar({ layout }) {
   const v = view.value;

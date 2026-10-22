@@ -5,15 +5,18 @@ import { inDiscord } from "./util.js";
 export let sdk = null;
 import { pip } from "./state.js";
 
+let subscribed = false;
+
 export async function initSdk(clientId) {
-  sdk = new DiscordSDK(clientId);
+  if (!sdk) sdk = new DiscordSDK(clientId);            // one SDK for the whole visit: making another on each reconnection breaks it
   await sdk.ready();
   return sdk;
 }
 
 // After signing in: keep the buttons working when the Activity is shrunk into a floating window, and follow its size.
 export async function afterAuth() {
-  if (!sdk) return;
+  if (!sdk || subscribed) return;
+  subscribed = true;
   try { await sdk.commands.setConfig({ use_interactive_pip: true }); } catch { /* an older Discord client */ }
   try {
     await sdk.subscribe("ACTIVITY_LAYOUT_MODE_UPDATE", (update) => {

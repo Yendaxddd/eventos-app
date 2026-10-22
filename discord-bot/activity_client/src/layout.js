@@ -84,13 +84,19 @@ export const overlapsAny = (box, taken) => taken.some((t) => overlaps(box, t));
 export const SCALES = [1, 0.86, 0.74, 0.62];
 export function pickSpotFit(area, taken, boxAt, placement = "random", rng = Math.random, scales = SCALES) {
   let last = null;
-  for (const k of scales) {
+  const roomW = area.width - 2 * EDGE, roomH = area.height - 2 * EDGE;
+  for (let i = 0; i < scales.length; i++) {
+    const k = scales[i];
     const size = boxAt(k);
+    const fits = size.w <= roomW + 0.5 && size.h <= roomH + 0.5;
+    if (!fits && i < scales.length - 1) continue;         // bigger than the whole area (a phone held sideways): try smaller first
     const spot = pickSpot(area, taken, size, placement, rng);
-    last = { ...spot, ...size, k };
-    if (!overlapsAny(last, taken)) return last;
+    const here = { ...spot, ...size, k };
+    if (last === null || (fits && !last.fits)) last = { ...here, fits };
+    if (fits && !overlapsAny(here, taken)) return here;
   }
-  return last;                                           // nothing fits even at the smallest size: the least bad spot
+  if (last) delete last.fits;
+  return last;                                           // nothing fits without touching even at the smallest size: the least bad spot
 }
 
 // Keep a spot inside the area after it changed (rotation, keyboard, resize).
