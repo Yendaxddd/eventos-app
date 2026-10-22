@@ -33,6 +33,14 @@ def _json(raw: str, what: str):
 OBJECT_TYPES = ("adaptation", "passive", "triggered", "consumable")
 OBJECT_RARITIES = ("common", "uncommon", "rare", "epic", "legendary", "mythic")
 TRIGGER_WINDOWS = ("parry", "counter", "evade", "any", "passive")
+# what a step of an object can give, as the form offers it: [effect template, Spanish label, the number it asks for (or None)]. These are
+# the ones the bot really applies today; anything else can still be typed by hand (it is checked by the bot's own validator).
+OBJECT_EFFECTS = [
+    ["damage_reduction:{n}", "Reduce el daño recibido (%)", 10], ["heal:{n}", "Cura al llegar (PV)", 10], ["heal_percent:{n}", "Cura al llegar (% de la vida)", 10],
+    ["auto_evade:easy", "Esquiva sola los QTE fáciles", None], ["auto_evade:medium", "Esquiva sola los QTE medios", None],
+    ["guaranteed_counter", "Contraataque garantizado", None], ["on_hard_evade:heal:{n}", "Al esquivar uno difícil, cura (PV)", 15],
+    ["on_boss_stunned:black_flash", "Black Flash cuando el jefe está aturdido", None],
+]
 
 
 class DataOps:
@@ -440,7 +448,7 @@ class DataOps:
             except (OSError, ValueError):
                 errors = ["El archivo no es un JSON válido."]
             pending.append({"file": f.name, "name": text(name, 80), "ok": not errors, "errors": [text(e, 200) for e in errors[:5]]})
-        return {"approved": approved, "pending": pending}
+        return {"approved": approved, "pending": pending, "effects": OBJECT_EFFECTS}
 
     def object_approve(self, actor: str, filename: str) -> dict:
         """Pending -> approved: checked first, an older object with the same id is archived, and the new one is loaded."""
@@ -481,6 +489,85 @@ class DataOps:
             raise RpcError(f"No se pudo rechazar: {message}")
         self.log.add(actor, f"Rechazó el objeto «{filename}»")
         return self.objects()
+
+    # ---- one object, from a form ---------------------------------------------------------------------------------------------
+    def object_get(self, object_id) -> dict:
+        """An approved object as the form edits it, and who has it now."""
+        manager = self._manager()
+        oid = str(object_id or "")
+        path = manager.approved_path / f"{oid}.json"
+        if not ID.match(oid) or not path.is_file():
+            raise RpcError("Ese objeto ya no existe.")
+        data = json.loads(path.read_text(encoding="utf-8"))
+        owners = [uid for uid, items in (manager.player_inventory or {}).items() if oid in (items or [])]
+        unique_owner = (getattr(manager, "unique_object_owners", {}) or {}).get(oid)
+        if unique_owner is not None and unique_owner not in owners:
+            owners.append(unique_owner)
+        return {"object": data, "owners": [{"id": str(u), "name": self._name_of(u)} for u in owners[:50]], "effects": OBJECT_EFFECTS}
+
+    def _name_of(self, uid) -> str:
+        for member in list(getattr(self.app, "qte_players", []) or []):
+            if getattr(member, "id", None) == uid:
+                return getattr(member, "display_name", None) or member.name
+        return str(uid)
+
+    def object_save(self, actor: str, form: dict) -> dict:
+        """An object from the form: the fields the form knows are replaced, everything else in its file is kept. Checked like any object
+        file, saved (with a copy of the old one) and loaded into the running bot."""
+        manager = self._manager()
+        if not isinstance(form, dict):
+            raise RpcError("El objeto no es válido.")
+        oid = text(form.get("id"), 40).strip().lower()
+        if not ID.match(oid):
+            raise RpcError("El identificador debe tener entre 2 y 40 letras minúsculas, números o guiones bajos.")
+        path = manager.approved_path / f"{oid}.json"
+        creating = not path.is_file()
+        if creating and form.get("creating") is False:
+            raise RpcError("Ese objeto ya no existe.")
+        if not creating and form.get("creating"):
+            raise RpcError(f"Ya hay un objeto «{oid}»: elige otro identificador.")
+        data = {} if creating else json.loads(path.read_text(encoding="utf-8"))
+        name = text(form.get("name"), 80).strip()
+        if not name:
+            raise RpcError("El objeto necesita un nombre.")
+        image = form.get("image") or None
+        if image is not None and not (isinstance(image, str) and re.match(r"^(https://\S{8,500}|files/images/[0-9a-f]{24}\.(png|jpg|gif|webp))$", image)):
+            raise RpcError("La imagen debe ser un enlace https o una imagen de la biblioteca.")
+        tracking = form.get("tracking") if form.get("tracking") in ("total", "per_difficulty") else "total"
+        thresholds = form.get("thresholds")
+        display = dict(data.get("display") or {})
+        display.update({"emoji": text(form.get("emoji") or "📦", 8), "color": text(form.get("color") or "#888888", 9)})
+        data.update({
+            "id": oid, "name": name, "description": text(form.get("description"), 500), "lore": text(form.get("lore"), 400),
+            "type": form.get("type"), "rarity": form.get("rarity") or "common", "slots_required": max(1, min(10, int(finite(form.get("slots"), 1)))),
+            "tradeable": bool(form.get("tradeable", True)), "unique": bool(form.get("unique", False)), "image_url": image,
+            "tracking": {**(data.get("tracking") or {}), "type": tracking},
+            "thresholds": thresholds if thresholds is not None else data.get("thresholds", []), "display": display,
+        })
+        data.setdefault("author", actor)
+        data.setdefault("version", "1.0")
+        problems = self._object_problems(data)
+        if problems:
+            raise RpcError("El objeto no es válido: " + " ".join(problems[:4]))
+        self._write(path, json.dumps(data, ensure_ascii=False, indent=2) + "\n")
+        ok, error = manager._load_object(path)
+        if not ok:
+            raise RpcError(f"Se guardó pero el bot no pudo cargarlo: {error}")
+        self.log.add(actor, f"{'Creó' if creating else 'Cambió'} el objeto «{name}»")
+        return {**self.objects(), "saved": oid}
+
+    def object_image(self, actor: str, object_id, image) -> dict:
+        """The picture of an object (what /setobjectimage did): kept in its file and in the running bot."""
+        manager = self._manager()
+        current = self.object_get(object_id)["object"]
+        form = {"id": current["id"], "name": current.get("name"), "description": current.get("description"), "lore": current.get("lore"),
+                "type": current.get("type"), "rarity": current.get("rarity"), "slots": current.get("slots_required", 1), "tradeable": current.get("tradeable", True),
+                "unique": current.get("unique", False), "image": image or None, "tracking": (current.get("tracking") or {}).get("type", "total"),
+                "thresholds": current.get("thresholds", []), "emoji": (current.get("display") or {}).get("emoji"), "color": (current.get("display") or {}).get("color")}
+        out = self.object_save(actor, form)
+        if object_id in manager.objects:
+            manager.objects[object_id]["image_url"] = image or None
+        return out
 
     def object_reload(self, actor: str) -> dict:
         count, errors = self._manager().load_all()

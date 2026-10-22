@@ -690,3 +690,32 @@ def test_every_change_is_signed_and_the_log_survives_a_restart(rig):
     for i in range(6):
         small.add("x", str(i))
     assert [e["action"] for e in small.recent(10)] == ["5", "4", "3"]
+
+
+def test_an_object_is_created_and_edited_from_a_form_keeping_what_the_form_does_not_show(rig):
+    gm, app = rig.gm, rig.app
+    form = {"creating": True, "id": "moon_blade", "name": "Hoja lunar", "description": "Corta la noche.", "type": "adaptation", "rarity": "epic", "slots": 2,
+            "unique": True, "tradeable": False, "image": None, "emoji": "🌙", "color": "#99ccff", "tracking": "total",
+            "thresholds": [{"spins": 5, "effects": ["damage_reduction:10"]}, {"spins": 12, "effects": ["heal:20", "guaranteed_counter"]}]}
+    out = gm.object_save("Gus", form)
+    assert out["saved"] == "moon_blade" and "moon_blade" in app.special_objects_manager.objects
+    loaded = gm.object_get("moon_blade")
+    obj = loaded["object"]
+    assert obj["name"] == "Hoja lunar" and obj["slots_required"] == 2 and obj["unique"] and obj["display"]["emoji"] == "🌙"
+    assert obj["thresholds"][1]["effects"] == ["heal:20", "guaranteed_counter"] and loaded["owners"] == [] and loaded["effects"]
+    with pytest.raises(RpcError, match="Ya hay"):
+        gm.object_save("Gus", form)                                                     # a new one never overwrites
+    # editing the shard from the form keeps its trigger, its messages and its conditionals
+    shard = gm.object_get("mirror_shard")["object"]
+    gm.object_save("Gus", {"creating": False, "id": "mirror_shard", "name": "Fragmento de espejo", "description": shard["description"], "type": "adaptation",
+                           "rarity": "legendary", "slots": 1, "unique": True, "tradeable": False, "image": "https://cdn.discordapp.com/x/espejo.png",
+                           "emoji": "🪞", "color": "#4169e1", "tracking": "total", "thresholds": shard["thresholds"]})
+    again = gm.object_get("mirror_shard")["object"]
+    assert again["name"] == "Fragmento de espejo" and again["trigger"] == shard["trigger"] and "threshold_message" in again["display"]
+    assert app.special_objects_manager.objects["mirror_shard"]["image_url"].endswith("espejo.png")
+    gm.object_image("Gus", "mirror_shard", None)                                        # what /setobjectimage did
+    assert gm.object_get("mirror_shard")["object"]["image_url"] is None
+    for bad, why in (({"name": " "}, "nombre"), ({"id": "Mal!"}, "identificador"), ({"thresholds": [{"spins": 1, "effects": ["explode_world"]}]}, "no válido"),
+                     ({"image": "javascript:alert(1)"}, "https"), ({"type": "weapon"}, "tipo")):
+        with pytest.raises(RpcError, match=why):
+            gm.object_save("Gus", {**form, "id": "other_one", **bad})

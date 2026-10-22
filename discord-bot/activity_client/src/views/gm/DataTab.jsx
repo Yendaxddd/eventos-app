@@ -9,6 +9,7 @@ import { usePanel } from "../../panel/data.js";
 import { OBJECT_TYPE, parseNumber, plural, rarityOf } from "../../panel/format.js";
 import { ago } from "../../util.js";
 import { Card, NumberInput } from "./ui.jsx";
+import { ObjectForm } from "./ObjectForm.jsx";
 import { useDo } from "./hooks.js";
 
 const STARTER_I18N = '{\n  "exact": {},\n  "patterns": []\n}\n';
@@ -168,10 +169,19 @@ function Pending({ p, onChanged, openFile }) {
 function Objects({ openFile }) {
   const q = usePanel("gm.objects");
   const [busy, run] = useDo();
+  const [form, setForm] = useState(null);                  // null | { loaded } (an object to edit) | { loaded: null } (a new one)
+  const [players, setPlayers] = useState([]);
+  const openForm = async (id) => {
+    try {
+      const [loaded, list] = await Promise.all([id ? rpc("gm.object", { id }) : Promise.resolve(null), rpc("gm.players", {})]);
+      setPlayers((list.players || []).map((p) => ({ id: String(p.id), name: p.name })));
+      setForm({ loaded });
+    } catch (error) { toast(error.message, "bad"); }
+  };
   const reload = async () => {
     const out = await run("reload", "gm.obj_reload", {}, null);
     if (out) {
-      q.replace({ approved: out.approved, pending: out.pending });
+      q.replace({ approved: out.approved, pending: out.pending, effects: out.effects });
       if (out.errors.length) toast(`Se cargaron ${out.loaded}; ${plural(out.errors.length, "archivo con error", "archivos con error")}: ${out.errors[0]}`, "warn", 6000);
       else toast(`Objetos recargados: ${plural(out.loaded, "cargado", "cargados")}.`, "ok");
     }
@@ -181,8 +191,11 @@ function Objects({ openFile }) {
       {(d) => (
         <>
           <div class="row wrap" style={{ gap: "10px" }}>
+            <button class="btn btn-primary" type="button" onClick={() => openForm(null)} data-testid="gm-obj-new"><Plus size={16} /> Nuevo objeto</button>
             <button class="btn" type="button" onClick={reload} disabled={busy !== null} data-testid="gm-obj-reload"><RefreshCw size={16} /> Recargar objetos</button>
           </div>
+          {form && <ObjectForm loaded={form.loaded} players={players} effects={d.effects} onClose={() => setForm(null)}
+            onSaved={(out) => { q.replace({ approved: out.approved, pending: out.pending, effects: out.effects }); if (!form.loaded) setForm(null); }} />}
           <Card title="Esperando aprobación" icon={Package} testid="gm-pending" hint="Objetos enviados por el equipo. Se revisan antes de que los jugadores puedan tenerlos.">
             {d.pending.length === 0 ? <Empty icon={Check} title="No hay objetos pendientes">Cuando alguien envíe uno, aparecerá aquí.</Empty>
               : <ul class="gm-list">{d.pending.map((p) => <Pending key={p.file} p={p} onChanged={(out) => q.replace(out)} openFile={openFile} />)}</ul>}
@@ -196,7 +209,8 @@ function Objects({ openFile }) {
                     <div class="grow"><strong>{o.name}</strong> <code class="faint">{o.id}</code>
                       <div class="row wrap" style={{ gap: "6px", marginTop: "4px" }}><Pill>{rarityOf(o.rarity).label}</Pill><Pill>{OBJECT_TYPE[o.type] || o.type}</Pill></div>
                     </div>
-                    <button class="btn btn-sm" type="button" onClick={() => openFile(`object:${o.id}`)} data-testid={`gm-approved-edit-${o.id}`}><Pencil size={14} /> Editar</button>
+                    <button class="btn btn-sm" type="button" onClick={() => openForm(o.id)} data-testid={`gm-approved-form-${o.id}`}><Pencil size={14} /> Editar</button>
+                    <button class="btn btn-sm btn-ghost" type="button" onClick={() => openFile(`object:${o.id}`)} data-testid={`gm-approved-edit-${o.id}`} title="Editar el archivo JSON"><FileText size={14} /> JSON</button>
                   </li>
                 ))}
               </ul>

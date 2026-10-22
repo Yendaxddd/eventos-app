@@ -274,5 +274,15 @@ class GmRpc:
     async def rpc_gm_obj_reject(self, conn: Conn, args: dict):
         return self.gm.object_reject(await self._gm(conn), str(args.get("file")), str(args.get("reason") or ""))
 
+    async def rpc_gm_object(self, conn: Conn, args: dict):
+        await self._gm(conn)
+        return self.gm.object_get(args.get("id"))
+
+    async def rpc_gm_object_save(self, conn: Conn, args: dict):
+        return self.gm.object_save(await self._gm(conn), args.get("object"))
+
+    async def rpc_gm_object_image(self, conn: Conn, args: dict):
+        return self.gm.object_image(await self._gm(conn), str(args.get("id") or ""), args.get("image"))
+
     async def rpc_gm_obj_reload(self, conn: Conn, args: dict):
         return self.gm.object_reload(await self._gm(conn))
