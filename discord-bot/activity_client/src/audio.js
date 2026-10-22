@@ -146,6 +146,16 @@ export function setMusic(m, { keep = false, arrival = performance.now() } = {}) 
   startTrack(m, arrival);
 }
 
+// What plays now, to put it back later (a cinematic that changed the music on this screen gives the event's music back when it ends).
+export function musicSnapshot() {
+  return { music: music.value, arrival: track ? track.arrival : performance.now() };
+}
+export function restoreMusic(snap) {
+  if (!snap) return;
+  if (!snap.music) { setMusic(null); return; }
+  setMusic(snap.music, { arrival: snap.arrival });
+}
+
 // The player moved a volume or switched the event sound off: the music follows at once.
 effect(() => {
   const p = prefs.value;

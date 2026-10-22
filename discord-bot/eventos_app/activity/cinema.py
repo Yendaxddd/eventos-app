@@ -2,11 +2,16 @@
 
 A cinematic is a list of steps, each at a second of the timeline:
 
-    text    a caption (who says it, what, for how long, how it appears)
+    text    a caption (who says it, what, for how long, how it appears, where): with a side (left/right) it is a line of a
+            dialogue, and the speaker's portrait stands on that side while the other one waits on theirs
     audio   a library sound (once), music that starts, or «stop the music»
-    image   a picture on screen for a while
-    scene   the background (a colour, a picture, or nothing) from then on
-    effect  a flash, a shake or a fade to black
+    image   a picture on screen for a while (how it comes in, how big, a slow camera move on it)
+    scene   the background (a colour, a picture, or nothing) from then on, with a camera move and a transition
+    effect  a screen effect for a while: flash, shake, blackout, whiteout, blur, zoom, tint, black and white, sepia, negative,
+            vignette, chromatic split, glitch, pulse
+    vfx     an effect of the powers' kind (fx.py)
+    title   a title card (a chapter, a place, a big impact word)
+    weather rain, snow, embers, fog... from then on (until another weather step)
     post    a message the bot writes in the event channel
 
 The game masters write them in the panel, play them by hand or bind them to what happens in the game («when the boss appears»). The server
@@ -34,11 +39,19 @@ MAX_STEPS = 200
 MAX_TIME = 3600.0                      # an hour of timeline is already far more than anybody writes
 MAX_DURATION = 600.0
 MAX_TEXT = 600
-STEP_TYPES = ("text", "audio", "image", "scene", "effect", "vfx", "post")
-TEXT_EFFECTS = ("type", "fade", "shake")
+STEP_TYPES = ("text", "audio", "image", "scene", "effect", "vfx", "title", "weather", "post")
+TEXT_EFFECTS = ("type", "fade", "shake", "pop")
+TEXT_SIDES = ("bottom", "left", "right", "top", "center")
 AUDIO_MODES = ("play", "music", "stop_music")
-EFFECTS = ("flash", "shake", "blackout")
+EFFECTS = ("flash", "shake", "blackout", "whiteout", "blur", "zoom", "tint", "grayscale", "sepia", "invert", "vignette", "chromatic", "glitch", "pulse")
 SIZES = ("normal", "big")
+CAMERAS = ("none", "zoom_in", "zoom_out", "pan_left", "pan_right", "pan_up", "pan_down", "drift")
+ENTRANCES = ("pop", "fade", "slide_left", "slide_right", "slide_up", "zoom")
+IMAGE_SIZES = ("small", "medium", "large", "full")
+TRANSITIONS = ("cut", "fade", "flash")
+TITLE_STYLES = ("cinema", "chapter", "impact", "location", "minimal")
+EFFECT_COLORS = {"blackout": "#000000", "vignette": "#000000", "tint": "#dc2626", "pulse": "#dc2626"}     # the colour an effect has when none is chosen
+WEATHER = ("none", "rain", "storm", "snow", "embers", "fog", "petals", "sparks", "stars", "ash")
 _NOISY = {"evade_ok", "parry_ok", "counter", "rescue_ok", "combo_step", "player_hit", "heal", "boss_hit", "power_1", "power_2", "mob_attack", "mob_hit"}
 TRIGGER_EVENTS = tuple(e for e in EVENTS if not e.startswith("qte_") and e not in _NOISY)        # cinematics start on what happens, not on every QTE or blow
 BOSS_EVENTS = ("boss_spawn", "boss_defeated", "boss_domain")           # the events that say which boss they are about
@@ -89,6 +102,11 @@ def _percent(value: Any, default: int = 100) -> int:
         return default
 
 
+def _pick(value: Any, options: tuple, default: str | None = None) -> str:
+    """One of `options` (the first, or `default`, when it is not one of them)."""
+    return value if value in options else (default if default is not None else options[0])
+
+
 def text_duration(text: str) -> float:
     """How long a caption stays when its writer did not say: time to read it."""
     return round(max(2.0, min(20.0, len(text) / 14.0 + 1.0)), 2)
@@ -109,8 +127,8 @@ def clean_step(raw: Any, number: int, library: AudioLibrary | None) -> dict:
             raise RpcError(f"{where}: el texto está vacío.")
         step.update(text=text, speaker=_line(raw.get("speaker"), 60), avatar=_image(raw.get("avatar"), f"{where}, retrato"),
                     duration=_seconds(raw.get("duration"), f"{where}, duración", 0.5, MAX_DURATION, text_duration(text)),
-                    effect=raw.get("effect") if raw.get("effect") in TEXT_EFFECTS else "type", color=_color(raw.get("color"), f"{where}, color"),
-                    size=raw.get("size") if raw.get("size") in SIZES else "normal")
+                    effect=_pick(raw.get("effect"), TEXT_EFFECTS), color=_color(raw.get("color"), f"{where}, color"),
+                    size=_pick(raw.get("size"), SIZES), side=_pick(raw.get("side"), TEXT_SIDES))
     elif kind == "audio":
         mode = raw.get("mode") if raw.get("mode") in AUDIO_MODES else "play"
         step["mode"] = mode
@@ -126,13 +144,25 @@ def clean_step(raw: Any, number: int, library: AudioLibrary | None) -> dict:
         if image is None:
             raise RpcError(f"{where}: elige una imagen.")
         step.update(image=image, duration=_seconds(raw.get("duration"), f"{where}, duración", 0.5, MAX_DURATION, 4.0),
-                    position=raw.get("position") if raw.get("position") in ("center", "left", "right") else "center")
+                    position=_pick(raw.get("position"), ("center", "left", "right")), enter=_pick(raw.get("enter"), ENTRANCES),
+                    size=_pick(raw.get("size"), IMAGE_SIZES, "medium"), camera=_pick(raw.get("camera"), CAMERAS))
     elif kind == "scene":
         step.update(color=_color(raw.get("color"), f"{where}, color", "#000000"), image=_image(raw.get("image"), f"{where}, imagen"),
-                    dim=_percent(raw.get("dim"), 40))
+                    dim=_percent(raw.get("dim"), 40), camera=_pick(raw.get("camera"), CAMERAS),
+                    camera_time=_seconds(raw.get("camera_time"), f"{where}, duración del movimiento", 1, MAX_DURATION, 12.0),
+                    transition=_pick(raw.get("transition"), TRANSITIONS, "fade"))
     elif kind == "effect":
-        step.update(effect=raw.get("effect") if raw.get("effect") in EFFECTS else "flash", color=_color(raw.get("color"), f"{where}, color", "#ffffff"),
-                    duration=_seconds(raw.get("duration"), f"{where}, duración", 0.1, 30.0, 0.6))
+        effect = _pick(raw.get("effect"), EFFECTS)
+        step.update(effect=effect, color=_color(raw.get("color"), f"{where}, color", EFFECT_COLORS.get(effect, "#ffffff")),
+                    duration=_seconds(raw.get("duration"), f"{where}, duración", 0.1, 60.0, 0.6), intensity=_percent(raw.get("intensity"), 60))
+    elif kind == "title":
+        text = _line(raw.get("text"), 80)
+        if not text:
+            raise RpcError(f"{where}: el título está vacío.")
+        step.update(text=text, subtitle=_line(raw.get("subtitle"), 120), style=_pick(raw.get("style"), TITLE_STYLES),
+                    color=_color(raw.get("color"), f"{where}, color"), duration=_seconds(raw.get("duration"), f"{where}, duración", 0.5, MAX_DURATION, 3.5))
+    elif kind == "weather":
+        step.update(weather=_pick(raw.get("weather"), WEATHER, "rain"), intensity=_percent(raw.get("intensity"), 60))
     elif kind == "vfx":                      # a visual effect of the powers' kind (fx.py): a preset with its colour, strength and speed, and an optional banner
         look = fx_sanitize({k: raw.get(k) for k in ("preset", "color", "intensity", "speed", "banner")})
         step.update(preset=look["preset"], color=look["color"], intensity=look["intensity"], speed=look["speed"], banner=look["banner"],
@@ -166,6 +196,7 @@ def clean_cinema(raw: Any, library: AudioLibrary | None, known_id: str | None = 
     length = max(s["at"] + (s.get("duration") or 0) for s in steps)
     return {"id": known_id or str(raw.get("id") or "") or secrets.token_hex(4), "name": name, "steps": steps, "triggers": triggers,
             "boss": _line(raw.get("boss"), 80), "bg": _color(raw.get("bg"), "Fondo", "#000000"), "bars": bool(raw.get("bars", True)), "skippable": bool(raw.get("skippable", True)),
+            "see": bool(raw.get("see", False)),          # see-through: the game stays visible behind (a dialogue over the fight)
             "duration": round(length + 1.0, 2)}
 
 

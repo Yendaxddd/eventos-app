@@ -37,7 +37,9 @@ class CinemaRpc:
                 "events": [{"id": e, "label": EVENTS[e][0]} for e in TRIGGER_EVENTS],
                 "sounds": [{"id": s["id"], "name": s["name"], "kind": s["kind"]} for s in self.audio.library.public()],
                 "images": {"files": files, "bytes": size}, "canStore": self.audio.library.store is not None,
-                "autoplay": self.cinema.on_event_enabled, "bosses": self._known_bosses()}
+                "autoplay": self.cinema.on_event_enabled, "bosses": self._known_bosses(),
+                # the characters whose picture is kept on this PC: one click puts their name and portrait on a line of dialogue
+                "cast": [{"name": n, "image": p} for n, p in list(getattr(self, "char_images", {}).items())[:300]]}
 
     async def rpc_gm_cinemas(self, conn: Conn, args: dict):
         await self._gm(conn)

@@ -9,8 +9,9 @@ const transit = () => (comp.value.net !== null && comp.value.net !== undefined ?
 
 export function startCine(run, { arrival = performance.now(), preview = false } = {}) {
   if (!run || !run.cinema) { cine.value = null; return; }
-  if (!prefs.value.cinema && !preview) { cine.value = null; return; }
-  cine.value = { run, arrival, preview, transitMs: preview ? 0 : transit(), skipped: false };
+  // cinematics switched off: nothing is drawn, but its sounds and music still play (they are part of the event)
+  const hidden = !prefs.value.cinema && !preview;
+  cine.value = { run, arrival, preview, hidden, transitMs: preview ? 0 : transit(), skipped: false };
 }
 
 export function stopCine() { cine.value = null; }
@@ -20,8 +21,9 @@ export function onCineFrame(frame, arrival = performance.now()) {
   else if (frame.op === "stop") stopCine();
 }
 
-// For the editor: play a script that is not saved, only here.
-export function previewCine(cinema) {
+// For the editor: play a script that is not saved, only here (from second `from`, to see one part without waiting).
+let previews = 0;
+export function previewCine(cinema, from = 0) {
   const now = Date.now();
-  startCine({ id: "preview", cinema, startedAt: now, now }, { preview: true });
+  startCine({ id: `preview-${++previews}`, cinema, startedAt: now - Math.max(0, from) * 1000, now }, { preview: true });
 }

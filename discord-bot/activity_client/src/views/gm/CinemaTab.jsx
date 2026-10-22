@@ -1,29 +1,47 @@
 import { useMemo, useRef, useState } from "preact/hooks";
-import { ArrowLeft, Check, ChevronLeft, ChevronRight, Clapperboard, Copy, Eye, ImagePlus, Loader2, MessageSquare, Pencil, Play, Plus, Sparkles, Square, Trash2, TriangleAlert, Type, Volume2, X, Zap } from "lucide-preact";
+import { ArrowLeft, Check, ChevronLeft, ChevronRight, Clapperboard, ClipboardPaste, CloudRain, Copy, Eye, Heading, ImagePlus, LayoutTemplate, Loader2, MessageSquare, Pencil, Play, Plus, Sparkles, Square, Trash2, TriangleAlert, Type, Volume2, X, Zap } from "lucide-preact";
 import { Block, ConfirmButton, Empty, Pill } from "../../ui/Common.jsx";
 import { Range, Switch } from "../../ui/Controls.jsx";
 import { uploadCinemaImage } from "../../net.js";
 import { toast } from "../../state.js";
 import { previewCine } from "../../cine.js";
-import { LANES, STEP_LABELS, draggedTo, durationOf, newStep, orderOf, rulerTicks, validate } from "../../cinema-model.js";
+import { LANES, STEP_LABELS, TEMPLATES, draggedTo, durationOf, newStep, orderOf, pasteAt, rulerTicks, templateSteps, validate } from "../../cinema-model.js";
 import { PRESETS, PRESET_IDS } from "../../fx-model.js";
 import { playBinding } from "../../vfx.js";
 import { act } from "../../panel/data.js";
-import { cdn, cx, plural } from "../../util.js";
+import { cdn, cx, plural, store } from "../../util.js";
 import { Card, NumberInput } from "./ui.jsx";
 import { useAutosave, useDo, useLive } from "./hooks.js";
 
-const ICON = { text: Type, audio: Volume2, image: ImagePlus, scene: Sparkles, effect: Zap, vfx: Zap, post: MessageSquare };
-const TEXT_EFFECTS = [["type", "Se va escribiendo"], ["fade", "Aparece entera"], ["shake", "Tiembla"]];
+const ICON = { text: Type, title: Heading, audio: Volume2, image: ImagePlus, scene: Sparkles, weather: CloudRain, effect: Zap, vfx: Zap, post: MessageSquare };
+const TEXT_EFFECTS = [["type", "Se va escribiendo"], ["fade", "Aparece entera"], ["pop", "Golpe (aparece de golpe)"], ["shake", "Tiembla"]];
+const SIDES = [["bottom", "Abajo"], ["left", "Diálogo: izquierda"], ["right", "Diálogo: derecha"], ["top", "Arriba"], ["center", "Centro"]];
 const AUDIO_MODES = [["play", "Suena una vez"], ["music", "Empieza música"], ["stop_music", "Para la música"]];
-const EFFECTS = [["flash", "Destello"], ["shake", "Temblor"], ["blackout", "Fundido a negro"]];
+// the screen effects, grouped as a creator thinks of them
+export const EFFECTS = [["flash", "Pantallazo (destello)"], ["shake", "Temblor"], ["zoom", "Zoom de golpe"], ["blur", "Desenfoque"], ["blackout", "Fundido a negro"],
+  ["whiteout", "Fundido a blanco"], ["tint", "Teñir de un color"], ["pulse", "Latido de color"], ["vignette", "Viñeta (bordes oscuros)"], ["grayscale", "Blanco y negro"],
+  ["sepia", "Sepia (recuerdo)"], ["invert", "Negativo"], ["chromatic", "Aberración de color"], ["glitch", "Glitch"]];
+const COLORED = new Set(["flash", "blackout", "whiteout", "tint", "pulse", "vignette"]);
+const CAMERAS = [["none", "Quieta"], ["zoom_in", "Acercarse"], ["zoom_out", "Alejarse"], ["pan_left", "Barrido a la izquierda"], ["pan_right", "Barrido a la derecha"],
+  ["pan_up", "Subir"], ["pan_down", "Bajar"], ["drift", "Flotar suave"]];
+const ENTRANCES = [["pop", "Aparece con rebote"], ["fade", "Fundido"], ["slide_left", "Entra por la derecha"], ["slide_right", "Entra por la izquierda"], ["slide_up", "Sube desde abajo"], ["zoom", "Zoom"]];
+const IMAGE_SIZES = [["small", "Pequeña"], ["medium", "Mediana"], ["large", "Grande"], ["full", "Pantalla completa"]];
+const TRANSITIONS = [["fade", "Fundido"], ["cut", "Corte"], ["flash", "Destello"]];
+const TITLE_STYLES = [["cinema", "Cine"], ["chapter", "Capítulo"], ["impact", "Impacto"], ["location", "Lugar (abajo a la izquierda)"], ["minimal", "Sencillo"]];
+const WEATHER = [["rain", "Lluvia"], ["storm", "Tormenta"], ["snow", "Nieve"], ["embers", "Brasas"], ["sparks", "Chispas"], ["fog", "Niebla"], ["petals", "Pétalos"], ["stars", "Estrellas"], ["ash", "Ceniza"], ["none", "Despejado (quita el clima)"]];
+const CLIPBOARD = "eventos.cineClipboard";
+
+const Select = ({ value, options, onChange, testid, label }) => (
+  <select class="select" value={value} onChange={(e) => onChange(e.currentTarget.value)} data-testid={testid} aria-label={label}>{options.map(([v, t]) => <option key={v} value={v}>{t}</option>)}</select>
+);
 
 const num = (v, fallback = 0) => { const n = Number(v); return Number.isFinite(n) ? n : fallback; };
 
 // The draft as the screen plays it: numbers as numbers, unfinished steps left out, in time order, with its length.
 export function playable(draft, keepPosts = false) {
-  const steps = draft.steps.map((s) => ({ ...s, at: num(s.at), duration: s.duration === undefined ? undefined : num(s.duration, 3), dim: s.dim === undefined ? undefined : num(s.dim, 40), volume: s.volume === undefined ? undefined : num(s.volume, 100) }))
-    .filter((s) => (s.type === "text" ? s.text && s.text.trim() : s.type === "image" ? s.image : s.type === "audio" ? s.mode === "stop_music" || s.sound : s.type === "post" ? keepPosts && s.text && s.text.trim() : true))
+  const steps = draft.steps.map((s) => ({ ...s, at: num(s.at), duration: s.duration === undefined ? undefined : num(s.duration, 3), dim: s.dim === undefined ? undefined : num(s.dim, 40), volume: s.volume === undefined ? undefined : num(s.volume, 100),
+    intensity: s.intensity === undefined ? undefined : num(s.intensity, 60), camera_time: s.camera_time === undefined ? undefined : num(s.camera_time, 12) }))
+    .filter((s) => (s.type === "text" || s.type === "title" ? s.text && s.text.trim() : s.type === "image" ? s.image : s.type === "audio" ? s.mode === "stop_music" || s.sound : s.type === "post" ? keepPosts && s.text && s.text.trim() : true))
     .map((s) => (s.type === "text" ? { ...s, duration: s.duration || 3, color: s.color || null, avatar: s.avatar || null } : s))
     .sort((a, b) => a.at - b.at);
   return { ...draft, steps, bg: draft.bg || "#000000", duration: durationOf(steps.length ? steps : [{ at: 0, duration: 1 }]) };
@@ -62,8 +80,17 @@ function StepForm({ step, d, set }) {
             <label class="field"><span class="field-label">Cómo aparece</span>
               <select class="select" value={step.effect} onChange={(e) => set({ effect: e.currentTarget.value })}>{TEXT_EFFECTS.map(([v, t]) => <option key={v} value={v}>{t}</option>)}</select></label>
             <label class="field"><span class="field-label">Tamaño</span>
-              <select class="select" value={step.size} onChange={(e) => set({ size: e.currentTarget.value })}><option value="normal">Normal</option><option value="big">Grande (títulos)</option></select></label>
+              <select class="select" value={step.size} onChange={(e) => set({ size: e.currentTarget.value })}><option value="normal">Normal</option><option value="big">Grande</option></select></label>
+            <label class="field"><span class="field-label">Dónde</span><Select value={step.side || "bottom"} options={SIDES} onChange={(v) => set({ side: v })} testid="cine-side" label="Dónde sale el texto" /></label>
+            {(d.cast || []).length > 0 && (
+              <label class="field"><span class="field-label">Personaje <span class="faint">(nombre y retrato)</span></span>
+                <select class="select" value="" onChange={(e) => { const c = d.cast.find((x) => x.name === e.currentTarget.value); if (c) set({ speaker: c.name.slice(0, 60), avatar: c.image }); }} data-testid="cine-cast">
+                  <option value="">— elegir —</option>
+                  {d.cast.map((c) => <option key={c.name} value={c.name}>{c.name}</option>)}
+                </select></label>
+            )}
           </div>
+          {(step.side === "left" || step.side === "right") && <span class="faint gm-hint">Línea de diálogo: el retrato de quien habla sale a ese lado y el del otro personaje espera en el suyo. Alterna izquierda y derecha para una conversación.</span>}
           <textarea class="textarea" maxLength={600} value={step.text} placeholder="Lo que se dice…" onInput={(e) => set({ text: e.currentTarget.value })} data-testid="cine-text" aria-label="Texto" />
           <div class="row wrap" style={{ gap: "12px" }}>
             <label class="row" style={{ gap: "6px" }}><span class="faint">Color del texto</span><input type="color" value={step.color || "#ffffff"} onInput={(e) => set({ color: e.currentTarget.value })} aria-label="Color del texto" /></label>
@@ -93,6 +120,9 @@ function StepForm({ step, d, set }) {
           <label class="field"><span class="field-label">Cuánto se ve</span><NumberInput value={step.duration} min={0.5} max={600} step={0.5} unit="s" label="Duración" onInput={(v) => set({ duration: v })} /></label>
           <label class="field"><span class="field-label">Dónde</span>
             <select class="select" value={step.position} onChange={(e) => set({ position: e.currentTarget.value })}><option value="center">Centro</option><option value="left">Izquierda</option><option value="right">Derecha</option></select></label>
+          <label class="field"><span class="field-label">Tamaño</span><Select value={step.size || "medium"} options={IMAGE_SIZES} onChange={(v) => set({ size: v })} label="Tamaño de la imagen" /></label>
+          <label class="field"><span class="field-label">Cómo entra</span><Select value={step.enter || "pop"} options={ENTRANCES} onChange={(v) => set({ enter: v })} label="Cómo entra" /></label>
+          <label class="field"><span class="field-label">Cámara</span><Select value={step.camera || "none"} options={CAMERAS} onChange={(v) => set({ camera: v })} testid="cine-image-camera" label="Cámara sobre la imagen" /></label>
         </div>
       )}
       {step.type === "scene" && (
@@ -100,14 +130,42 @@ function StepForm({ step, d, set }) {
           <label class="field"><span class="field-label">Color de fondo</span><input type="color" value={step.color || "#000000"} onInput={(e) => set({ color: e.currentTarget.value })} aria-label="Color de fondo" /></label>
           <label class="field"><span class="field-label">Imagen de fondo</span><StepImage value={step.image} onChange={(image) => set({ image })} label="Subir fondo" /></label>
           <label class="field"><span class="field-label">Oscurecer</span><NumberInput value={step.dim} min={0} max={100} step={5} unit="%" label="Oscurecer" onInput={(v) => set({ dim: v })} /></label>
+          <label class="field"><span class="field-label">Cámara</span><Select value={step.camera || "none"} options={CAMERAS} onChange={(v) => set({ camera: v })} testid="cine-camera" label="Cámara sobre el fondo" /></label>
+          {step.camera && step.camera !== "none" && <label class="field"><span class="field-label">Movimiento en</span><NumberInput value={step.camera_time ?? 12} min={1} max={600} step={1} unit="s" label="Duración del movimiento" onInput={(v) => set({ camera_time: v })} /></label>}
+          <label class="field"><span class="field-label">Transición</span><Select value={step.transition || "fade"} options={TRANSITIONS} onChange={(v) => set({ transition: v })} label="Transición" /></label>
+        </div>
+      )}
+      {step.type === "title" && (
+        <div class="col" style={{ gap: "8px" }}>
+          <div class="gm-grid">
+            <label class="field"><span class="field-label">Título</span><input class="input" maxLength={80} value={step.text} placeholder="Capítulo I" onInput={(e) => set({ text: e.currentTarget.value })} data-testid="cine-title-text" /></label>
+            <label class="field"><span class="field-label">Subtítulo</span><input class="input" maxLength={120} value={step.subtitle} placeholder="(opcional)" onInput={(e) => set({ subtitle: e.currentTarget.value })} /></label>
+            <label class="field"><span class="field-label">Estilo</span><Select value={step.style || "cinema"} options={TITLE_STYLES} onChange={(v) => set({ style: v })} testid="cine-title-style" label="Estilo del título" /></label>
+            <label class="field"><span class="field-label">Cuánto se ve</span><NumberInput value={step.duration} min={0.5} max={600} step={0.5} unit="s" label="Duración" onInput={(v) => set({ duration: v })} /></label>
+          </div>
+          <label class="row" style={{ gap: "6px" }}><span class="faint">Color</span><input type="color" value={step.color || "#ffffff"} onInput={(e) => set({ color: e.currentTarget.value })} aria-label="Color del título" /></label>
+        </div>
+      )}
+      {step.type === "weather" && (
+        <div class="col" style={{ gap: "8px" }}>
+          <div class="row wrap gm-chips" role="group" aria-label="Clima">
+            {WEATHER.map(([v, t]) => <button key={v} type="button" class="choice" aria-pressed={step.weather === v ? "true" : "false"} onClick={() => set({ weather: v })} data-testid={`cine-weather-${v}`}>{t}</button>)}
+          </div>
+          {step.weather !== "none" && <label class="field"><span class="field-label">Intensidad</span><Range label="Intensidad" min={10} max={100} step={5} value={step.intensity ?? 60} onChange={(v) => set({ intensity: v })} format={(v) => `${v} %`} /></label>}
+          <span class="faint gm-hint">Sigue desde este momento hasta otro paso de clima (elige «Despejado» para quitarlo).</span>
         </div>
       )}
       {step.type === "effect" && (
-        <div class="gm-grid">
-          <label class="field"><span class="field-label">Efecto</span>
-            <select class="select" value={step.effect} onChange={(e) => set({ effect: e.currentTarget.value })}>{EFFECTS.map(([v, t]) => <option key={v} value={v}>{t}</option>)}</select></label>
-          <label class="field"><span class="field-label">Dura</span><NumberInput value={step.duration} min={0.1} max={30} step={0.1} unit="s" label="Duración" onInput={(v) => set({ duration: v })} /></label>
-          {step.effect !== "shake" && <label class="field"><span class="field-label">Color</span><input type="color" value={step.color || "#ffffff"} onInput={(e) => set({ color: e.currentTarget.value })} aria-label="Color" /></label>}
+        <div class="col" style={{ gap: "8px" }}>
+          <div class="row wrap gm-chips" role="group" aria-label="Efecto de pantalla">
+            {EFFECTS.map(([v, t]) => <button key={v} type="button" class="choice" aria-pressed={step.effect === v ? "true" : "false"} onClick={() => set({ effect: v })} data-testid={`cine-effect-${v}`}>{t}</button>)}
+          </div>
+          <div class="gm-grid">
+            <label class="field"><span class="field-label">Dura</span><NumberInput value={step.duration} min={0.1} max={60} step={0.1} unit="s" label="Duración" onInput={(v) => set({ duration: v })} /></label>
+            <label class="field"><span class="field-label">Fuerza</span><Range label="Fuerza" min={10} max={100} step={5} value={step.intensity ?? 60} onChange={(v) => set({ intensity: v })} format={(v) => `${v} %`} /></label>
+            {COLORED.has(step.effect) && <label class="field"><span class="field-label">Color</span><input type="color" value={step.color || "#ffffff"} onInput={(e) => set({ color: e.currentTarget.value })} aria-label="Color" /></label>}
+          </div>
+          <span class="faint gm-hint">Los efectos pueden solaparse: un temblor durante un fundido, un sepia con viñeta… Con «Sobre el juego» se aplican a la pantalla del juego.</span>
         </div>
       )}
       {step.type === "vfx" && (
@@ -141,11 +199,13 @@ function StepForm({ step, d, set }) {
 function brief(step, d) {
   const cut = (t, n = 28) => { const x = String(t || "").replace(/\s+/g, " ").trim(); return x.length > n ? `${x.slice(0, n - 1)}…` : x; };
   switch (step.type) {
-    case "text": return step.speaker ? `${cut(step.speaker, 14)}: ${cut(step.text, 20)}` : cut(step.text);
+    case "text": return `${step.side === "left" ? "◧ " : step.side === "right" ? "◨ " : ""}${step.speaker ? `${cut(step.speaker, 14)}: ${cut(step.text, 20)}` : cut(step.text)}`;
     case "audio": return step.mode === "stop_music" ? "Para la música" : (d.sounds.find((s) => s.id === step.sound) || { name: "(sin sonido)" }).name;
     case "image": return step.image ? "Imagen" : "(sin imagen)";
-    case "scene": return "Fondo";
+    case "scene": return step.camera && step.camera !== "none" ? `Fondo · ${(CAMERAS.find((c) => c[0] === step.camera) || CAMERAS[0])[1].toLowerCase()}` : "Fondo";
     case "effect": return (EFFECTS.find((e) => e[0] === step.effect) || EFFECTS[0])[1];
+    case "title": return cut(step.text) || "(sin título)";
+    case "weather": return (WEATHER.find((w) => w[0] === step.weather) || WEATHER[0])[1];
     case "vfx": return (PRESETS[step.preset] || PRESETS.explosion).label;
     default: return cut(step.text);
   }
@@ -245,6 +305,28 @@ function Editor({ start, d, onClose, replace }) {
     setDraft((old) => ({ ...old, steps: [...old.steps, fresh] }));
     setSelected(fresh._k);
   };
+  const addTemplate = (tid) => {
+    const fresh = templateSteps(tid, cursor).map((st) => ({ ...st, _k: ++stepKey }));
+    if (!fresh.length) return;
+    setDraft((old) => ({ ...old, steps: [...old.steps, ...fresh] }));
+    setSelected(fresh[0]._k);
+    toast(`Plantilla añadida en el segundo ${cursor}: cambia los textos y las imágenes.`, "ok", 3000);
+  };
+  const copyStep = (k) => {
+    const src = draft.steps.find((st) => st._k === k);
+    if (!src) return;
+    const { _k, _n, ...plain } = src;
+    store.set(CLIPBOARD, JSON.stringify([plain]));
+    toast("Paso copiado: pégalo aquí o en otra cinemática.", "ok", 2200);
+  };
+  const paste = () => {
+    let copied = [];
+    try { copied = JSON.parse(store.get(CLIPBOARD) || "[]"); } catch { copied = []; }
+    if (!Array.isArray(copied) || !copied.length) { toast("No hay ningún paso copiado.", "info"); return; }
+    const fresh = pasteAt(copied, cursor).map((st) => ({ ...st, _k: ++stepKey }));
+    setDraft((old) => ({ ...old, steps: [...old.steps, ...fresh] }));
+    setSelected(fresh[0]._k);
+  };
   const toggleTrigger = (tid) => set({ triggers: draft.triggers.includes(tid) ? draft.triggers.filter((t) => t !== tid) : [...draft.triggers, tid] });
   const sel = ordered.find((s) => s._k === selected) || null;
   const at = sel ? ordered.indexOf(sel) : -1;
@@ -264,15 +346,17 @@ function Editor({ start, d, onClose, replace }) {
           <div class="row wrap" style={{ gap: "8px" }}>
             <input class="input grow" maxLength={80} value={draft.name} onInput={(e) => set({ name: e.currentTarget.value })} placeholder="Nombre: p. ej. Llegada del Rey" aria-label="Nombre" data-testid="cine-name" />
             <button class="btn" type="button" onClick={() => previewCine(playable(draft))} data-testid="cine-preview"><Eye size={15} /> Ver aquí</button>
+            <button class="btn" type="button" onClick={() => previewCine(playable(draft), sel ? num(sel.at) : cursor)} data-testid="cine-preview-here" title="Ver desde el paso elegido (o desde el cursor)"><Eye size={15} /> Desde aquí</button>
             <button class="btn btn-primary" type="button" onClick={playNow} disabled={busy !== null || !!auto.reason} data-testid="cine-play-now"><Play size={15} /> Poner para todos</button>
           </div>
           <details class="cine-settings" data-testid="cine-settings">
-            <summary>Ajustes: {draft.bars ? "barras de cine" : "sin barras"} · {draft.skippable ? "se puede saltar" : "no se puede saltar"} · {draft.triggers.length ? `empieza sola con ${plural(draft.triggers.length, "suceso", "sucesos")}` : "solo la pones tú"}</summary>
+            <summary>Ajustes: {draft.see ? "sobre el juego · " : ""}{draft.bars ? "barras de cine" : "sin barras"} · {draft.skippable ? "se puede saltar" : "no se puede saltar"} · {draft.triggers.length ? `empieza sola con ${plural(draft.triggers.length, "suceso", "sucesos")}` : "solo la pones tú"}</summary>
             <div class="col" style={{ gap: "var(--sp-3)", marginTop: "var(--sp-3)" }}>
               <div class="row wrap" style={{ gap: "16px" }}>
                 <label class="row" style={{ gap: "8px" }}><Switch label="Barras de cine" checked={draft.bars} onChange={(v) => set({ bars: v })} /><span>Barras de cine</span></label>
                 <label class="row" style={{ gap: "8px" }}><Switch label="Se puede saltar" checked={draft.skippable} onChange={(v) => set({ skippable: v })} /><span>Cada jugador puede saltarla</span></label>
-                <label class="row" style={{ gap: "8px" }}><span class="faint">Fondo</span><input type="color" value={draft.bg || "#000000"} onInput={(e) => set({ bg: e.currentTarget.value })} aria-label="Color de fondo de la cinemática" /></label>
+                <label class="row" style={{ gap: "8px" }}><Switch label="Sobre el juego" checked={!!draft.see} onChange={(v) => set({ see: v })} /><span>Sobre el juego <span class="faint">(fondo transparente: se sigue viendo y usando el juego)</span></span></label>
+                {!draft.see && <label class="row" style={{ gap: "8px" }}><span class="faint">Fondo</span><input type="color" value={draft.bg || "#000000"} onInput={(e) => set({ bg: e.currentTarget.value })} aria-label="Color de fondo de la cinemática" /></label>}
               </div>
               {draft.triggers.some((t) => ["boss_spawn", "boss_defeated", "boss_domain"].includes(t)) && (
                 <label class="field"><span class="field-label">Solo para el jefe <span class="faint">(vacío: para cualquiera)</span></span>
@@ -299,6 +383,11 @@ function Editor({ start, d, onClose, replace }) {
           <span class="faint">Añadir en el segundo</span>
           <NumberInput value={cursor} min={0} max={3600} step={0.5} unit="s" label="Segundo donde se añade" testid="cine-cursor" width="110px" onInput={(v) => setCursor(Math.max(0, num(v)))} />
           {Object.keys(STEP_LABELS).map((type) => { const Icon = ICON[type]; return <button key={type} class="btn btn-sm" type="button" onClick={() => add(type)} data-testid={`cine-add-${type}`}><Icon size={14} /> {STEP_LABELS[type]}</button>; })}
+          <button class="btn btn-sm btn-ghost" type="button" onClick={paste} data-testid="cine-paste" title="Pegar el paso copiado en el segundo elegido"><ClipboardPaste size={14} /> Pegar</button>
+        </div>
+        <div class="cine-templates" data-testid="cine-templates">
+          <span class="faint"><LayoutTemplate size={14} style={{ verticalAlign: "-2px" }} /> Plantillas</span>
+          {TEMPLATES.map((tpl) => <button key={tpl.id} class="btn btn-sm" type="button" title={tpl.hint} onClick={() => addTemplate(tpl.id)} data-testid={`cine-template-${tpl.id}`}>{tpl.name}</button>)}
         </div>
       </Card>
 
@@ -308,6 +397,7 @@ function Editor({ start, d, onClose, replace }) {
             <button class="btn btn-sm btn-ghost" type="button" onClick={() => setSelected(ordered[at - 1]._k)} disabled={at <= 0} aria-label="Paso anterior"><ChevronLeft size={14} /></button>
             <button class="btn btn-sm btn-ghost" type="button" onClick={() => setSelected(ordered[at + 1]._k)} disabled={at >= ordered.length - 1} aria-label="Paso siguiente"><ChevronRight size={14} /></button>
             <button class="btn btn-sm btn-ghost" type="button" onClick={() => duplicate(sel._k)} aria-label="Duplicar paso" title="Duplicar" data-testid="cine-duplicate"><Copy size={14} /></button>
+            <button class="btn btn-sm btn-ghost" type="button" onClick={() => copyStep(sel._k)} aria-label="Copiar paso" title="Copiar (para pegarlo en otro momento o en otra cinemática)" data-testid="cine-copy"><ClipboardPaste size={14} style={{ transform: "scaleY(-1)" }} /></button>
             <button class="btn btn-sm btn-ghost" type="button" onClick={() => remove(sel._k)} aria-label="Quitar paso" title="Quitar" data-testid="cine-remove"><Trash2 size={14} /></button>
           </>
         )}>
@@ -330,7 +420,7 @@ function Editor({ start, d, onClose, replace }) {
   );
 }
 
-const BLANK = () => ({ id: "", name: "Nueva cinemática", boss: "", steps: [newStep("scene", []), { ...newStep("text", [{ at: 0, duration: 1 }]), text: "Escribe aquí lo que se dice…" }], triggers: [], bg: "#000000", bars: true, skippable: true });
+const BLANK = () => ({ id: "", name: "Nueva cinemática", boss: "", steps: [newStep("scene", []), { ...newStep("text", [{ at: 0, duration: 1 }]), text: "Escribe aquí lo que se dice…" }], triggers: [], bg: "#000000", bars: true, skippable: true, see: false });
 
 function List({ d, replace, edit }) {
   const [busy, run] = useDo();
@@ -360,7 +450,7 @@ function List({ d, replace, edit }) {
               {d.running === c.id
                 ? <button class="btn btn-sm btn-danger" type="button" onClick={stop} data-testid={`cine-stop-${c.id}`}><Square size={14} /> Parar</button>
                 : <button class="btn btn-sm btn-primary" type="button" onClick={() => play(c)} disabled={busy !== null} data-testid={`cine-play-${c.id}`}><Play size={14} /> Poner</button>}
-              <button class="btn btn-sm" type="button" onClick={() => edit({ ...c, steps: c.steps.map((s) => ({ ...s, color: s.color || "", avatar: s.avatar || "", image: s.image || "" })) })} data-testid={`cine-edit-${c.id}`}><Pencil size={14} /> Editar</button>
+              <button class="btn btn-sm" type="button" onClick={() => edit({ ...c, see: !!c.see, steps: c.steps.map((s) => ({ ...s, color: s.color || "", avatar: s.avatar || "", image: s.image || "", ...(s.type === "title" ? { subtitle: s.subtitle || "" } : {}) })) })} data-testid={`cine-edit-${c.id}`}><Pencil size={14} /> Editar</button>
               <button class="btn btn-sm btn-ghost" type="button" onClick={() => copy(c)} aria-label={`Duplicar «${c.name}»`} title="Duplicar"><Copy size={14} /></button>
               <ConfirmButton icon={Trash2} confirm="Sí, borrar" onConfirm={() => del(c)} class="btn-ghost" testid={`cine-delete-${c.id}`} label={`Borrar «${c.name}»`} />
             </div>

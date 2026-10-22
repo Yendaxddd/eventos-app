@@ -9,6 +9,8 @@ import { applyPrefs } from "./prefs.js";
 import { setPrefs } from "./settings-actions.js";
 import { cine } from "./cine.js";
 import { vfxLog } from "./vfx.js";
+import { music } from "./audio.js";
+import { mobs } from "./mobs.js";
 
 effect(() => applyPrefs(prefs.value));      // the player's settings are applied to the page whenever they change
 installKeys();
@@ -19,6 +21,7 @@ window.__eventos = {
   get link() { return link.value; }, get comp() { return comp.value; }, get me() { return me.value; }, get game() { return game.value; },
   get conn() { return conn.value; }, get view() { return view.value; }, get prefs() { return prefs.value; }, get tutorial() { return tutorial.value; },
   get characters() { return characters.value; }, get perms() { return perms.value; }, go, setPrefs, get cine() { return cine.value; }, vfxLog,
+  get music() { return music.value; }, get mobs() { return mobs.value; },
 };
 
 render(<App />, document.getElementById("root"));

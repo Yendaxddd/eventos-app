@@ -52,7 +52,9 @@ def test_a_script_is_checked_step_by_step_put_in_time_order_and_measured(tmp_pat
     assert cinema["triggers"] == ["boss_spawn"]                                           # no duplicates, no unknown event, and a QTE is not an event to start one
     assert cinema["duration"] == 10.0 and cinema["bars"] is True and len(cinema["id"]) == 8
     text = cinema["steps"][2]
-    assert text == {"type": "text", "at": 4.0, "text": "Así que habéis venido.", "speaker": "Rey", "avatar": None, "duration": 3.0, "effect": "type", "color": None, "size": "normal"}
+    assert text == {"type": "text", "at": 4.0, "text": "Así que habéis venido.", "speaker": "Rey", "avatar": None, "duration": 3.0, "effect": "type", "color": None, "size": "normal",
+                    "side": "bottom"}
+    assert cinema["see"] is False
     assert cinema["steps"][3]["duration"] == 0.6 and cinema["steps"][3]["color"] == "#ffffff"      # defaults for what was not said
     assert text_duration("hola") == 2.0 and text_duration("x" * 200) == 15.29 and text_duration("x" * 2000) == 20.0
 
@@ -72,6 +74,37 @@ def test_what_is_wrong_in_a_script_is_said_in_spanish_with_the_step(tmp_path, ch
     change(raw)
     with pytest.raises(RpcError, match=message):
         clean_cinema(raw, lib)
+
+
+def test_the_creator_steps_dialogue_screen_effects_camera_titles_and_weather_are_kept_in_range(tmp_path):
+    lib, raw = valid(tmp_path, see=True)
+    raw["steps"] += [
+        {"type": "text", "at": 2, "speaker": "Kuro", "text": "¿Quién eres?", "side": "left", "avatar": PIC},
+        {"type": "text", "at": 4, "speaker": "Shiro", "text": "Tu sombra.", "side": "right", "effect": "pop"},
+        {"type": "effect", "at": 3, "effect": "blur", "intensity": 300, "duration": 2},
+        {"type": "effect", "at": 3, "effect": "nope"},
+        {"type": "scene", "at": 5, "image": PIC, "camera": "pan_left", "camera_time": 20, "transition": "flash"},
+        {"type": "image", "at": 6, "image": PIC, "enter": "slide_left", "size": "full", "camera": "zoom_in"},
+        {"type": "title", "at": 7, "text": "  Capítulo II  ", "subtitle": "La caída", "style": "chapter"},
+        {"type": "weather", "at": 0, "weather": "snow", "intensity": 30},
+        {"type": "weather", "at": 9, "weather": "tornado"}]
+    cinema = clean_cinema(raw, lib)
+    steps = cinema["steps"]
+    left, right = [s for s in steps if s["type"] == "text" and s["side"] != "bottom"]
+    assert left["side"] == "left" and left["avatar"] == PIC and right["side"] == "right" and right["effect"] == "pop"
+    blur, fallback = [s for s in steps if s["type"] == "effect" and s["at"] == 3]
+    assert blur["effect"] == "blur" and blur["intensity"] == 100 and fallback["effect"] == "flash" and fallback["intensity"] == 60
+    scene = next(s for s in steps if s["type"] == "scene" and s["at"] == 5)
+    assert scene["camera"] == "pan_left" and scene["camera_time"] == 20 and scene["transition"] == "flash"
+    image = next(s for s in steps if s["type"] == "image")
+    assert (image["enter"], image["size"], image["camera"], image["position"]) == ("slide_left", "full", "zoom_in", "center")
+    title = next(s for s in steps if s["type"] == "title")
+    assert title["text"] == "Capítulo II" and title["subtitle"] == "La caída" and title["style"] == "chapter" and title["duration"] == 3.5
+    weather = [s for s in steps if s["type"] == "weather"]
+    assert weather[0] == {"type": "weather", "at": 0.0, "weather": "snow", "intensity": 30} and weather[1]["weather"] == "rain"
+    assert cinema["see"] is True
+    with pytest.raises(RpcError, match="título está vacío"):
+        clean_cinema({**raw, "steps": [{"type": "title", "at": 0, "text": " "}]}, lib)
 
 
 # ---- keeping --------------------------------------------------------------------------------------------------------------

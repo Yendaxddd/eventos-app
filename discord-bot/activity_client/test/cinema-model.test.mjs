@@ -17,9 +17,14 @@ const cinema = {
 };
 
 test("the background is the latest scene step that has started", () => {
-  assert.deepEqual(sceneAt(cinema, 0), { color: "#220033", image: "files/images/a.png", dim: 50 });
-  assert.deepEqual(sceneAt(cinema, 9), { color: "#000000", image: null, dim: 0 });
-  assert.deepEqual(sceneAt({ bg: "#111111", steps: [] }, 5), { color: "#111111", image: null, dim: 0 });
+  const pick = ({ color, image, dim }) => ({ color, image, dim });
+  assert.deepEqual(pick(sceneAt(cinema, 0)), { color: "#220033", image: "files/images/a.png", dim: 50 });
+  assert.deepEqual(pick(sceneAt(cinema, 9)), { color: "#000000", image: null, dim: 0 });
+  assert.deepEqual(pick(sceneAt({ bg: "#111111", steps: [] }, 5)), { color: "#111111", image: null, dim: 0 });
+  assert.equal(sceneAt({ see: true, steps: [] }, 1).color, "transparent");         // see-through: the game shows behind
+  const cross = sceneAt({ steps: [{ type: "scene", at: 0, color: "#111111" }, { type: "scene", at: 3, color: "#222222", transition: "fade" }] }, 3.4);
+  assert.equal(cross.prev.color, "#111111");                                      // the first second of a fade: both, to blend them
+  assert.equal(sceneAt({ steps: [{ type: "scene", at: 0, color: "#111111" }, { type: "scene", at: 3, color: "#222222" }] }, 4.5).prev, null);
 });
 
 test("a caption appears at its moment, is typed letter by letter, and the next one replaces it", () => {
@@ -66,7 +71,7 @@ test("the clock of a run counts from when the server started it, with the time t
 test("the editor measures a script and starts new steps where the last one ends", () => {
   assert.equal(durationOf(cinema.steps), 9);                                   // the picture ends at 8, plus a second of air
   assert.equal(stepEnd({ at: 2, duration: 1.5 }), 3.5);
-  assert.deepEqual(newStep("text", []), { type: "text", at: 0, speaker: "", text: "", duration: 4, effect: "type", color: "", size: "normal", avatar: "" });
+  assert.deepEqual(newStep("text", []), { type: "text", at: 0, speaker: "", text: "", duration: 4, effect: "type", color: "", size: "normal", avatar: "", side: "bottom" });
   assert.equal(newStep("audio", cinema.steps).at, 8);
   assert.equal(newStep("post", []).type, "post");
   assert.equal(newStep("effect", []).duration, 0.6);
@@ -75,7 +80,7 @@ test("the editor measures a script and starts new steps where the last one ends"
 import { LANES, draggedTo, laneOf, orderOf, rulerTicks, validate } from "../src/cinema-model.js";
 
 test("every kind of step sits on one row of the timeline", () => {
-  for (const type of ["text", "audio", "image", "scene", "effect", "vfx", "post"]) assert.ok(LANES.some((l) => l[2].includes(type)), type);
+  for (const type of ["text", "title", "audio", "image", "scene", "weather", "effect", "vfx", "post"]) assert.ok(LANES.some((l) => l[2].includes(type)), type);
   assert.equal(laneOf("vfx"), "fx"); assert.equal(laneOf("effect"), "fx"); assert.equal(laneOf("audio"), "sound");
 });
 
@@ -109,4 +114,64 @@ test("the ruler has about eight marks at round seconds", () => {
   assert.deepEqual(rulerTicks(8), [0, 1, 2, 3, 4, 5, 6, 7, 8]);
   assert.deepEqual(rulerTicks(22), [0, 5, 10, 15, 20]);
   assert.deepEqual(rulerTicks(100), [0, 15, 30, 45, 60, 75, 90]);
+});
+
+// ---- 2.0: the creator's steps ------------------------------------------------------------------------------------------------
+import { effectsAt, envelope, particles, pasteAt, screenLook, stageAt, templateSteps, titleAt, weatherAt, TEMPLATES } from "../src/cinema-model.js";
+
+test("screen effects rise, hold and fade, and several can be on at once", () => {
+  assert.equal(envelope("blur", 0), 0);
+  assert.equal(envelope("blur", 0.5), 1);
+  assert.ok(envelope("blur", 0.95) < 0.3 && envelope("flash", 0.1) > envelope("flash", 0.8));
+  const cinema = { steps: [
+    { type: "effect", at: 0, effect: "blur", duration: 4, intensity: 50 },
+    { type: "effect", at: 1, effect: "tint", color: "#ff0000", duration: 4, intensity: 100 },
+    { type: "effect", at: 1, effect: "shake", duration: 2, intensity: 100 },
+  ] };
+  const look = screenLook(effectsAt(cinema, 2), 2);
+  assert.match(look.filter, /blur\(6\.0px\)/);
+  assert.equal(look.layers[0].kind, "tint");
+  assert.match(look.transform, /translate/);
+  const calm = screenLook(effectsAt(cinema, 2), 2, true);                 // less motion: no shaking, the colours stay
+  assert.equal(calm.transform, "");
+  assert.equal(calm.layers.length, 1);
+  assert.deepEqual(effectsAt(cinema, 9), []);
+});
+
+test("a dialogue keeps both portraits between its lines and says who is talking", () => {
+  const cinema = { steps: templateSteps("dialogue", 2) };
+  assert.equal(stageAt(cinema, 1), null);                                  // before it starts
+  const first = stageAt(cinema, 2.5);
+  assert.equal(first.active, "left");
+  assert.equal(first.left.speaker, "Personaje A");
+  const second = stageAt(cinema, 6);
+  assert.equal(second.active, "right");
+  assert.ok(second.left && second.right);
+  assert.ok(stageAt(cinema, 5.1));                                          // between two lines the portraits stay
+  assert.equal(stageAt(cinema, 30), null);                                  // and leave a moment after the last one
+  const withScene = { steps: [...cinema.steps, { type: "scene", at: 7, color: "#000000" }] };
+  assert.equal(stageAt(withScene, 7.5), null);                              // a new scene clears the stage
+});
+
+test("weather lasts until the next weather step and titles until their end", () => {
+  const cinema = { steps: [{ type: "weather", at: 1, weather: "snow", intensity: 40 }, { type: "weather", at: 5, weather: "none" },
+    { type: "title", at: 2, text: "Capítulo I", duration: 2 }] };
+  assert.equal(weatherAt(cinema, 0.5), null);
+  assert.equal(weatherAt(cinema, 3).weather, "snow");
+  assert.equal(weatherAt(cinema, 6), null);
+  assert.equal(titleAt(cinema, 3).step.text, "Capítulo I");
+  assert.equal(titleAt(cinema, 4.5), null);
+  const a = particles("rain", 50), b = particles("rain", 50);
+  assert.deepEqual(a, b);                                                   // the same for everybody
+  assert.ok(particles("rain", 100).length > a.length && particles("rain", 100, true).length < particles("rain", 100).length);
+});
+
+test("templates give steps from the cursor, and pasted steps keep their spacing", () => {
+  for (const tpl of TEMPLATES) {
+    const steps = templateSteps(tpl.id, 10);
+    assert.ok(steps.length > 0 && Math.min(...steps.map((s) => s.at)) === 10, tpl.id);
+    assert.ok(steps.every((s) => s.type), tpl.id);
+  }
+  const pasted = pasteAt([{ type: "text", at: 4, text: "a" }, { type: "effect", at: 5.5, effect: "flash" }], 20);
+  assert.deepEqual(pasted.map((s) => s.at), [20, 21.5]);
 });

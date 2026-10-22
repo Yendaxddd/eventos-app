@@ -6,6 +6,7 @@ import { startQte } from "../qte-store.js";
 import { practiceFrame } from "../practice.js";
 import { useNow, useResize } from "../hooks.js";
 import { cx } from "../util.js";
+import { cine } from "../cine.js";
 
 // What each step says, which part of the screen it points at, and whether it starts a practice QTE.
 const STEPS = [
@@ -132,5 +133,7 @@ export function TutorialHost() {
     return () => clearTimeout(id);
   }, [ok]);
   if (!t.active || !ok) return null;
+  const playing = cine.value && !cine.value.hidden && !cine.value.preview;
+  if (playing) return null;                     // a cinematic is on: the tutorial waits under it (and comes back where it was)
   return <Tutorial />;
 }
