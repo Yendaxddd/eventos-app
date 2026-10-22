@@ -17,6 +17,7 @@ import { describeNotice } from "./notices.js";
 import { onAudioFrame, onWelcomeAudio } from "./audio.js";
 import { onCineFrame, startCine, stopCine } from "./cine.js";
 import { playBinding } from "./vfx.js";
+import { onMobHit, setMobs } from "./mobs.js";
 
 function showNotice(kind, data) {
   const notice = describeNotice(kind, data);
@@ -194,6 +195,7 @@ function onFrame(frame, arrival) {
         rules.value = frame.rules || null;
         onWelcomeAudio(frame.audio, arrival);
         if (frame.cine) startCine(frame.cine, { arrival }); else stopCine();
+        setMobs(frame.mobs, arrival);
         comp.value = { ...comp.value, ...(frame.comp || {}) };
         calib.value = frame.calib || null;
         if (frame.prefs) setPrefsFromServer(frame.prefs);
@@ -248,6 +250,8 @@ function onFrame(frame, arrival) {
     case "audio": onAudioFrame(frame, arrival); break;
     case "cine": onCineFrame(frame, arrival); break;
     case "fx": playBinding(frame.fx, frame.ctx || {}); break;
+    case "mobs": setMobs(frame, arrival); break;
+    case "mob_hit": onMobHit(frame); break;
     case "slow": toast("Vas demasiado rápido: espera un momento.", "warn", 2000); break;
     case "rpc_ok": case "rpc_err": {
       const job = pending.get(frame.id);

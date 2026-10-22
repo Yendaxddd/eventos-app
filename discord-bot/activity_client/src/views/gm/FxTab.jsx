@@ -17,6 +17,7 @@ const GROUPS = [
   ["Golpes y vida", ["player_hit", "low_hp", "heal", "boss_hit", "player_down", "checkpoint"]],
   ["Dominios", ["domain_cast", "domain", "boss_domain"]],
   ["Combate", ["boss_spawn", "boss_defeated", "fight_start", "fight_end"]],
+  ["Enemigos", ["mob_spawn", "mob_attack", "mob_hit", "mob_down", "mobs_cleared"]],
 ];
 
 // What a binding does, in a few words.

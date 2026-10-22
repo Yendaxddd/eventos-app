@@ -177,3 +177,11 @@
 .gm-links { display: flex; flex-direction: column; gap: var(--sp-3); }
 .gm-link { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: var(--sp-2) var(--sp-3); padding: var(--sp-3); border-radius: var(--r-md); background: var(--surface); border: 1px solid var(--line-soft); }
 .gm-link-title { grid-column: 1 / -1; }
+
+/* ---- mini enemies: the bestiary and the ones on the field ---- */
+.mob-list, .mob-live { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.mob-list li, .mob-live li { display: flex; align-items: center; gap: 10px; padding: 8px; border-radius: var(--r-md); background: rgb(255 255 255 / .03); border: 1px solid var(--line, rgb(255 255 255 / .08)); flex-wrap: wrap; }
+.mob-list li > .grow, .mob-live li > .grow { display: flex; flex-direction: column; gap: 3px; min-width: 160px; }
+.mob-list .mob-pic, .mob-live .mob-pic { width: 40px; height: 40px; }
+.mob-editor { display: flex; flex-direction: column; gap: 10px; padding: 12px; margin-bottom: 10px; border-radius: var(--r-md); background: rgb(255 255 255 / .04); border: 1px dashed var(--line, rgb(255 255 255 / .14)); }
+.mob-editor-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px; }

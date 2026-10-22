@@ -30,6 +30,8 @@ from .fx import FxBook, FxDirector
 from .arena import ArenaQtes
 from .fx_rpc import FxRpc
 from .quick_rpc import QuickRpc
+from .mobs import Mobs
+from .mobs_rpc import MobsRpc
 from .latency import CAP_MS, LatencyBook, compensation
 from .prefs import PrefsStore
 from .qte import COMMANDS, TIMED, ActivityInput, describe, response_seconds
@@ -116,12 +118,12 @@ def serialize_message(message: Any, own_webhooks: set[int] | frozenset[int] = fr
     }
 
 
-class ActivityBridge(PanelRpc, GmRpc, TupperRpc, AudioRpc, CinemaRpc, FxRpc, QuickRpc):
+class ActivityBridge(PanelRpc, GmRpc, TupperRpc, AudioRpc, CinemaRpc, FxRpc, QuickRpc, MobsRpc):
     def __init__(self, hub: Hub, app: Any, pool: Callable[[], Any] | None = None, avatar_file: Path | None = None,
                  prefs_file: Path | None = None, latency_file: Path | None = None, data_dir: Path | None = None,
                  gm_log_file: Path | None = None, values_file: Path | None = None, files: MediaStore | None = None,
                  char_images_file: Path | None = None, audio_file: Path | None = None, cinema_file: Path | None = None,
-                 fx_file: Path | None = None) -> None:
+                 fx_file: Path | None = None, mobs_file: Path | None = None) -> None:
         self.hub, self.app = hub, app        # app: the AdvancedQTEBot instance
         self.pool = pool or (lambda: None)   # the SenderPool, for webhook sends
         self._listeners: list[tuple[Any, str]] = []
@@ -139,6 +141,7 @@ class ActivityBridge(PanelRpc, GmRpc, TupperRpc, AudioRpc, CinemaRpc, FxRpc, Qui
         self.audio = AudioDirector(hub, AudioLibrary(files, audio_file))      # the sounds, the music and the cues (audio.py)
         self.arena = ArenaQtes(self)                                          # swipe, drag and tap QTEs (arena.py)
         self.fx = FxDirector(hub, FxBook(fx_file), self.audio)                 # the looks of powers and events (fx.py)
+        self.mobs = Mobs(self, mobs_file)                                      # the mini enemies (mobs.py, mobs_rpc.py)
         self.cinema = CinemaDirector(hub, CinemaBook(cinema_file, self.audio.library), post=self._cinema_post)     # the scripts and their playing (cinema.py)
         self.gm = GmPanel(app, GmLog(gm_log_file), data_dir, values_file)       # the game-master panel (gm/, gm_rpc.py)
 
@@ -171,6 +174,7 @@ class ActivityBridge(PanelRpc, GmRpc, TupperRpc, AudioRpc, CinemaRpc, FxRpc, Qui
             self.app.bot.remove_listener(fn, name)
         self._listeners.clear()
         self.arena.stop_all()
+        self.mobs.stop()
         book = getattr(self.app, "active_qtes", None)
         if hasattr(book, "on_start"):
             book.on_start = book.on_end = None
@@ -437,7 +441,7 @@ class ActivityBridge(PanelRpc, GmRpc, TupperRpc, AudioRpc, CinemaRpc, FxRpc, Qui
         return {"perms": {"gm": await self.is_gm(conn)}, "prefs": self.prefs.get(conn.user_id) if self.prefs.has(conn.user_id) else None,
                 "calib": self.latency.get(conn.user_id),
                 "comp": comp, "rules": self.rules(), "charAvatars": self.char_avatars(conn.user_id), "audio": self.audio.welcome(),
-                "cine": self.cinema.current()}
+                "cine": self.cinema.current(), "mobs": self.mobs.public()}
 
     async def save_prefs(self, conn: Conn, raw) -> dict:
         return self.prefs.set(conn.user_id, raw)

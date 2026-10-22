@@ -1,7 +1,7 @@
 // The game masters' quick controls, always at hand beside the chat (and in a drawer on phones): the boss, the fight, a QTE, a cinematic, the
 // music, and what is already linked to each moment of a fight. Every button does what the panel's own button does (the server asks for the role again).
 import { useState } from "preact/hooks";
-import { Clapperboard, Crown, Flag, Flame, Heart, Link2, Music, Play, Skull, Sparkles, Square, Swords, Wand2, Zap } from "lucide-preact";
+import { Bug, Clapperboard, Crown, Pause, Flag, Flame, Heart, Link2, Music, Play, Skull, Sparkles, Square, Swords, Wand2, Zap } from "lucide-preact";
 import { go, perms } from "../state.js";
 import { act } from "../panel/data.js";
 import { ConfirmButton } from "./Common.jsx";
@@ -10,6 +10,7 @@ import { Bar, DIFFICULTIES } from "../views/gm/ui.jsx";
 import { useLive } from "../views/gm/hooks.js";
 import { PRESETS } from "../fx-model.js";
 import { cx } from "../util.js";
+import { mobs } from "../mobs.js";
 
 const MODES = [["single", "Individual"], ["group", "Grupal"], ["combo", "Combo"], ["direction", "Dirección"], ["flick", "Deslizar"], ["drag", "Arrastrar"], ["mash", "Machacar"], ["fake", "Falso"]];
 
@@ -127,6 +128,33 @@ function Links({ d }) {
   );
 }
 
+// the mini enemies: send one in from the bestiary, pause them, clear the field
+function Mobs({ d, run, busy }) {
+  const book = (d.mobs && d.mobs.bestiary) || [];
+  const live = mobs.value;
+  const [pick, setPick] = useState("");
+  const chosen = book.find((t) => t.id === pick) || book[0];
+  if (!book.length) return <p class="faint deck-hint">Crea enemigos en el panel (pestaña Enemigos) para enviarlos desde aquí.</p>;
+  return (
+    <div class="col" style={{ gap: "8px" }}>
+      <div class="row" style={{ gap: "6px" }}>
+        <select class="input grow" value={chosen ? chosen.id : ""} aria-label="Enemigo" onChange={(e) => setPick(e.currentTarget.value)} data-testid="deck-mob-pick">
+          {book.map((t) => <option key={t.id} value={t.id}>{t.name} · {t.hp} PV</option>)}
+        </select>
+        <button class="btn btn-sm btn-primary" type="button" disabled={busy || !chosen} data-testid="deck-mob-spawn" onClick={() => run("gm.mob_spawn", { id: chosen.id, count: 1 })}><Play size={13} /> Enviar</button>
+      </div>
+      {live.list.length > 0 && (
+        <div class="deck-grid">
+          <button class="btn btn-sm" type="button" disabled={busy} onClick={() => run("gm.mob_pause", { paused: !live.paused })} data-testid="deck-mob-pause">
+            {live.paused ? <><Play size={13} /> Reanudar ({live.list.length})</> : <><Pause size={13} /> Pausar ({live.list.length})</>}
+          </button>
+          <ConfirmButton icon={Square} confirm="Sí, retirar" onConfirm={() => run("gm.mob_remove", { id: "all" }, "Enemigos retirados.")} testid="deck-mob-clear">Retirar</ConfirmButton>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function GmDeck() {
   return perms.value.gm ? <Deck /> : null;          // the requests only start for who has the role
 }
@@ -172,6 +200,7 @@ function Deck() {
           <Zap size={13} /> {s.stunLeft > 0 ? `Jefe aturdido (${Math.ceil(s.stunLeft)} s)` : "Lanzar a alguien al azar"}
         </button>
       </Block>
+      <Block icon={Bug} title="Enemigos" testid="deck-mobs-block"><Mobs d={d} run={run} busy={busy} /></Block>
       <Block icon={Clapperboard} title="Escena y música"><Scene d={d} run={run} busy={busy} /></Block>
       <Block icon={Link2} title="Enlazado a cada momento" testid="deck-links-block"><Links d={d} /></Block>
       <button class="btn btn-sm btn-ghost btn-block" type="button" onClick={() => go("gm", { tab: "event" })}>Abrir el panel completo</button>

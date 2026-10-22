@@ -233,4 +233,6 @@ def test_group_and_direction_qtes_are_described_with_the_windows_the_bot_judges(
     combo = describe(3, {"difficulty": "medium", "mode": "combo", "target": target, "combo_sequence": ["evade"] * 5, "combo_index": 2, "combo_length": 5}, times, 0.0)
     assert combo["combo"]["limits"] == [5.0, 10.0, 15.0, 20.0, 25.0] and combo["combo"]["index"] == 2
     fake = describe(4, {"difficulty": "medium", "mode": "fake", "target": target}, times, 0.0)
-    assert fake["target"] is None and fake["commands"] == [] and fake["timeout"] == 3.0
+    # a fake looks like a real one aimed at somebody (answering it is falling for it): same buttons, the whole time to "answer"
+    assert fake["target"] == {"id": "5", "name": "Ana"} and fake["commands"] == ["evade", "parry"] and fake["timeout"] == 3.0
+    assert fake["windows"]["evade"] == [0.0, 3.0]

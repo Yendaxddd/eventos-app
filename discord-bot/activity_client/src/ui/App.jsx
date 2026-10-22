@@ -8,6 +8,7 @@ import { Composer } from "./Composer.jsx";
 import { BossCard, MeCard, MiniHud, PlayersPanel, RightPanel } from "./Hud.jsx";
 import { Actions } from "./Actions.jsx";
 import { GmDeck } from "./GmDeck.jsx";
+import { MobsBar } from "./Mobs.jsx";
 import { QteLayer } from "./QteLayer.jsx";
 import { CinemaLayer } from "./CinemaLayer.jsx";
 import { MenuPage } from "../views/Menu.jsx";
@@ -42,6 +43,7 @@ function EventView({ layout }) {
       {wide && p.showPlayers && <PlayersPanel />}
       <div class="center">
         <BossCard />
+        <MobsBar />
         {narrow && <MiniHud />}
         <div class="arena" data-arena>
           <Feed />
@@ -75,6 +77,7 @@ function PipView() {
     <div class="app pip-view" data-view="pip">
       <div class="pip-body">
         <BossCard />
+        <MobsBar />
         <MiniHud />
         <Actions variant="bar" />
       </div>

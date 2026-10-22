@@ -160,6 +160,9 @@ async def do_gesture(page, keyboard=False):
     q = await page.evaluate("(() => { const e = window.__eventos.qtes.find((x) => x.practice && !x.pressed && !x.ended); return e ? { mode: e.q.mode, arena: e.q.arena } : null; })()")
     if not q or q["mode"] not in ("flick", "drag", "mash"):
         return False
+    # the QTE box pops in with a scale animation: measuring it before that ends gives the wrong place to aim at
+    await page.evaluate("""Promise.race([new Promise((r) => setTimeout(r, 600)), Promise.all(document.getAnimations()
+        .filter((a) => a.effect && a.effect.getTiming().iterations !== Infinity && a.effect.getComputedTiming().endTime < 1500).map((a) => a.finished.catch(() => null)))])""")
     if q["mode"] == "flick":
         if keyboard:
             await page.keyboard.press({"up": "ArrowUp", "down": "ArrowDown", "left": "ArrowLeft", "right": "ArrowRight"}[q["arena"]["dir"]])

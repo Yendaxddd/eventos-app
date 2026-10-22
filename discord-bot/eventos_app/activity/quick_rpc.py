@@ -42,4 +42,5 @@ class QuickRpc:
             "links": self._links(),
             "sounds": [{"id": s["id"], "name": s["name"], "kind": s["kind"]} for s in self.audio.library.public()],
             "presets": list(PRESET_IDS),
+            "mobs": {"bestiary": [{"id": t["id"], "name": t["name"], "hp": t["hp"]} for t in self.mobs.bestiary.items.values()], **self.mobs.public()},
         }

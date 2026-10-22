@@ -43,6 +43,9 @@ EVENTS: dict[str, tuple[str, str]] = {
     "player_hit": ("Un jugador recibe daño", "target"), "low_hp": ("Vida baja (queda un cuarto)", "target"), "heal": ("Un jugador se cura", "target"),
     "boss_hit": ("El jefe recibe daño", "all"),
     "power_used": ("Alguien usa un poder (cualquiera)", "all"), "power_1": ("Se usa un Poder 1", "all"), "power_2": ("Se usa un Poder 2", "all"),
+    # the mini enemies (mobs.py)
+    "mob_spawn": ("Aparecen enemigos", "all"), "mob_attack": ("Un enemigo ataca", "target"), "mob_hit": ("Un enemigo recibe un golpe", "all"),
+    "mob_down": ("Cae un enemigo", "all"), "mobs_cleared": ("No queda ningún enemigo", "all"),
 }
 PHASE_EVENTS = ("fight_start", "boss_spawn", "boss_domain", "boss_defeated", "fight_end")      # the moments of a fight that can change the music by themselves
 PHASE_MODES = ("music", "stop")

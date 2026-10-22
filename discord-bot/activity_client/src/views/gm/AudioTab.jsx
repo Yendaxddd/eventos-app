@@ -18,6 +18,7 @@ const GROUPS = [
   ["Poderes", ["power_used", "power_1", "power_2"]],
   ["Dominios", ["domain_cast", "domain", "boss_domain"]],
   ["Combate", ["boss_spawn", "boss_defeated", "fight_start", "fight_end", "player_down", "checkpoint"]],
+  ["Enemigos", ["mob_spawn", "mob_attack", "mob_hit", "mob_down", "mobs_cleared"]],
 ];
 const bytes = (n) => (n >= 1048576 ? `${(n / 1048576).toFixed(1)} MB` : `${Math.max(1, Math.round(n / 1024))} KB`);
 

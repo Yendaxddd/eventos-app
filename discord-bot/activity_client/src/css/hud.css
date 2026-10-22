@@ -145,3 +145,35 @@
 .panel-tabs button { flex: 1; display: inline-flex; align-items: center; justify-content: center; gap: 6px; padding: 8px 6px; border: 0; border-radius: var(--r-sm); background: transparent; color: var(--text-faint); font: 600 .75rem/1 var(--font-ui); cursor: pointer; }
 .panel-tabs button[aria-selected="true"] { background: var(--surface-3); color: var(--text); }
 .gm-deck { margin-top: 0; padding-top: 0; border-top: 0; }
+
+/* ---- mini enemies: a row of cards under the boss; tap one to hit it ---- */
+.mobs { display: flex; gap: var(--sp-2); overflow-x: auto; padding: 2px 2px 6px; scroll-snap-type: x proximity; scrollbar-width: thin; }
+.mob {
+  --mob: #fb7185; position: relative; flex: none; width: 172px; min-height: 56px; display: flex; align-items: center; gap: 8px; padding: 6px 10px 6px 6px;
+  border-radius: var(--r-md); border: 1px solid color-mix(in srgb, var(--mob) 40%, transparent); scroll-snap-align: start; text-align: left; color: var(--text);
+  background: linear-gradient(135deg, color-mix(in srgb, var(--mob) 20%, transparent), rgb(19 19 31 / .9) 70%); cursor: crosshair;
+  transition: transform .12s var(--ease), box-shadow .2s ease; animation: mob-in .45s var(--ease-spring) both; touch-action: manipulation;
+}
+.mob:hover { box-shadow: 0 0 0 1px color-mix(in srgb, var(--mob) 70%, transparent), 0 8px 22px -10px var(--mob); }
+.mob:active { transform: scale(.95); }
+.mob:focus-visible { outline: 2px solid var(--focus, #fff); outline-offset: 2px; }
+.mob.cooling { cursor: wait; }
+.mob.cooling .mob-pic { filter: saturate(.4) brightness(.8); }
+.mob.soon .mob-meta { color: var(--warn); }
+.mob.attacking { animation: mob-attack .7s ease-in-out infinite alternate; }
+.mob-pic { width: 42px; height: 42px; flex: none; border-radius: 10px; overflow: hidden; display: grid; place-items: center; background: color-mix(in srgb, var(--mob) 30%, #111); }
+.mob-pic img { width: 100%; height: 100%; object-fit: cover; }
+.mob-pic b { font: 700 1.1rem/1 var(--font-display); }
+.mob-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+.mob-name { font: 700 .8125rem/1.1 var(--font-display); }
+.mob-bar { height: 6px; border-radius: 99px; background: rgb(255 255 255 / .1); overflow: hidden; }
+.mob-bar i { display: block; height: 100%; background: var(--mob); transition: width .3s var(--ease); }
+.mob-meta { display: flex; align-items: center; gap: 4px; font-size: .6875rem; color: var(--text-dim); }
+.mob-meta em { margin-left: auto; font-style: normal; color: var(--text-faint); }
+.mob-dmg { position: absolute; top: -4px; right: 10px; font: 800 1rem/1 var(--font-display); color: #fff; text-shadow: 0 1px 0 #000, 0 0 10px var(--mob); pointer-events: none; animation: mob-dmg 1s ease-out both; }
+@keyframes mob-in { from { opacity: 0; transform: translateY(-8px) scale(.9); } }
+@keyframes mob-attack { to { box-shadow: 0 0 0 2px var(--mob), 0 0 22px -2px var(--mob); } }
+@keyframes mob-dmg { from { opacity: 1; transform: translateY(0) scale(1.2); } to { opacity: 0; transform: translateY(-26px) scale(.9); } }
+.stage[data-layout="narrow"] .mob { width: 148px; min-height: 48px; }
+.stage[data-layout="narrow"] .mob-pic { width: 34px; height: 34px; }
+@media (prefers-reduced-motion: reduce) { .mob, .mob.attacking, .mob-dmg { animation: none; } }
