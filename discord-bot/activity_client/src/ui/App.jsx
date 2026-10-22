@@ -20,6 +20,7 @@ import { PanelPage } from "../views/Panel.jsx";
 import { GmPage } from "../views/Gm.jsx";
 import { TutorialHost } from "../views/Tutorial.jsx";
 import { BottomNav, Palette } from "./Navigation.jsx";
+import { PowerShow } from "./PowerShow.jsx";
 
 function Splash() {
   const c = conn.value;
@@ -89,7 +90,7 @@ function PipView() {
 export function App() {
   const layout = useLayout();
   if (conn.value.state !== "connected") return <Splash />;
-  if (pip.value) return <><PipView /><CinemaLayer /><QteLayer /><Toasts /><FxLayer /></>;
+  if (pip.value) return <><PipView /><CinemaLayer /><PowerShow /><QteLayer /><Toasts /><FxLayer /></>;
   const v = view.value;
   const bottom = layout.mode === "narrow" && !(v === "event" && layout.short);       // a phone held sideways keeps the whole height for the game
   return (
@@ -102,6 +103,7 @@ export function App() {
         {bottom && <BottomNav />}
       </div>
       <CinemaLayer />
+      <PowerShow />
       <QteLayer />
       {sheet.value === "players" && (
         <Sheet title="Jugadores y tú" onClose={() => { sheet.value = null; }}>

@@ -203,9 +203,15 @@ def test_a_power_is_checked_like_the_register_power_command(rig):
     app, panel = rig
     assert panel.save_power(ME, False, GOOD) == {"character": "Shiro", "slot": 2}
     saved = app.character_powers["Shiro"]["power2"]
-    assert saved == {"name": "Escudo", "description": "Detiene el tiempo", "type": "defend", "cooldown": 120, "effect": "heal:30", "image_url": None, "trigger_phrase": "detén el tiempo"}
+    assert saved == {"name": "Escudo", "description": "Detiene el tiempo", "type": "defend", "cooldown": 120, "effect": "heal:30", "image_url": None, "trigger_phrase": "detén el tiempo",
+                     "show": "all"}
     assert panel.save_power(ME, False, {**GOOD, "image": "https://cdn.discordapp.com/p.png"}) and app.character_powers["Shiro"]["power2"]["image_url"].endswith("p.png")
-    assert panel.save_power(ME, False, {**GOOD, "effect": "buff:attack:0.2:30"}) and panel.save_power(ME, False, {**GOOD, "effect": "stun"})
+    assert panel.save_power(ME, False, {**GOOD, "effect": "buff:damage_boost:0.2:30"}) and panel.save_power(ME, False, {**GOOD, "effect": "stun"})
+    assert app.character_powers["Shiro"]["power2"]["effect"] == "stun:3"
+    panel.save_power(ME, False, {**GOOD, "effect": "damage_all:80; shield_team:30:10", "show": "self"})
+    assert app.character_powers["Shiro"]["power2"]["effect"] == "damage_all:80;shield_team:30:10" and app.character_powers["Shiro"]["power2"]["show"] == "self"
+    with pytest.raises(RpcError, match="damage_boost"):
+        panel.save_power(ME, False, {**GOOD, "effect": "buff:attack:0.2:30"})              # a boost that does nothing is refused
     for patch, why in (({"character": "Mina"}, "no es tuyo"), ({"character": "Nadie"}, "registrado"), ({"slot": 3}, "ranura"), ({"name": " "}, "nombre"),
                        ({"description": ""}, "qué hace"), ({"type": "hack"}, "tipo"), ({"cooldown": -1}, "recarga"), ({"cooldown": 10**7}, "recarga"),
                        ({"effect": ""}, "efecto"), ({"effect": "rm -rf /"}, "efecto"), ({"effect": "damage:abc"}, "efecto"),

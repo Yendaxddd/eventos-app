@@ -26,6 +26,7 @@ const KINDS = {
     text: `${d.why === "timeout" ? "Cadena terminada" : d.why === "mistimed" ? "Parry a destiempo: la cadena termina" : "Parry sin Black Flash: la cadena termina"} · parry en recarga ${d.cooldown} s.`,
   }),
   chain_max: (d) => ({ tone: "bf", text: `¡CADENA MÁXIMA de Black Flash! Parry en recarga ${d.cooldown} s.` }),
+  power_effect: (d) => ({ tone: "ok", text: `${d.name || "Tu poder"}${d.damage ? ` · ${d.damage} de daño` : ""}${d.healed ? ` · +${d.healed} PV` : ""}` }),
   mob_down: (d) => ({ tone: "ok", text: `¡Derrotaste a ${d.name}!${d.charge ? ` +${d.charge} % de carga en tus poderes.` : ""}` }),
   black_flash: (d) => ({ tone: "bf", text: `¡Black Flash! ${d.damage} de daño${d.chain ? ` · cadena ${d.chain}/4` : ""}${d.mirror ? " · Fragmento de espejo" : ""}` }),
   // the button already says these: evade_ok, evade_slow, parry_ok, parry_mistimed, save_ok, save_slow, direction_ok, direction_slow, combo_step

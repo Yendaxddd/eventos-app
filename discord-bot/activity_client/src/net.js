@@ -19,6 +19,7 @@ import { onAudioFrame, onWelcomeAudio } from "./audio.js";
 import { onCineFrame, startCine, stopCine } from "./cine.js";
 import { playBinding } from "./vfx.js";
 import { onMobHit, setMobs } from "./mobs.js";
+import { onPowerShow } from "./ui/PowerShow.jsx";
 
 function showNotice(kind, data) {
   const notice = describeNotice(kind, data);
@@ -255,6 +256,7 @@ function onFrame(frame, arrival) {
     case "fx": playBinding(frame.fx, frame.ctx || {}); break;
     case "mobs": setMobs(frame, arrival); break;
     case "mob_hit": onMobHit(frame); break;
+    case "power_show": onPowerShow(frame); break;
     case "slow": toast("Vas demasiado rápido: espera un momento.", "warn", 2000); break;
     case "rpc_ok": case "rpc_err": {
       const job = pending.get(frame.id);

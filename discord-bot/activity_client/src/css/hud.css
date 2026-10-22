@@ -280,3 +280,16 @@
 .stage[data-layout="narrow"] .mob { width: 148px; min-height: 48px; }
 .stage[data-layout="narrow"] .mob-pic { width: 34px; height: 34px; }
 @media (prefers-reduced-motion: reduce) { .mob, .mob.attacking, .mob-dmg { animation: none; } }
+
+/* ---- a power's picture filling the screen ---- */
+.power-show { position: fixed; inset: 0; z-index: 95; display: grid; place-items: center; pointer-events: none; background: radial-gradient(circle at center, rgb(0 0 0 / .35), rgb(0 0 0 / .75)); animation: power-show 2.6s ease both; }
+.power-show img { max-width: min(86vw, 900px); max-height: 62vh; border-radius: var(--r-lg); box-shadow: 0 0 0 2px rgb(255 255 255 / .15), 0 30px 80px -10px var(--pc, #a78bfa); animation: power-pop .5s var(--ease-spring) both; }
+.power-show-name { position: absolute; bottom: 14vh; display: flex; flex-direction: column; align-items: center; gap: 4px; text-align: center; }
+.power-show-name small { font: 700 .8rem/1 var(--font-display); letter-spacing: .2em; text-transform: uppercase; color: rgb(255 255 255 / .7); }
+.power-show-name strong { font: 800 clamp(1.6rem, 6vw, 3rem)/1.05 var(--font-display); color: #fff; letter-spacing: .06em; text-shadow: 0 0 24px var(--pc, #a78bfa), 0 4px 18px #000; animation: power-name .6s .15s var(--ease) both; }
+.power-show.pt-destructive { --pc: #f43f5e; } .power-show.pt-support { --pc: #34d399; } .power-show.pt-defend { --pc: #60a5fa; } .power-show.pt-build { --pc: #fbbf24; } .power-show.pt-control { --pc: #a78bfa; }
+.power-show.soft { background: rgb(0 0 0 / .4); }
+.power-show.soft img { max-height: 40vh; animation: none; }
+@keyframes power-show { 0% { opacity: 0; } 10%, 82% { opacity: 1; } 100% { opacity: 0; } }
+@keyframes power-pop { from { opacity: 0; transform: scale(.7) rotate(-2deg); } }
+@keyframes power-name { from { opacity: 0; letter-spacing: .4em; } }

@@ -285,6 +285,40 @@ class ActivityBridge(PanelRpc, GmRpc, TupperRpc, AudioRpc, CinemaRpc, FxRpc, Qui
         self._spawn(self.audio.dispatch(event, data or {}))
         self._spawn(self.cinema.on_event(event, data or {}))
         self._spawn(self.fx.dispatch(event, data or {}))
+        self._spawn(self._game_event(event, data or {}))
+
+    async def _game_event(self, event: str, data: dict) -> None:
+        """What the Activity itself does when something happens: a power's picture on the screens, its blow on the mini enemies..."""
+        try:
+            if event == "power_used":
+                await self._show_power(data)
+            elif event == "power_aoe":
+                await self.mobs.damage_all(int(data.get("amount") or 0), data.get("user"))
+            elif event == "boss_stunned":
+                await self.mobs.stun(float(data.get("seconds") or 0))
+            elif event == "power_effect" and data.get("user") is not None:
+                self.notify(int(data["user"]), "power_effect", {k: data.get(k) for k in ("name", "damage", "healed")})
+        except Exception:  # noqa: BLE001 - one effect failing must not stop the game
+            log.exception("could not apply %s in the Activity", event)
+
+    async def _show_power(self, data: dict) -> None:
+        """The power's picture or GIF fills the screen a moment: for everybody, only for whoever used it, or nobody (its «show»)."""
+        powers = (getattr(self.app, "character_powers", None) or {}).get(str(data.get("character") or "")) or {}
+        power = powers.get(f"power{data.get('slot')}") if isinstance(powers, dict) else None
+        if not isinstance(power, dict):
+            return
+        show = power.get("show") or "all"
+        image = power.get("image_url")
+        if show == "off" or not isinstance(image, str) or not image:
+            return
+        frame = {"t": "power_show", "image": image, "name": str(power.get("name") or "")[:60], "character": str(data.get("character") or "")[:80],
+                 "type": str(power.get("type") or "")}
+        if show == "self" and data.get("user") is not None:
+            for conn in list(self.hub.conns.values()):
+                if conn.user_id == int(data["user"]):
+                    await self.hub.send(conn, frame)
+        else:
+            await self.hub.broadcast(frame)
 
     # ---- notifications: what an answer led to, told to the player inside their Activity ----------------
     def has_player(self, user_id) -> bool:

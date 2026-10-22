@@ -209,3 +209,9 @@
 .board-me { display: flex; flex-direction: column; gap: 6px; padding-top: var(--sp-3); border-top: 1px dashed var(--line); }
 
 .bar.mt { margin-top: var(--sp-3); }
+
+/* ---- power builder ---- */
+.power-row { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; padding: 6px; border-radius: var(--r-md); background: var(--surface-2); border: 1px solid var(--line-soft); }
+.power-row .select { flex: 1 1 180px; min-width: 0; }
+.power-row .num-input { max-width: 130px; }
+.power-preview-box { display: flex; flex-direction: column; gap: 4px; padding: 10px 12px; border-radius: var(--r-md); background: color-mix(in srgb, var(--primary) 10%, transparent); border: 1px solid color-mix(in srgb, var(--primary) 30%, transparent); font-size: .875rem; }

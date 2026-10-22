@@ -47,6 +47,7 @@ except Exception as e:
 from eventos_app.console_bridge import console
 from eventos_app import paths as app_paths
 from eventos_app.activity.qte import QteBook
+from eventos_app import powers as power_effects
 
 # Load environment variables (an optional .env next to the app / script)
 load_dotenv(app_paths.app_home() / ".env")
@@ -7585,7 +7586,13 @@ Your response (1-2 sentences max):"""
             console.print(f"[cyan]🛡️ Damage reduction {damage_reduction:.0f}%: {damage} → {reduced_damage} (-{reduction_amount})[/cyan]")
             damage = reduced_damage
         # =======================================================
-        
+
+        # ========== POWER SHIELDS (shield / shield_team) ==========
+        shield = self.get_active_buff(user_id, "shield")
+        if shield and damage > 0:
+            damage = int(round(damage * (1 - min(90.0, float(shield["value"])) / 100)))
+        # ==========================================================
+
         # Apply damage
         old_hp = hp_data["current"]
         hp_data["current"] = max(0, hp_data["current"] - damage)
@@ -10194,7 +10201,7 @@ Your response (1-2 sentences max):"""
             # Apply power effect (will set cooldown internally based on damage)
             self.emit_event("power_used", user=user_id, character=character_name, slot=power_slot, name=power.get("name", ""),
                             type=power.get("type", ""), effect=str(power.get("effect", "")))
-            await self.apply_power_effect(message.author, power, channel, power_key)
+            await self.apply_power_effect(message.author, power, channel, power_key, user_id=user_id, character=character_name)
             
             console.print(f"[purple]⚡ {message.author.name} used {power['name']}[/purple]")
             
@@ -12469,109 +12476,92 @@ Responde SOLAMENTE con un numero del 1 al 10."""
     
     # ========== END DOMAIN TYPE HANDLERS ==========
 
-    async def apply_power_effect(self, user, power, channel, power_key=None):
-        """Apply power effects based on effect string"""
+    async def apply_power_effect(self, user, power, channel, power_key=None, user_id=None, character=None):
+        """Apply a power's effects (see eventos_app/powers.py for the effect string). `user_id` is the player who used it
+        (for a Tupperbox message `user` is the webhook, so the caller passes the resolved player)."""
         try:
-            effect = power["effect"]
+            uid = user_id if user_id is not None else user.id
             power_name = power["name"]
-            
-            # Create activation embed
-            embed = discord.Embed(
-                title=f"⚡ {power_name.upper()} ⚡",
-                description=power["description"],
-                color=self.get_power_color(power["type"])
-            )
-            
-            # Parse effect string
-            if effect.startswith("damage:"):
-                raw_damage = int(effect.split(":")[1])
-                
-                # ========== CAP DAMAGE AT 500 ==========
-                damage = min(raw_damage, self.ultimate_max_damage)
-                was_capped = raw_damage > self.ultimate_max_damage
-                # ======================================
-                
-                if was_capped:
-                    embed.add_field(
-                        name="Effect", 
-                        value=f"💥 **{damage} damage** to enemy! (capped from {raw_damage})", 
-                        inline=False
-                    )
-                else:
-                    embed.add_field(name="Effect", value=f"💥 **{damage} damage** to enemy!", inline=False)
-                
-                # ===== PHASE 5: ADD CHARGE FROM POWER DAMAGE (only if self-recharge enabled) =====
-                if self.ultimate_self_recharge:
-                    self.add_charge_from_damage_dealt(user.id, damage)
-                # =================================================
-                
-                # Apply damage to boss if active
-                if self.active_boss:
-                    await self.damage_boss(self.active_boss['name'], damage)
-                
-            elif effect.startswith("heal:"):
-                heal_amount = int(effect.split(":")[1])
-                if user.id in self.player_hp:
-                    old_hp = self.player_hp[user.id]["current"]
-                    self.player_hp[user.id]["current"] = min(
-                        self.player_hp[user.id]["current"] + heal_amount,
-                        self.player_hp[user.id]["max"]
-                    )
-                    new_hp = self.player_hp[user.id]["current"]
-                    healed = new_hp - old_hp
-                    await self.update_hp_bar_display(user.id)
-                    embed.add_field(name="Effect", value=f"💚 Healed **{healed} HP**!", inline=False)
-            
-            elif effect == "stun":
-                self.enemy_stunned = True
-                self.stun_end_time = time.time() + 3.0  # 3 second stun
-                embed.add_field(name="Effect", value="🌀 Enemy stunned for **3 seconds**!", inline=False)
-            
-            elif effect.startswith("buff:"):
-                buff_parts = effect.split(":")
-                buff_type = buff_parts[1]
-                buff_value = float(buff_parts[2]) if len(buff_parts) > 2 else 0.1
-                buff_duration = float(buff_parts[3]) if len(buff_parts) > 3 else 30.0
-                # Apply actual buff
-                self.apply_buff(user.id, buff_type, buff_value, buff_duration)
-                embed.add_field(name="Effect", value=f"✨ **{buff_type.capitalize()}** buff applied! (+{buff_value*100:.0f}% for {buff_duration:.0f}s)", inline=False)
-            
-            else:
-                embed.add_field(name="Effect", value=f"⚡ {effect}", inline=False)
-            
+            embed = discord.Embed(title=f"⚡ {power_name.upper()} ⚡", description=power["description"],
+                                  color=self.get_power_color(power["type"]))
+            try:
+                parts = power_effects.parse(power.get("effect"))
+            except power_effects.PowerError:
+                parts = []
+            hp = self.player_hp.get(uid) or {}
+            boost = self.get_active_buff(uid, "damage_boost")
+            multiplier = power_effects.damage_multiplier(self.get_weapon_damage_multiplier(uid), float(boost["value"]) if boost else 0.0,
+                                                         bool(hp.get("revenge_mode")))
+            standing = [p for p, d in self.player_hp.items() if d.get("alive")]
+            report = {"user": uid, "character": character, "name": power_name, "damage": 0, "healed": 0}
+            for part in parts:
+                kind, amount, seconds = part["kind"], part["amount"], part["seconds"]
+                if kind in ("damage", "damage_all"):
+                    damage = power_effects.boss_damage(amount, multiplier, self.ultimate_max_damage)
+                    if self.ultimate_self_recharge:
+                        self.add_charge_from_damage_dealt(uid, damage)
+                    if self.active_boss:
+                        await self.damage_boss(self.active_boss['name'], damage)
+                        report["damage"] += damage
+                    if kind == "damage_all":
+                        self.emit_event("power_aoe", user=uid, amount=int(round(amount * multiplier)))
+                elif kind in ("heal", "heal_team"):
+                    for target in ([uid] if kind == "heal" else standing):
+                        before = (self.player_hp.get(target) or {}).get("current", 0)
+                        await self.heal_player(target, int(amount))
+                        report["healed"] += (self.player_hp.get(target) or {}).get("current", 0) - before
+                elif kind in ("shield", "shield_team"):
+                    for target in ([uid] if kind == "shield" else standing or [uid]):
+                        self.apply_buff(target, "shield", amount, seconds)
+                elif kind == "stun":
+                    self.enemy_stunned = True
+                    self.stun_end_time = max(getattr(self, "stun_end_time", 0) or 0, time.time() + seconds)
+                    self.emit_event("boss_stunned", user=uid, seconds=seconds)
+                elif kind == "buff":
+                    self.apply_buff(uid, part["buff"], amount, seconds)
+                elif kind == "charge_team":
+                    for target in standing:
+                        if target == uid:
+                            continue
+                        charges = self.power_charges.setdefault(target, {"power1": 0, "power2": 0})
+                        for slot in ("power1", "power2"):
+                            charges[slot] = min(100, float(charges.get(slot, 0) or 0) + amount)
+                elif kind in ("cleanse", "cleanse_team"):
+                    for target in ([uid] if kind == "cleanse" else list(self.player_status_effects.keys())):
+                        self.player_status_effects.pop(target, None)
+            if boost and boost.get("expires", 0) == 0 and any(p["kind"] in ("damage", "damage_all") for p in parts):
+                self.consume_buff(uid, "damage_boost")
+            lines = power_effects.describe(parts, multiplier, self.ultimate_max_damage) if parts else [f"⚡ {power.get('effect', '')}"]
+            if multiplier > 1.0 and any(p["kind"] in ("damage", "damage_all") for p in parts):
+                lines.append(f"🗡️ Damage ×{multiplier:.2f} (weapon, boosts and revenge)")
+            embed.add_field(name="Effect", value="\n".join(lines)[:1024], inline=False)
+            self.emit_event("power_effect", **report)
+
             # ========== APPLY COOLDOWN FOR ALL POWER TYPES ==========
-            # Use power's custom cooldown if set, otherwise use base cooldown
             power_cooldown = power.get("cooldown", self.ultimate_base_cooldown)
-            
-            # ===== JACKPOT CHECK - Reduce cooldowns during jackpot =====
-            if user.id in self.player_stats and self.player_stats[user.id].get('jackpot_active'):
-                jackpot_end = self.player_stats[user.id].get('jackpot_end_time', 0)
+            if uid in self.player_stats and self.player_stats[uid].get('jackpot_active'):
+                jackpot_end = self.player_stats[uid].get('jackpot_end_time', 0)
                 if time.time() < jackpot_end:
-                    # During jackpot: 10s cooldown only!
-                    power_cooldown = self.player_stats[user.id].get('jackpot_ult_cooldown', 10)
+                    power_cooldown = self.player_stats[uid].get('jackpot_ult_cooldown', 10)
                     console.print(f"[purple]🎰 JACKPOT ACTIVE - Cooldown reduced to {power_cooldown}s![/purple]")
-                    # Also refill charges to 100% (unlimited ult charge)
-                    if user.id not in self.power_charges:
-                        self.power_charges[user.id] = {}
-                    self.power_charges[user.id]["power1"] = 100
-                    self.power_charges[user.id]["power2"] = 100
-            # ===========================================================
-            
-            if power_key and user.id:
-                if user.id not in self.power_cooldowns:
-                    self.power_cooldowns[user.id] = {}
-                self.power_cooldowns[user.id][power_key] = time.time() + power_cooldown
+                    if uid not in self.power_charges:
+                        self.power_charges[uid] = {}
+                    self.power_charges[uid]["power1"] = 100
+                    self.power_charges[uid]["power2"] = 100
+            if power_key and uid:
+                if uid not in self.power_cooldowns:
+                    self.power_cooldowns[uid] = {}
+                self.power_cooldowns[uid][power_key] = time.time() + power_cooldown
                 cooldown_display = f"{power_cooldown // 60}m {power_cooldown % 60}s" if power_cooldown >= 60 else f"{power_cooldown}s"
                 embed.add_field(name="Cooldown", value=f"⏱️ **{cooldown_display}** (fight-time only!)", inline=False)
                 console.print(f"[yellow]⏱️ Set {power_key} cooldown: {cooldown_display} (fight-time)[/yellow]")
             # =========================================================
-            
-            # Add power image (custom if set, otherwise default ultimate GIF)
+
             power_image = power.get("image_url") or self.ultimate_gif
             embed.set_image(url=power_image)
             embed.set_footer(text=f"Type: {power['type'].capitalize()} | 💡 Cooldowns tick during fights only!")
             await channel.send(embed=embed)
-            
+
         except Exception as e:
             log.error(f"Error applying power effect: {e}")
 
@@ -12711,6 +12701,10 @@ Responde SOLAMENTE con un numero del 1 al 10."""
                 console.print(f"[gold1]🗡️ WEAPON BONUS: Damage multiplied by {weapon_multiplier}x![/gold1]")
             # ===============================================
             
+            # ========== DAMAGE BOOST (powers, /support) ==========
+            counter_damage = self.apply_damage_buff(user_id, counter_damage)
+            # =====================================================
+
             # ========== TRANSFIGURATION (Soul Manipulator) ==========
             transfig_multiplier = self.get_soul_manipulator_multiplier(user_id)
             if transfig_multiplier > 1.0:

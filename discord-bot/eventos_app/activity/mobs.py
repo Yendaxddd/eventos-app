@@ -193,6 +193,29 @@ class Mobs:
             mob["next"] = max(mob["next"], now + mob["every"] * 0.5)
         await self.announce()
 
+    async def damage_all(self, amount: int, user: Any = None) -> int:
+        """A power that hits every enemy on the field (`damage_all`). Says how many it hit."""
+        if amount <= 0 or not self.live:
+            return 0
+        who = None
+        if user is not None:
+            conn = next((c for c in list(self.b.hub.conns.values()) if c.user_id == int(user)), None)
+            who = (int(user), conn.name if conn else "?")
+        hit = 0
+        for mob in list(self.live.values()):
+            await self._damage(mob, amount, who)
+            hit += 1
+        return hit
+
+    async def stun(self, seconds: float) -> None:
+        """The boss was stunned: the mini enemies wait too (their next attack comes `seconds` later)."""
+        if seconds <= 0 or not self.live:
+            return
+        later = time.monotonic() + seconds
+        for mob in self.live.values():
+            mob["next"] = max(mob["next"], later)
+        await self.announce()
+
     # ---- the players hit -----------------------------------------------------------------------------------------------
     def damage_of(self, uid: int, base: int) -> int:
         app = self.b.app

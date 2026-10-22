@@ -170,9 +170,9 @@ def test_characters_can_be_registered_given_powers_edited_and_dropped_and_every_
         await page.wait_for_selector("[data-testid=power-editor]", state="detached")
         saved = rig.panel_app.character_powers["Shiro"]["power1"]
         assert saved == {"name": "Escudo lunar", "description": "Una barrera de luz", "type": "defend", "cooldown": 90, "effect": "damage:80",
-                         "image_url": None, "trigger_phrase": "luz de luna"}
+                         "image_url": None, "trigger_phrase": "luz de luna", "show": "all"}
         card = page.locator("[data-testid=power-Shiro-1]")
-        assert "Escudo lunar" in await card.inner_text() and "Daño 80" in await card.inner_text() and "«luz de luna»" in await card.inner_text()
+        assert "Escudo lunar" in await card.inner_text() and "80 de daño al jefe" in await card.inner_text() and "«luz de luna»" in await card.inner_text()
 
         # edit the one Kuro already has: the form starts with what it has
         await page.click("[data-testid=power-edit-Kuro-1]")
@@ -182,7 +182,19 @@ def test_characters_can_be_registered_given_powers_edited_and_dropped_and_every_
         await page.click("[data-testid=power-save]")
         await page.wait_for_selector("[data-testid=power-editor]", state="detached")
         assert rig.panel_app.character_powers["Kuro"]["power1"]["effect"] == "heal:20"
-        assert "Curación 20" in await page.locator("[data-testid=power-Kuro-1]").inner_text()
+        assert "Te curas 20 PV" in await page.locator("[data-testid=power-Kuro-1]").inner_text()
+
+        # several effects at once, with what they will do said before saving, and who sees the picture
+        await page.click("[data-testid=power-edit-Kuro-1]")
+        await page.click("[data-testid=power-add-effect]")
+        await page.select_option("[data-testid=power-effect-kind-1]", "shield_team")
+        await page.fill("[data-testid=power-effect-1-amount]", "35")
+        assert "35 % menos de daño" in await page.locator("[data-testid=power-preview]").inner_text()
+        await page.click("[data-testid=power-show-self]")
+        await page.click("[data-testid=power-save]")
+        await page.wait_for_selector("[data-testid=power-editor]", state="detached")
+        assert rig.panel_app.character_powers["Kuro"]["power1"]["effect"] == "heal:20;shield_team:35:12"
+        assert rig.panel_app.character_powers["Kuro"]["power1"]["show"] == "self"
 
         # an invalid one is explained, not lost
         await page.click("[data-testid=power-edit-Kuro-1]")

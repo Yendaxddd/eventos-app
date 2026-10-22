@@ -14,10 +14,11 @@ from typing import Any
 
 from ..i18n import describe_object_effect, describe_skill_effect, tr
 from .hub import RpcError
+from .. import powers as power_rules
 
 MAX_CHARACTER_NAME = 80
 MAX_CHARACTERS = 25                 # per player: far more than anyone plays, and the «jugar como» list stays usable
-MAX_POWER_NAME, MAX_POWER_TEXT, MAX_EFFECT, MAX_TRIGGER = 50, 900, 100, 100
+MAX_POWER_NAME, MAX_POWER_TEXT, MAX_EFFECT, MAX_TRIGGER = 50, 900, 160, 100
 MAX_COOLDOWN = 86_400
 MAX_URL = 600
 MAX_COUNTER_IMAGES = 20
@@ -28,7 +29,7 @@ CATEGORIES = ("success_rate", "black_flashes", "parry_streak", "total_attempts",
 PROGRESS_STATS = {                  # achievement trigger -> the player's stat that counts toward it
     "evade_count": "evades", "evade_streak": "best_evade_streak", "parry_count": "parries", "black_flash_count": "black_flashes",
 }
-POWER_EFFECT = re.compile(r"^(?:(?:damage|heal):\d{1,6}|stun|buff:[a-z_]{1,24}(?::\d{1,4}(?:\.\d{1,2})?){0,2})$", re.I)
+POWER_SHOW = ("all", "self", "off")       # who sees the power's picture fill the screen in the Activity
 DIFFICULTIES = ("easy", "medium", "hard", "impossible")
 
 
@@ -284,7 +285,18 @@ class PlayerPanel:
         return {"name": _text(power.get("name"), MAX_POWER_NAME), "description": _text(power.get("description"), MAX_POWER_TEXT),
                 "type": _text(power.get("type"), 20), "cooldown": _int(power.get("cooldown")), "effect": _text(power.get("effect"), MAX_EFFECT),
                 "image": power.get("image_url") if isinstance(power.get("image_url"), str) else None,
-                "trigger": _text(power.get("trigger_phrase"), MAX_TRIGGER) or None}
+                "trigger": _text(power.get("trigger_phrase"), MAX_TRIGGER) or None, "show": power.get("show") if power.get("show") in POWER_SHOW else "all"}
+
+    def damage_multiplier(self, uid: int) -> float:
+        """What this player's hits are worth now (weapon, damage boost, revenge): the power builder shows its numbers with it."""
+        app = self.app
+        try:
+            weapon = float(app.get_weapon_damage_multiplier(uid)) if hasattr(app, "get_weapon_damage_multiplier") else 1.0
+            boost = app.get_active_buff(uid, "damage_boost") if hasattr(app, "get_active_buff") else None
+        except Exception:  # noqa: BLE001 - the bot's helpers: a failure there shows the plain numbers
+            weapon, boost = 1.0, None
+        revenge = bool(((getattr(app, "player_hp", {}) or {}).get(uid) or {}).get("revenge_mode"))
+        return power_rules.damage_multiplier(weapon, float(boost["value"]) if boost else 0.0, revenge)
 
     def characters(self, uid: int, avatars: dict[str, str] | None = None, seen: list[str] | None = None) -> dict:
         powers = getattr(self.app, "character_powers", {}) or {}
@@ -294,6 +306,7 @@ class PlayerPanel:
             "characters": [{"name": name, "avatar": (avatars or {}).get(name),
                             "powers": {key: self._power((powers.get(name) or {}).get(key)) for key in ("power1", "power2")}} for name in mine],
             "types": list(getattr(self.app, "power_types", []) or []), "max": MAX_CHARACTERS,
+            "multiplier": round(self.damage_multiplier(uid), 3), "cap": int(getattr(self.app, "ultimate_max_damage", 500) or 500),
             "suggestions": [n for n in (seen or []) if n not in known][:12],     # names seen in the channel that nobody has registered
         }
 
@@ -348,13 +361,16 @@ class PlayerPanel:
         effect = _clean_line(data.get("effect"), MAX_EFFECT)
         if not effect:
             raise RpcError("Falta el efecto del poder.")
-        if not POWER_EFFECT.match(effect):
-            raise RpcError("El efecto debe ser «damage:50», «heal:30», «stun» o «buff:ataque:0.2:30».")
+        try:
+            effect = power_rules.validate(effect)
+        except power_rules.PowerError as exc:
+            raise RpcError(str(exc)) from None
         trigger = _clean_line(data.get("trigger"), MAX_TRIGGER).lower() or None
         image = _url(data.get("image"))
         app.character_powers.setdefault(name, {})[f"power{slot}"] = {
             "name": power_name, "description": description, "type": kind, "cooldown": cooldown, "effect": effect,
             "image_url": image, "trigger_phrase": trigger,
+            "show": data.get("show") if data.get("show") in POWER_SHOW else "all",
         }
         self._save()
         return {"character": name, "slot": slot}

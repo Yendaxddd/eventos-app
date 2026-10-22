@@ -7,29 +7,79 @@ import { Modal } from "../../ui/Overlays.jsx";
 import { Block, ConfirmButton, Empty, Field, Pill } from "../../ui/Common.jsx";
 import { act, usePanel } from "../../panel/data.js";
 import { TupperImport } from "./TupperImport.jsx";
-import { EFFECT_KINDS, POWER_TYPE, buildEffect, duration, effectLabel, parseEffect } from "../../panel/format.js";
+import { POWER_TYPE, duration } from "../../panel/format.js";
+import { KINDS, MAX_PARTS, PRESETS, compose, describe, effectSummary, freshPart, parse } from "../../power-model.js";
 import { cdn, cx } from "../../util.js";
 
 const COOLDOWNS = [30, 60, 120, 300, 600];
 const SLOT_NAME = { 1: "Poder 1 · de lore", 2: "Poder 2 · de historia" };
 
-// the effect as the editor shows it: damage / heal / stun get a simple form, anything else stays text
-function startEffect(power) {
-  if (!power) return { kind: "damage", a: 50 };
-  const e = parseEffect(power.effect);
-  return e.kind === "buff" || e.kind === "custom" ? { kind: "custom", text: power.effect } : e;
+const SHOW = [["all", "Todos"], ["self", "Solo yo"], ["off", "Nadie"]];
+
+// The effects of a power, as rows the player builds (or the text of an effect the builder cannot show, kept as it is).
+function EffectBuilder({ parts, setParts, text, setText, meta, type }) {
+  const advanced = parts === null;
+  const kinds = Object.keys(KINDS);
+  const change = (i, patch) => setParts(parts.map((p, j) => (j === i ? { ...p, ...patch } : p)));
+  const lines = advanced ? [] : describe(parts, meta.multiplier || 1, meta.cap || 500);
+  return (
+    <div class="col power-builder" style={{ gap: "8px" }} data-testid="power-builder">
+      {advanced ? (
+        <div class="row" style={{ gap: "8px" }}>
+          <select class="select" value="custom" data-testid="power-effect-kind" style={{ maxWidth: "190px" }}
+            onChange={(e) => { const k = e.currentTarget.value; if (k !== "custom") setParts([freshPart(k)]); }}>
+            {kinds.map((k) => <option key={k} value={k}>{KINDS[k][0]}</option>)}<option value="custom">Avanzado (texto)</option>
+          </select>
+          <input class="input" maxLength={160} value={text} data-testid="power-effect-text" onInput={(e) => setText(e.currentTarget.value)} placeholder="damage:80;stun:3" />
+        </div>
+      ) : parts.map((p, i) => (
+        <div key={i} class="power-row" data-testid={`power-row-${i}`}>
+          <select class="select" value={p.kind} data-testid={i === 0 ? "power-effect-kind" : `power-effect-kind-${i}`}
+            onChange={(e) => { const k = e.currentTarget.value; if (k === "custom") setText(compose(parts)); else setParts(parts.map((q, j) => (j === i ? freshPart(k) : q))); }}>
+            {kinds.map((k) => <option key={k} value={k}>{KINDS[k][0]}</option>)}
+            {i === 0 && <option value="custom">Avanzado (texto)</option>}
+          </select>
+          {KINDS[p.kind][1].map(([key, label, unit, min, max, step], f) => (
+            <label key={key} class="num-input" title={label}>
+              <input class="input num" type="number" min={min} max={max} step={step} value={p[key]} aria-label={label}
+                data-testid={i === 0 && f === 0 ? "power-effect-amount" : `power-effect-${i}-${key}`}
+                onInput={(e) => change(i, { [key]: Math.max(min, Math.min(max, Number(e.currentTarget.value) || 0)) })} />
+              <i aria-hidden="true">{unit}</i>
+            </label>
+          ))}
+          {parts.length > 1 && <button class="btn btn-sm btn-ghost" type="button" aria-label="Quitar este efecto" onClick={() => setParts(parts.filter((_, j) => j !== i))}><Trash2 size={14} /></button>}
+        </div>
+      ))}
+      <div class="row wrap" style={{ gap: "6px" }}>
+        {!advanced && parts.length < MAX_PARTS && <button class="btn btn-sm" type="button" onClick={() => setParts([...parts, freshPart("heal")])} data-testid="power-add-effect"><Plus size={14} /> Otro efecto</button>}
+        <button class="btn btn-sm btn-ghost" type="button" onClick={() => setParts(parse(PRESETS[type] || "damage:80"))} data-testid="power-suggest">Sugerir para «{POWER_TYPE[type] || type}»</button>
+      </div>
+      {!advanced && (
+        <div class="power-preview-box" data-testid="power-preview">
+          <span class="field-label">Al usarlo</span>
+          {lines.map((l) => <div key={l}>{l}</div>)}
+          {(meta.multiplier || 1) !== 1 && parts.some((p) => p.kind === "damage" || p.kind === "damage_all") && (
+            <small class="faint">Tu daño ahora va ×{(meta.multiplier || 1).toFixed(2)} (arma, mejoras y venganza).</small>
+          )}
+        </div>
+      )}
+    </div>
+  );
 }
 
-function PowerEditor({ character, slot, power, types, onClose, onSaved }) {
+function PowerEditor({ character, slot, power, types, meta, onClose, onSaved }) {
   const [f, setF] = useState({
     name: power ? power.name : "", description: power ? power.description : "", type: power ? power.type : types[0] || "destructive",
     cooldown: power ? power.cooldown : 60, trigger: power && power.trigger ? power.trigger : "", image: power && power.image ? power.image : "",
+    show: power && power.show ? power.show : "all",
   });
-  const [effect, setEffect] = useState(() => startEffect(power));
+  const [parts, setParts] = useState(() => (power ? parse(power.effect) : [freshPart("damage")]));
+  const [text, setText] = useState(() => (power ? power.effect : ""));
   const [busy, setBusy] = useState(null);
   const picker = useRef(null);
   const set = (patch) => setF((old) => ({ ...old, ...patch }));
-  const code = buildEffect(effect);
+  const code = parts ? compose(parts) : text.trim();
+  const setTextMode = (value) => { setParts(null); setText(value); };
 
   const upload = async (e) => {
     const picked = e.currentTarget.files && e.currentTarget.files[0];
@@ -61,18 +111,8 @@ function PowerEditor({ character, slot, power, types, onClose, onSaved }) {
             {types.map((t) => <option key={t} value={t}>{POWER_TYPE[t] || t}</option>)}
           </select>
         </Field>
-        <Field label="Efecto en el combate" hint={effect.kind === "custom" ? "Formatos: damage:50 · heal:30 · stun · buff:damage_boost:20:30" : effectLabel(code)}>
-          <div class="row" style={{ gap: "8px" }}>
-            <select class="select" value={effect.kind} data-testid="power-effect-kind"
-              onChange={(e) => { const kind = e.currentTarget.value; setEffect(kind === "custom" ? { kind, text: code } : kind === "stun" ? { kind } : { kind, a: effect.a || 50 }); }}>
-              {EFFECT_KINDS.map(([k, label]) => <option key={k} value={k}>{label}</option>)}
-            </select>
-            {(effect.kind === "damage" || effect.kind === "heal") && (
-              <input class="input" type="number" min={0} max={999999} step={5} value={effect.a} style={{ maxWidth: "130px" }} data-testid="power-effect-amount"
-                onInput={(e) => setEffect({ kind: effect.kind, a: Number(e.currentTarget.value) })} />
-            )}
-            {effect.kind === "custom" && <input class="input" maxLength={100} value={effect.text} data-testid="power-effect-text" onInput={(e) => setEffect({ kind: "custom", text: e.currentTarget.value })} />}
-          </div>
+        <Field label="Efecto en el combate" hint="Hasta 4 efectos a la vez. Los números son reales: el bot los aplica tal cual (el daño, con tu arma y tus mejoras).">
+          <EffectBuilder parts={parts} setParts={setParts} text={text} setText={setTextMode} meta={meta || {}} type={f.type} />
         </Field>
         <Field label="Recarga (segundos)" hint={`Tarda ${duration(f.cooldown)} en poder usarse otra vez, contando solo el tiempo de combate.`}>
           <div class="row wrap" style={{ gap: "6px" }}>
@@ -91,12 +131,17 @@ function PowerEditor({ character, slot, power, types, onClose, onSaved }) {
           </div>
           {f.image && <img class="power-preview" src={cdn(f.image)} alt="" onError={(e) => { e.currentTarget.style.display = "none"; }} />}
         </Field>
+        <Field label="Quién ve la imagen en pantalla" hint="En la Actividad, la imagen o el GIF llena la pantalla un momento al lanzar el poder.">
+          <div class="row wrap gm-chips" role="group" aria-label="Quién ve la imagen">
+            {SHOW.map(([v, t]) => <button key={v} type="button" class="choice" aria-pressed={f.show === v ? "true" : "false"} onClick={() => set({ show: v })} data-testid={`power-show-${v}`}>{t}</button>)}
+          </div>
+        </Field>
       </div>
     </Modal>
   );
 }
 
-function Power({ character, slot, power, types, replace }) {
+function Power({ character, slot, power, types, meta, replace }) {
   const [editing, setEditing] = useState(false);
   const close = () => setEditing(false);
   const remove = async () => {
@@ -118,7 +163,7 @@ function Power({ character, slot, power, types, replace }) {
           <div class="row wrap" style={{ gap: "6px" }}>
             <Pill>{POWER_TYPE[power.type] || power.type}</Pill>
             <Pill tone="warn">Recarga {duration(power.cooldown)}</Pill>
-            <Pill tone="info">{effectLabel(power.effect)}</Pill>
+            <Pill tone="info">{effectSummary(power.effect, (meta && meta.multiplier) || 1, (meta && meta.cap) || 500)}</Pill>
             {power.trigger && <Pill tone="primary">«{power.trigger}»</Pill>}
           </div>
           <div class="row" style={{ gap: "6px", marginTop: "6px" }}>
@@ -132,12 +177,12 @@ function Power({ character, slot, power, types, replace }) {
           <button class="btn btn-sm" type="button" onClick={() => setEditing(true)} data-testid={`power-add-${character}-${slot}`}><Plus size={14} /> Crear poder</button>
         </>
       )}
-      {editing && <PowerEditor character={character} slot={slot} power={power} types={types} onClose={close} onSaved={(out) => { replace(out); close(); }} />}
+      {editing && <PowerEditor character={character} slot={slot} power={power} types={types} meta={meta} onClose={close} onSaved={(out) => { replace(out); close(); }} />}
     </div>
   );
 }
 
-function Character({ c, types, replace }) {
+function Character({ c, types, meta, replace }) {
   const picture = c.avatar || charAvatars.value[c.name];
   const drop = async () => {
     const out = await act("panel.unregister", { name: c.name }, `«${c.name}» ya no está registrado.`);
@@ -151,7 +196,7 @@ function Character({ c, types, replace }) {
         <ConfirmButton icon={Trash2} confirm="Sí, quitar" onConfirm={drop} class="btn-ghost" testid={`char-drop-${c.name}`}>Quitar</ConfirmButton>
       </header>
       <div class="powers">
-        {[1, 2].map((slot) => <Power key={slot} character={c.name} slot={slot} power={c.powers[`power${slot}`]} types={types} replace={replace} />)}
+        {[1, 2].map((slot) => <Power key={slot} character={c.name} slot={slot} power={c.powers[`power${slot}`]} types={types} meta={meta} replace={replace} />)}
       </div>
     </article>
   );
@@ -199,7 +244,7 @@ function Characters({ d, replace }) {
       <Register d={d} replace={replace} />
       {d.characters.length === 0
         ? <Empty icon={Drama} title="Todavía no tienes personajes">Registra el nombre de tu personaje de Tupperbox para poder escribir como él y darle poderes.</Empty>
-        : d.characters.map((c) => <Character key={c.name} c={c} types={d.types} replace={replace} />)}
+        : d.characters.map((c) => <Character key={c.name} c={c} types={d.types} meta={d} replace={replace} />)}
     </div>
   );
 }

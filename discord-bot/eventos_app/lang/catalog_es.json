@@ -7246,5 +7246,95 @@
 "kind": "user",
 "en": "🪞💥 Mirror Shard - QTE Reflected!",
 "es": "🪞💥 Mirror Shard - ¡QTE reflejado!"
+},
+{
+"id": "c83c4a269a0f",
+"kind": "user",
+"en": "🗡️ Damage ×{1} (weapon, boosts and revenge)",
+"es": "🗡️ Daño ×{1} (arma, mejoras y venganza)"
+},
+{
+"id": "b0e50845c733",
+"kind": "user",
+"en": "💥 {1} damage to the boss",
+"es": "💥 {1} de daño al jefe"
+},
+{
+"id": "25440a140a09",
+"kind": "user",
+"en": "💥 {1} damage to the boss and {2} to every mini enemy",
+"es": "💥 {1} de daño al jefe y {2} a cada mini enemigo"
+},
+{
+"id": "ce1f8e088806",
+"kind": "user",
+"en": "💚 Heals {1} HP",
+"es": "💚 Cura {1} PV"
+},
+{
+"id": "6b52ce0ddc86",
+"kind": "user",
+"en": "💚 Heals {1} HP to every player",
+"es": "💚 Cura {1} PV a cada jugador"
+},
+{
+"id": "8a16767ed4d8",
+"kind": "user",
+"en": "🛡️ {1}% less damage for {2} seconds",
+"es": "🛡️ {1} % menos de daño durante {2} segundos"
+},
+{
+"id": "a11fcc75b820",
+"kind": "user",
+"en": "🛡️ Everyone takes {1}% less damage for {2} seconds",
+"es": "🛡️ Todos reciben un {1} % menos de daño durante {2} segundos"
+},
+{
+"id": "86013de39cfa",
+"kind": "user",
+"en": "🌀 The boss is stunned for {1} seconds",
+"es": "🌀 El jefe queda aturdido {1} segundos"
+},
+{
+"id": "73e0d8f4cde9",
+"kind": "user",
+"en": "✨ +{1}% damage for {2} seconds",
+"es": "✨ +{1} % de daño durante {2} segundos"
+},
+{
+"id": "103fcd4cdd39",
+"kind": "user",
+"en": "✨ +{1}% damage on the next hit",
+"es": "✨ +{1} % de daño en el próximo golpe"
+},
+{
+"id": "0f113ad266f7",
+"kind": "user",
+"en": "✨ +{1}% Black Flash chance for {2} seconds",
+"es": "✨ +{1} % de probabilidad de Black Flash durante {2} segundos"
+},
+{
+"id": "d5fa9a609dfb",
+"kind": "user",
+"en": "✨ +{1}% Black Flash chance on the next hit",
+"es": "✨ +{1} % de probabilidad de Black Flash en el próximo golpe"
+},
+{
+"id": "a3adc01cc6a8",
+"kind": "user",
+"en": "⚡ +{1}% power charge to every other player",
+"es": "⚡ +{1} % de carga de poder para los demás jugadores"
+},
+{
+"id": "24994984aca3",
+"kind": "user",
+"en": "🧼 Removes your harmful effects",
+"es": "🧼 Te quita los efectos dañinos"
+},
+{
+"id": "2457c8ed9172",
+"kind": "user",
+"en": "🧼 Removes everyone's harmful effects",
+"es": "🧼 Quita los efectos dañinos a todos"
 }
 ]
