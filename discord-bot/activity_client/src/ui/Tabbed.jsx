@@ -11,6 +11,11 @@ export function TabbedPage({ tabs, prefix, label, testid }) {
     const el = document.getElementById(`${prefix}-tab-${found[0]}`);
     if (el && el.scrollIntoView) el.scrollIntoView({ block: "nearest", inline: "center", behavior: "smooth" });
   }, [found[0]]);
+  useEffect(() => {                                   // a new page: the keyboard starts on its chosen tab
+    if (document.querySelector(".modal-card, .palette")) return;
+    const el = document.getElementById(`${prefix}-tab-${found[0]}`);
+    if (el) el.focus({ preventScroll: true });
+  }, [prefix]);
   const move = (e, index) => {
     const step = e.key === "ArrowRight" || e.key === "ArrowDown" ? 1 : e.key === "ArrowLeft" || e.key === "ArrowUp" ? -1 : 0;
     if (!step) return;

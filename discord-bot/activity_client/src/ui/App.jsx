@@ -19,6 +19,7 @@ import { TrainingPage } from "../views/Training.jsx";
 import { PanelPage } from "../views/Panel.jsx";
 import { GmPage } from "../views/Gm.jsx";
 import { TutorialHost } from "../views/Tutorial.jsx";
+import { BottomNav, Palette } from "./Navigation.jsx";
 
 function Splash() {
   const c = conn.value;
@@ -90,12 +91,15 @@ export function App() {
   if (conn.value.state !== "connected") return <Splash />;
   if (pip.value) return <><PipView /><CinemaLayer /><QteLayer /><Toasts /><FxLayer /></>;
   const v = view.value;
+  const bottom = layout.mode === "narrow" && !(v === "event" && layout.short);       // a phone held sideways keeps the whole height for the game
   return (
     <>
-      <div class="app" data-view={v}>
+      <a class="skip-link" href="#composer-input" onClick={(e) => { e.preventDefault(); const box = document.querySelector("[data-testid=composer] textarea"); if (box) box.focus(); }}>Ir al chat</a>
+      <div class={`app ${bottom ? "has-bottom-nav" : ""}`} data-view={v}>
         <Topbar layout={layout} />
         <Banner />
-        {v === "event" ? <EventView layout={layout} /> : <Pages layout={layout} />}
+        {v === "event" ? <EventView key="event" layout={layout} /> : <Pages layout={layout} />}
+        {bottom && <BottomNav />}
       </div>
       <CinemaLayer />
       <QteLayer />
@@ -113,6 +117,7 @@ export function App() {
       <Toasts />
       <FxLayer />
       <TutorialHost />
+      <Palette />
     </>
   );
 }

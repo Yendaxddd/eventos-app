@@ -1,4 +1,5 @@
 // Small form controls shared by the settings pages.
+import { useEffect, useRef } from "preact/hooks";
 import { cx } from "../util.js";
 
 export function Switch({ checked, onChange, label, disabled }) {
@@ -40,11 +41,14 @@ export function Section({ title, children }) {
 }
 
 export function Page({ title, icon: Icon, children, actions, narrow = true }) {
+  const heading = useRef(null);
+  // a new page: the keyboard and the screen reader start at its title, not wherever the last page left them
+  useEffect(() => { if (heading.current && !document.querySelector(".modal-card, .palette")) heading.current.focus({ preventScroll: true }); }, []);
   return (
     <div class="page" data-testid="page">
       <div class="page-head">
         {Icon && <Icon size={20} />}
-        <h1 class="grow">{title}</h1>
+        <h1 class="grow" tabIndex={-1} ref={heading}>{title}</h1>
         {actions}
       </div>
       <div class={cx("page-body", narrow && "narrow")}>{children}</div>

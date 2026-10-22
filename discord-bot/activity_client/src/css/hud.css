@@ -271,7 +271,7 @@
 .mob-name { font: 700 .8125rem/1.1 var(--font-display); }
 .mob-bar { height: 6px; border-radius: 99px; background: rgb(255 255 255 / .1); overflow: hidden; }
 .mob-bar i { display: block; height: 100%; background: var(--mob); transition: width .3s var(--ease); }
-.mob-meta { display: flex; align-items: center; gap: 4px; font-size: .6875rem; color: var(--text-dim); }
+.mob-meta { display: flex; align-items: center; gap: 4px; font-size: .6875rem; color: var(--text-dim); white-space: nowrap; }
 .mob-meta em { margin-left: auto; font-style: normal; color: var(--text-faint); }
 .mob-dmg { position: absolute; top: -4px; right: 10px; font: 800 1rem/1 var(--font-display); color: #fff; text-shadow: 0 1px 0 #000, 0 0 10px var(--mob); pointer-events: none; animation: mob-dmg 1s ease-out both; }
 @keyframes mob-in { from { opacity: 0; transform: translateY(-8px) scale(.9); } }

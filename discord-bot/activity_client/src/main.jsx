@@ -10,10 +10,12 @@ import { setPrefs } from "./settings-actions.js";
 import { cine } from "./cine.js";
 import { vfxLog } from "./vfx.js";
 import { music } from "./audio.js";
+import { installPaletteKeys } from "./ui/Navigation.jsx";
 import { mobs } from "./mobs.js";
 
 effect(() => applyPrefs(prefs.value));      // the player's settings are applied to the page whenever they change
 installKeys();
+installPaletteKeys();
 
 // handy for tests and for looking around from the browser console
 window.__eventos = {

@@ -18,7 +18,7 @@ function MobCard({ mob, at, now, cooling }) {
         <span class="mob-name ellipsis">{mob.name}</span>
         <span class="mob-bar"><i style={{ width: `${pct}%` }} /></span>
         <span class="mob-meta num">
-          {mob.attacking ? <><Swords size={11} /> {mob.attacking}</> : left === null ? <><Pause size={11} /> en pausa</> : `ataca en ${Math.ceil(left)} s`}
+          {mob.attacking ? <><Swords size={11} /> {mob.attacking}</> : left === null ? <><Pause size={11} /> en pausa</> : <><Swords size={11} /> {Math.ceil(left)} s</>}
           <em>{mob.hp}/{mob.max}</em>
         </span>
       </span>

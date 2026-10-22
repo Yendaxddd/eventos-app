@@ -1,7 +1,8 @@
-import { ArrowLeft, Crown, Menu, Music, Settings, Swords, Users, Volume2, VolumeX } from "lucide-preact";
+import { ArrowLeft, Crown, Menu, Music, Search, Settings, Swords, Users, Volume2, VolumeX } from "lucide-preact";
 import { channelName, go, back, link, perms, prefs, sheet, users, view } from "../state.js";
 import { audioBlocked, music } from "../audio.js";
 import { setPrefs } from "../settings-actions.js";
+import { TopNav, palette } from "./Navigation.jsx";
 import { QUALITY } from "../terms.js";
 
 export function ConnBadge() {
@@ -50,6 +51,7 @@ export function Topbar({ layout }) {
           <span>{v === "event" ? `${online} en la Actividad` : TITLES[v] || ""}</span>
         </div>
       </div>
+      {layout.mode !== "narrow" && <TopNav />}
       <div class="spacer" />
       <NowPlaying />
       <ConnBadge />
@@ -59,7 +61,8 @@ export function Topbar({ layout }) {
       {v === "event" && layout.mode === "narrow" && perms.value.gm && (
         <button class="icon-btn" type="button" onClick={() => { sheet.value = "gm"; }} aria-label="Mando del GM" data-testid="gm-deck-button"><Crown size={20} /></button>
       )}
-      <button class={`icon-btn ${v === "settings" ? "is-on" : ""}`} type="button" onClick={() => go("settings")} aria-label="Ajustes" data-testid="settings-button"><Settings size={20} /></button>
+      {layout.mode === "narrow" && <button class="icon-btn" type="button" onClick={() => { palette.value = true; }} aria-label="Ir a…" data-testid="open-palette"><Search size={20} /></button>}
+      {layout.mode !== "narrow" && <button class={`icon-btn ${v === "settings" ? "is-on" : ""}`} type="button" onClick={() => go("settings")} aria-label="Ajustes" data-testid="settings-button"><Settings size={20} /></button>}
     </header>
   );
 }
