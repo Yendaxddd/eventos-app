@@ -140,6 +140,19 @@ class PanelRpc:
         log.info("%s guardó el poder %s de %s", conn.name, done["slot"], done["character"])
         return await self._characters_changed(conn)
 
+    async def rpc_gm_powers(self, conn: Conn, args: dict):
+        """Every character's powers, for the game masters (what /manageultimates listed): they edit them with the same builder."""
+        await self._gm(conn)
+        app = self.app
+        registry = getattr(app, "character_registry", {}) or {}
+        powers = getattr(app, "character_powers", {}) or {}
+        names = sorted(set(registry) | set(powers), key=str.lower)[:400]
+        owners = {uid: (await self.who_is(uid, fetch=False))[0] for uid in {registry[n] for n in names if n in registry}}
+        rows = [{"character": n, "owner": owners.get(registry.get(n), "—"),
+                 "powers": {k: self.panel._power((powers.get(n) or {}).get(k)) for k in ("power1", "power2")}} for n in names]
+        return {"rows": rows, "types": list(getattr(app, "power_types", []) or []), "multiplier": 1.0,
+                "cap": int(getattr(app, "ultimate_max_damage", 500) or 500), "selfRecharge": bool(getattr(app, "ultimate_self_recharge", False))}
+
     async def rpc_panel_unpower(self, conn: Conn, args: dict):
         self.panel.remove_power(conn.user_id, await self.is_gm(conn), args.get("character"), args.get("slot"))
         return await self._characters_changed(conn)

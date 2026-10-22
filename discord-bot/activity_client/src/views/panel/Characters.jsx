@@ -67,7 +67,7 @@ function EffectBuilder({ parts, setParts, text, setText, meta, type }) {
   );
 }
 
-function PowerEditor({ character, slot, power, types, meta, onClose, onSaved }) {
+export function PowerEditor({ character, slot, power, types, meta, onClose, onSaved }) {
   const [f, setF] = useState({
     name: power ? power.name : "", description: power ? power.description : "", type: power ? power.type : types[0] || "destructive",
     cooldown: power ? power.cooldown : 60, trigger: power && power.trigger ? power.trigger : "", image: power && power.image ? power.image : "",

@@ -193,6 +193,12 @@ class GmRpc:
         self.gm.give_object(actor, uid, label, args.get("object"))
         return await self._player_view(uid)
 
+    async def rpc_gm_support(self, conn: Conn, args: dict):
+        actor = await self._gm(conn)
+        uid, label = await self._who(args)
+        await self.gm.support(actor, uid, label, args.get("kind"), args.get("value"), args.get("duration"))
+        return await self._player_view(uid)
+
     async def rpc_gm_obj_take(self, conn: Conn, args: dict):
         actor = await self._gm(conn)
         uid, label = await self._who(args)

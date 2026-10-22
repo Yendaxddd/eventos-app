@@ -110,3 +110,22 @@ def test_a_power_can_make_the_boss_burn_and_weakness_and_curses_now_count(tmp_pa
     asyncio.run(bot.apply_status_effect(1, "cursed", 30, 2, source="test"))
     bot.add_charge_from_damage_taken(1, 50)
     assert bot.power_charges[1]["power1"] < 50 / 5.0 * bot.charge_per_damage_taken          # cursed: less charge
+
+
+def test_the_game_masters_support_heals_boosts_shields_and_shortens_cooldowns_in_the_real_bot(tmp_path, monkeypatch):
+    from eventos_app.activity.gm import GmPanel
+    bot, _, _ = real_bot(tmp_path, monkeypatch)
+    fight(bot)
+    gm = GmPanel(bot)
+    asyncio.run(gm.support("Gus", 1, "Ana", "heal", 25, 0))
+    assert bot.player_hp[1]["current"] == 75
+    asyncio.run(gm.support("Gus", 1, "Ana", "shield", 50, 20))
+    assert bot.get_active_buff(1, "shield")["value"] == 50
+    asyncio.run(gm.support("Gus", 1, "Ana", "damage_boost", 30, 0))
+    assert bot.get_active_buff(1, "damage_boost")["value"] == 30
+    bot.power_cooldowns[1] = {"power1": time.time() + 100}
+    asyncio.run(gm.support("Gus", 1, "Ana", "cd_reduce", 60, 0))
+    assert bot.power_cooldowns[1]["power1"] < time.time() + 41
+    with pytest.raises(Exception, match="no existe"):
+        asyncio.run(gm.support("Gus", 1, "Ana", "nuke", 1, 0))
+    assert any("Curó a Ana" in e["action"] or "Curó Ana" in e["action"] for e in gm.log.recent())

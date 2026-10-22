@@ -618,10 +618,9 @@ class AdvancedQTEBot:
         # =====================================
         
         # ========== BOSS DEFEAT SYSTEM ==========
-        self.boss_defeat_gifs = [
-            "https://media.tenor.com/your-boss-defeat-gif-1.gif",  # Placeholder
-            "https://media.tenor.com/your-boss-defeat-gif-2.gif"   # Placeholder
-        ]
+        # the GIFs were loaded from the saved data above: placeholders here used to overwrite them on every start
+        if not isinstance(getattr(self, "boss_defeat_gifs", None), list):
+            self.boss_defeat_gifs = []
         self.boss_defeat_messages = [
             "The tyrant falls... their reign ends here.",
             "Victory! The darkness recedes...",
@@ -6462,13 +6461,16 @@ Your response (1-2 sentences max):"""
                 tracking = self.special_objects_manager.get_all_tracking(user_id, obj_id)
                 
                 field_value = ""
-                for difficulty in ['easy', 'medium', 'hard', 'impossible']:
+                all_thresholds = obj.get('thresholds') or {}
+                # an object with one counter («total») has a plain list of steps: it used to crash here
+                rows = ['total'] if isinstance(all_thresholds, list) else ['easy', 'medium', 'hard', 'impossible']
+                for difficulty in rows:
                     spins = tracking.get(difficulty, 0)
                     # Pass empty list for character names since we use inventory now
                     reduction = self.special_objects_manager.get_damage_reduction(user_id, [], difficulty)
                     
                     # Find next threshold
-                    thresholds = obj.get('thresholds', {}).get(difficulty, [])
+                    thresholds = all_thresholds if isinstance(all_thresholds, list) else all_thresholds.get(difficulty, [])
                     next_threshold = None
                     for t in thresholds:
                         if t['spins'] > spins:
@@ -7410,7 +7412,10 @@ Your response (1-2 sentences max):"""
             result_msg = f"⚡ Ultimate charge +**{value}%**!"
         
         elif effect_type == "cd_reduce":
-            # This would need cooldown tracking - for now just message
+            for key, end in list((self.power_cooldowns.get(actual_target) or {}).items()):
+                self.power_cooldowns[actual_target][key] = end - value
+            for key, rest in list((self.ultimate_fight_cooldowns.get(actual_target) or {}).items()):
+                self.ultimate_fight_cooldowns[actual_target][key] = max(0, rest - value)
             result_msg = f"⏱️ Cooldowns reduced by **{value}s**!"
         
         else:

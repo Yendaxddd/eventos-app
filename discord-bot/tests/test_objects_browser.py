@@ -41,3 +41,22 @@ def test_a_game_master_creates_an_object_with_steps_and_gives_it_to_a_player():
         assert page.errors == []
 
     run(scenario)
+
+
+def test_a_game_master_sees_every_power_and_edits_one_with_the_builder_and_gives_support():
+    async def scenario(rig, browser, url):
+        rig.app.character_registry = {"Kuro": OTHER}
+        rig.app.user_characters = {OTHER: ["Kuro"]}
+        rig.app.power_types = ["destructive", "support", "defend", "build", "control"]
+        rig.app.character_powers = {"Kuro": {"power1": {"name": "Corte", "description": "Un tajo", "type": "destructive", "cooldown": 60, "effect": "damage:50"}}}
+        page = await gm_page(browser, url, tab="data", width=1200, height=1100)
+        await page.click("[data-testid=gm-section-powers]")
+        await page.wait_for_selector("[data-testid=gm-powers-Kuro]")
+        assert "50 de daño al jefe" in await page.locator("[data-testid=gm-powers-Kuro]").inner_text()
+        await page.click("[data-testid=gm-power-edit-Kuro-1]")
+        await page.fill("[data-testid=power-effect-amount]", "90")
+        await page.click("[data-testid=power-save]")
+        await until(lambda: rig.app.character_powers["Kuro"]["power1"]["effect"] == "damage:90", "the GM's edit")
+        assert page.errors == []
+
+    run(scenario)

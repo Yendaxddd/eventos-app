@@ -10,6 +10,7 @@ import { OBJECT_TYPE, parseNumber, plural, rarityOf } from "../../panel/format.j
 import { ago } from "../../util.js";
 import { Card, NumberInput } from "./ui.jsx";
 import { ObjectForm } from "./ObjectForm.jsx";
+import { PowersSection } from "./PowersSection.jsx";
 import { useDo } from "./hooks.js";
 
 const STARTER_I18N = '{\n  "exact": {},\n  "patterns": []\n}\n';
@@ -378,7 +379,7 @@ function Files({ pick, onPicked }) {
   );
 }
 
-const SECTIONS = [["achievements", "Logros"], ["objects", "Objetos"], ["files", "Archivos"]];
+const SECTIONS = [["achievements", "Logros"], ["objects", "Objetos"], ["powers", "Poderes"], ["files", "Archivos"]];
 
 export function DataTab() {
   const [section, setSection] = useState("achievements");
@@ -391,6 +392,7 @@ export function DataTab() {
       </div>
       {section === "achievements" && <Achievements />}
       {section === "objects" && <Objects openFile={openFile} />}
+      {section === "powers" && <PowersSection />}
       {section === "files" && <Files pick={pick} onPicked={() => setPick(null)} />}
     </div>
   );

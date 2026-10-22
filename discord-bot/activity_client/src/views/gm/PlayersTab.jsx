@@ -148,6 +148,37 @@ function Charges({ row, id, replace }) {
   );
 }
 
+// What /support did, as buttons: heal, a boost, charge, shorter cooldowns or a shield, for this player.
+const SUPPORT = [["heal", "Curar", "PV", 30, false], ["shield", "Escudo", "%", 40, true], ["damage_boost", "Más daño", "%", 25, true], ["bf_boost", "Más Black Flash", "%", 10, true],
+  ["ult_charge", "Carga de poder", "%", 25, false], ["cd_reduce", "Reducir recargas", "s", 60, false]];
+
+function Support({ id, replace }) {
+  const [kind, setKind] = useState("heal");
+  const [value, setValue] = useState("30");
+  const [seconds, setSeconds] = useState("30");
+  const [busy, run] = useDo();
+  const spec = SUPPORT.find((x) => x[0] === kind);
+  const pick = (k) => { const s = SUPPORT.find((x) => x[0] === k); setKind(k); setValue(String(s[3])); };
+  const give = async () => {
+    const out = await run("support", "gm.support", { id, kind, value: parseNumber(value), duration: spec[4] ? parseNumber(seconds) ?? 0 : 0 }, "Apoyo aplicado.");
+    if (out) replace(out);
+  };
+  return (
+    <Card title="Apoyo" icon={Heart} testid="gm-support" hint="Lo que hacía /support: una ayuda inmediata para esta persona.">
+      <div class="col" style={{ gap: "var(--sp-3)" }}>
+        <div class="row wrap gm-chips" role="group" aria-label="Tipo de apoyo">
+          {SUPPORT.map(([k, label]) => <button key={k} type="button" class="choice" aria-pressed={kind === k ? "true" : "false"} onClick={() => pick(k)} data-testid={`gm-support-${k}`}>{label}</button>)}
+        </div>
+        <div class="row wrap" style={{ gap: "8px", alignItems: "flex-end" }}>
+          <Field label="Cantidad"><NumberInput value={value} min={1} max={1000} unit={spec[2]} label="Cantidad" testid="gm-support-value" onInput={setValue} /></Field>
+          {spec[4] && <Field label="Durante (0 = el próximo golpe)"><NumberInput value={seconds} min={0} max={3600} unit="s" label="Duración" onInput={setSeconds} /></Field>}
+          <button class="btn btn-primary" type="button" disabled={busy !== null} onClick={give} data-testid="gm-support-give">Aplicar</button>
+        </div>
+      </div>
+    </Card>
+  );
+}
+
 function Points({ d, id, replace }) {
   const [amount, setAmount] = useState("1");
   const [busy, run] = useDo();
@@ -321,6 +352,7 @@ function Person({ id, onBack }) {
             </div>
             <Health row={d.row} id={id} replace={q.replace} />
             <Charges row={d.row} id={id} replace={q.replace} />
+            <Support id={id} replace={q.replace} />
             <Points d={d} id={id} replace={q.replace} />
             <Achievements d={d} id={id} replace={q.replace} />
             <Objects d={d} id={id} replace={q.replace} />

@@ -220,6 +220,27 @@ class PlayerOps:
             raise RpcError("No tiene ese objeto.")
         return obj
 
+    SUPPORT = {"heal": ("Curó a", "PV"), "damage_boost": ("Dio más daño a", "%"), "bf_boost": ("Dio más Black Flash a", "%"),
+               "ult_charge": ("Dio carga de poder a", "%"), "cd_reduce": ("Redujo las recargas de", "s"), "shield": ("Puso un escudo a", "%")}
+
+    async def support(self, actor: str, uid: int, label: str, kind, value, duration) -> None:
+        """What /support did: heal, a boost for a while (or the next hit), power charge, shorter cooldowns, or a shield."""
+        kind = str(kind or "")
+        if kind not in self.SUPPORT:
+            raise RpcError("Ese apoyo no existe.")
+        amount = int(finite(value))
+        seconds = int(finite(duration))
+        if not 1 <= amount <= 1000 or not 0 <= seconds <= 3600:
+            raise RpcError("La cantidad va de 1 a 1000 y la duración de 0 a 3600 segundos.")
+        if kind == "shield":
+            self.app.apply_buff(uid, "shield", min(amount, 90), seconds or 30)
+        else:
+            ok, message = await self.app.apply_support_effect(uid, uid, f"support:self:{kind}:{amount}:{seconds}")
+            if not ok:
+                raise RpcError("El bot no aceptó ese apoyo.")
+        what, unit = self.SUPPORT[kind]
+        self.log.add(actor, f"{what} {label} ({amount} {unit}{f', {seconds} s' if seconds and kind not in ('heal', 'ult_charge', 'cd_reduce') else ''})")
+
     def give_object(self, actor: str, uid: int, label: str, object_id) -> None:
         ok, message = self._manager().give_object(uid, str(object_id or ""))
         if not ok:
