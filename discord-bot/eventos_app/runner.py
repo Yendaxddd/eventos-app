@@ -20,7 +20,7 @@ import discord
 
 from rich.markup import escape as markup_escape
 
-from . import activity, backups, benchmark, browser, console_bridge, diagnostics, i18n, multibot, paths, snapshot, webhooks
+from . import activity, backups, benchmark, browser, console_bridge, diagnostics, i18n, lang, multibot, paths, snapshot, webhooks
 from .settings import Settings
 
 log = logging.getLogger("eventos_app")
@@ -605,6 +605,7 @@ class BotRunner:
         error = ""
         try:
             os.environ.update(settings.to_env())
+            lang.activate(settings.language)              # the bot's messages, its command descriptions and this log in Spanish
             module = importlib.import_module(BOT_MODULE)
             self._app = module.AdvancedQTEBot()
             self._base_interval = self._app._min_message_interval

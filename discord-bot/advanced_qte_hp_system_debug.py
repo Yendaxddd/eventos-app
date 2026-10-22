@@ -13409,6 +13409,11 @@ Responde SOLAMENTE con un numero del 1 al 10."""
 
 if __name__ == "__main__":
     try:
+        try:                                                    # Spanish messages unless EVENTOS_LANG=en (see eventos_app/lang)
+            from eventos_app import lang as _lang
+            _lang.activate(os.environ.get("EVENTOS_LANG", "es"))
+        except ImportError:
+            pass
         bot = AdvancedQTEBot()
         bot.run()
     except KeyboardInterrupt:

@@ -53,6 +53,8 @@ class Settings:
     # what the channel says about each answer: "auto" (the Activity tells whoever has it open; the channel tells the rest), "quiet"
     # (the channel only has the QTE messages) or "chat" (everything in the channel, as before the Activity)
     channel_feedback: str = "auto"
+    # the language of what the bot writes in Discord and in the app's log: "es" (translated, see eventos_app/lang) or "en" (as written)
+    language: str = "es"
 
     def validate(self) -> list[str]:
         """Human-readable problems (Spanish, shown in the UI). Empty list = OK."""
@@ -76,6 +78,7 @@ class Settings:
             "EVENTOS_RESET_ON_START": "1" if self.reset_on_start else "0",
             "EVENTOS_HOTKEYS": "1" if self.hotkeys_enabled else "0",
             "EVENTOS_FEEDBACK": self.channel_feedback if self.channel_feedback in ("auto", "quiet", "chat") else "auto",
+            "EVENTOS_LANG": self.language if self.language in ("es", "en") else "es",
         }
         for name, var in _ID_FIELDS.items():
             value = getattr(self, name).strip()

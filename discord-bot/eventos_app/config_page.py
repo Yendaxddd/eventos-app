@@ -75,6 +75,7 @@ class ConfigPage(ctk.CTkFrame):
             "backup_on_stop": tk.BooleanVar(value=s.backup_on_stop),
             "check_updates": tk.BooleanVar(value=s.check_updates),
             "channel_feedback": tk.StringVar(value=s.channel_feedback),
+            "language": tk.StringVar(value=s.language),
         }
         self._building = "bot"
         self._build_token(0)
@@ -579,6 +580,16 @@ class ConfigPage(ctk.CTkFrame):
         self.feedback_menu.grid(row=1, column=1, columnspan=3, padx=(0, 18), pady=6, sticky="ew")
         self._note(box, 2, "Sin reacciones (✅ ❌ ⭐) ni un mensaje por cada esquive o parry: quien juega desde la Actividad lo ve en su pantalla. "
                            "En «Automático» quien juega desde el chat sigue recibiendo los mensajes. Vale al reiniciar el bot.", pady=(0, 12))
+        languages = {"es": "Español (traducidos por la app)", "en": "Inglés (como los escribió el autor del bot)"}
+        by_language = {label: key for key, label in languages.items()}
+        ctk.CTkLabel(box, text="Idioma", text_color=MUTED, anchor="w").grid(row=3, column=0, padx=(18, 12), pady=6, sticky="w")
+        self.language_menu = ctk.CTkOptionMenu(
+            box, values=list(languages.values()), height=34, fg_color=BUTTON_NEUTRAL, button_color=CARD_BORDER, button_hover_color=BUTTON_NEUTRAL_HOVER,
+            command=lambda label: self.vars["language"].set(by_language[label]))
+        self.language_menu.set(languages.get(self.vars["language"].get(), languages["es"]))
+        self.language_menu.grid(row=3, column=1, columnspan=3, padx=(0, 18), pady=6, sticky="ew")
+        self._note(box, 4, "Los mensajes del bot en el canal, las descripciones de sus comandos y este registro. Lo que escriben los jugadores no se toca. "
+                           "Vale al reiniciar el bot.", pady=(0, 12))
 
     # ---- Discord Activity: the settings (the Activity page puts them in its own card) ----------------------------------------
     def build_activity_settings(self, box, first_row: int = 1) -> None:

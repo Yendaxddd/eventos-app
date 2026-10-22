@@ -16,6 +16,7 @@ import discord
 
 from .auth import AuthError
 from .hub import Conn, Hub, RpcError
+from ..lang.discord_hooks import untranslated
 from .gm import GmLog, GmPanel
 from .gm_rpc import GmRpc
 from .panel_rpc import PanelRpc, is_storage_message
@@ -543,7 +544,8 @@ class ActivityBridge(PanelRpc, GmRpc, TupperRpc, AudioRpc, CinemaRpc, FxRpc, Qui
                 log.warning("Activity: no webhook lane in the event channel, so players' messages go out as the bot "
                             "(give a bot «Gestionar webhooks» there to show their own name and picture)")
             try:
-                await channel.send(f"**{name}:** {text}", allowed_mentions=discord.AllowedMentions.none())
+                with untranslated():                   # what the player wrote goes out as they wrote it
+                    await channel.send(f"**{name}:** {text}", allowed_mentions=discord.AllowedMentions.none())
             except discord.HTTPException as exc:
                 return f"Discord no dejó publicarlo ({exc.status})."
         if member is not None:

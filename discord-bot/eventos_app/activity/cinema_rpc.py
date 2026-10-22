@@ -11,6 +11,7 @@ import discord
 from .audio import EVENTS
 from .cinema import TRIGGER_EVENTS
 from .hub import Conn, RpcError
+from ..lang.discord_hooks import untranslated
 from .media import IMAGES, MediaError
 
 log = logging.getLogger("eventos_app.activity")
@@ -104,7 +105,8 @@ class CinemaRpc:
     async def _cinema_post(self, text: str) -> None:
         channel = self.channel()
         if channel is not None:
-            await channel.send(text, allowed_mentions=discord.AllowedMentions.none())
+            with untranslated():                       # a game master's own words
+                await channel.send(text, allowed_mentions=discord.AllowedMentions.none())
 
     # ---- a picture for a cinematic (a game master uploads it over HTTP; it stays on this PC) ----------------------------------------
     async def store_cinema_image(self, user_id: int, filename: str, data: bytes, dev_gm: bool = False) -> dict:

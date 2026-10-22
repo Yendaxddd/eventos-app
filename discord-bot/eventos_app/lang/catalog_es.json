@@ -1,0 +1,7250 @@
+[
+{
+"id": "c959364b6310",
+"kind": "console",
+"en": "[/cyan bold]\n[green]✓ QTE System Ready![/green]",
+"es": "[/cyan bold]\n[green]✓ ¡Sistema QTE listo![/green]"
+},
+{
+"id": "8193b3d40314",
+"kind": "console",
+"en": "[blue]✏️ {1} set {2} spins for {3}: {4} → {5}[/blue]",
+"es": "[blue]✏️ {1} estableció {2} giros para {3}: {4} → {5}[/blue]"
+},
+{
+"id": "fcd268b34aa4",
+"kind": "console",
+"en": "[blue]🔄 {1} reset {2} spins for {3}[/blue]",
+"es": "[blue]🔄 {1} reinició los giros de {2} para {3}[/blue]"
+},
+{
+"id": "3d190419693e",
+"kind": "console",
+"en": "[bold blue]🎯 DIRECTION QTE TRIGGERED[/bold blue]\n[yellow]Target: {1}[/yellow]\n[cyan]Shown: {2} | Correct: {3}[/cyan]",
+"es": "[bold blue]🎯 QTE DE DIRECCIÓN ACTIVADO[/bold blue]\n[yellow]Objetivo: {1}[/yellow]\n[cyan]Mostrado: {2} | Correcto: {3}[/cyan]"
+},
+{
+"id": "a096e53366b8",
+"kind": "console",
+"en": "[bold gold1]⚡💥 {1}COUNTER ATTACK! 💥⚡[/bold gold1]\n[cyan]{2}[/cyan] landed a counter!\n[yellow]Damage: {3} | Stun: {4}s | Luck: {5}%[/yellow]",
+"es": "[bold gold1]⚡💥 {1}¡CONTRAATAQUE! 💥⚡[/bold gold1]\n[cyan]{2}[/cyan] ¡logró un contraataque!\n[yellow]Daño: {3} | Aturdimiento: {4}s | Suerte: {5}%[/yellow]"
+},
+{
+"id": "134233417d3d",
+"kind": "console",
+"en": "[bold gold1]🏆 MAX BF CHAIN ACHIEVED! {1}[/bold gold1]",
+"es": "[bold gold1]🏆 ¡CADENA BF MÁXIMA ALCANZADA! {1}[/bold gold1]"
+},
+{
+"id": "1326c7bd91c1",
+"kind": "console",
+"en": "[bold green]✅ COMMANDS SYNCED[/bold green]\n[cyan]{1} commands synced to {2} guilds[/cyan]",
+"es": "[bold green]✅ COMANDOS SINCRONIZADOS[/bold green]\n[cyan]{1} comandos sincronizados en {2} servidores[/cyan]"
+},
+{
+"id": "d2b5b6892811",
+"kind": "console",
+"en": "[bold green]📦 BATCH DISTRIBUTED[/bold green]\n[cyan]Distributed to {1} players[/cyan]",
+"es": "[bold green]📦 LOTE DISTRIBUIDO[/bold green]\n[cyan]Distribuido a {1} jugadores[/cyan]"
+},
+{
+"id": "8b25d44afb0f",
+"kind": "console",
+"en": "[bold magenta]⚡ BF CHAIN {1} TRIGGERED![/bold magenta]\n[cyan]{2}[/cyan] can deal {3} damage!",
+"es": "[bold magenta]⚡ ¡CADENA BF {1} ACTIVADA![/bold magenta]\n[cyan]{2}[/cyan] ¡puede infligir {3} de daño!"
+},
+{
+"id": "7de0a77d6811",
+"kind": "console",
+"en": "[bold magenta]⚡ BLACK FLASH! Timing: {1}s, Chance: {2}[/bold magenta]",
+"es": "[bold magenta]⚡ ¡BLACK FLASH! Tiempo: {1}s, Probabilidad: {2}[/bold magenta]"
+},
+{
+"id": "8634c669f415",
+"kind": "console",
+"en": "[bold magenta]⚡💥 BLACK FLASH - {1}![/bold magenta]",
+"es": "[bold magenta]⚡💥 BLACK FLASH - ¡{1}![/bold magenta]"
+},
+{
+"id": "f27ee6a9b472",
+"kind": "console",
+"en": "[bold magenta]⚡💥 BLACK FLASH! 💥⚡[/bold magenta]\n[cyan]{1}[/cyan] landed a PERFECT parry!\n[yellow]Time: {2}s | New Chance: {3}%[/yellow]",
+"es": "[bold magenta]⚡💥 ¡BLACK FLASH! 💥⚡[/bold magenta]\n[cyan]{1}[/cyan] ¡logró un parry PERFECTO!\n[yellow]Tiempo: {2}s | Nueva probabilidad: {3}%[/yellow]"
+},
+{
+"id": "a79a72e308b0",
+"kind": "console",
+"en": "[bold magenta]⚡💥 CHAIN {1} BLACK FLASH! 💥⚡[/bold magenta]\n[cyan]{2}[/cyan] dealt {3} damage!",
+"es": "[bold magenta]⚡💥 ¡BLACK FLASH EN CADENA {1}! 💥⚡[/bold magenta]\n[cyan]{2}[/cyan] ¡infligió {3} de daño!"
+},
+{
+"id": "7a5ee9edfdfb",
+"kind": "console",
+"en": "[bold magenta]🌌 DOMAIN EXPANSION CASTING 🌌[/bold magenta]\n[yellow]{1} - {2}[/yellow]\n[red]INTERRUPTIBLE - 5 second cast![/red]",
+"es": "[bold magenta]🌌 LANZANDO EXPANSIÓN DE DOMINIO 🌌[/bold magenta]\n[yellow]{1} - {2}[/yellow]\n[red]INTERRUMPIBLE - ¡lanzamiento de 5 segundos![/red]"
+},
+{
+"id": "b8eb4429fb5b",
+"kind": "console",
+"en": "[bold magenta]🌌 DOMAIN EXPANSION COMPLETE 🌌[/bold magenta]\n[green]{1} - {2}[/green]\n[cyan]Type: {3}[/cyan]",
+"es": "[bold magenta]🌌 EXPANSIÓN DE DOMINIO COMPLETADA 🌌[/bold magenta]\n[green]{1} - {2}[/green]\n[cyan]Tipo: {3}[/cyan]"
+},
+{
+"id": "b44869844bb3",
+"kind": "console",
+"en": "[bold magenta]🪞⚡ MIRROR SHARD BLACK FLASH! {1} damage (40% boss HP), reset to 5 spins[/bold magenta]",
+"es": "[bold magenta]🪞⚡ ¡BLACK FLASH DE MIRROR SHARD! {1} de daño (40% de HP del jefe), reiniciado a 5 giros[/bold magenta]"
+},
+{
+"id": "e49c22d417e2",
+"kind": "console",
+"en": "[bold purple]👻 FAKE QTE TRIGGERED[/bold purple]\n[yellow]Target (hidden): {1}[/yellow]\n[red]ANY RESPONSE = INSTANT FAIL![/red]",
+"es": "[bold purple]👻 QTE FALSO ACTIVADO[/bold purple]\n[yellow]Objetivo (oculto): {1}[/yellow]\n[red]¡CUALQUIER RESPUESTA = FALLO INSTANTÁNEO![/red]"
+},
+{
+"id": "248a6a097339",
+"kind": "console",
+"en": "[bold red]⚔️ DOMAIN CLASH TRIGGERED! ⚔️[/bold red]\n[yellow]Challenger 1: {1} - {2}[/yellow]\n[yellow]Challenger 2: {3} - {4}[/yellow]",
+"es": "[bold red]⚔️ ¡CHOQUE DE DOMINIOS ACTIVADO! ⚔️[/bold red]\n[yellow]Retador 1: {1} - {2}[/yellow]\n[yellow]Retador 2: {3} - {4}[/yellow]"
+},
+{
+"id": "de73c56ea32b",
+"kind": "console",
+"en": "[bold red]⚡ REVENGE MODE ⚡[/bold red]\n[yellow]{1} activated REVENGE![/yellow]",
+"es": "[bold red]⚡ MODO VENGANZA ⚡[/bold red]\n[yellow]¡{1} activó la VENGANZA![/yellow]"
+},
+{
+"id": "03fffcecc801",
+"kind": "console",
+"en": "[bold red]👹 BOSS EVADED {1}'s counter![/bold red]",
+"es": "[bold red]👹 ¡EL JEFE ESQUIVÓ el contraataque de {1}![/bold red]"
+},
+{
+"id": "f2a5889b331c",
+"kind": "console",
+"en": "[bold red]👹💥 BOSS COUNTERS for {1} damage![/bold red]",
+"es": "[bold red]👹💥 ¡EL JEFE CONTRAATACA con {1} de daño![/bold red]"
+},
+{
+"id": "3c90680cbc29",
+"kind": "console",
+"en": "[bold red]💀 {1} has DIED[/bold red]",
+"es": "[bold red]💀 {1} ha MUERTO[/bold red]"
+},
+{
+"id": "cbe07ad507e6",
+"kind": "console",
+"en": "[bold red]🔥 COMBO QTE TRIGGERED[/bold red]\n[yellow]Target: {1}[/yellow]\n[cyan]Sequence: {2}[/cyan]",
+"es": "[bold red]🔥 COMBO QTE ACTIVADO[/bold red]\n[yellow]Objetivo: {1}[/yellow]\n[cyan]Secuencia: {2}[/cyan]"
+},
+{
+"id": "81a1be19333d",
+"kind": "console",
+"en": "[bold yellow]📦 BATCH MODE STARTED[/bold yellow]\n[cyan]Press F9-F12 to queue QTEs, then Alt+F9 again to send[/cyan]",
+"es": "[bold yellow]📦 MODO POR LOTES INICIADO[/bold yellow]\n[cyan]Pulsa F9-F12 para encolar QTEs, luego Alt+F9 de nuevo para enviar[/cyan]"
+},
+{
+"id": "e1da51a6a421",
+"kind": "console",
+"en": "[bold]QTE BOT ONLINE[/bold]",
+"es": "[bold]QTE BOT EN LÍNEA[/bold]"
+},
+{
+"id": "b90a63c59564",
+"kind": "console",
+"en": "[cyan bold]✓ Bot logged in as ",
+"es": "[cyan bold]✓ Bot conectado como "
+},
+{
+"id": "f3ee691d52df",
+"kind": "console",
+"en": "[cyan]  Channel ID: {1}[/cyan]",
+"es": "[cyan]  ID del canal: {1}[/cyan]"
+},
+{
+"id": "7a9fefc8f9d8",
+"kind": "console",
+"en": "[cyan]  HP Thread: {1} ({2})[/cyan]",
+"es": "[cyan]  Hilo de HP: {1} ({2})[/cyan]"
+},
+{
+"id": "3325666bbc53",
+"kind": "console",
+"en": "[cyan]Boss HP bar sent to thread[/cyan]",
+"es": "[cyan]Barra de HP del jefe enviada al hilo[/cyan]"
+},
+{
+"id": "14da76afdc9e",
+"kind": "console",
+"en": "[cyan]No old commands to remove[/cyan]",
+"es": "[cyan]No hay comandos antiguos que eliminar[/cyan]"
+},
+{
+"id": "a379fc97298d",
+"kind": "console",
+"en": "[cyan]↻ Reconnected to Discord[/cyan]",
+"es": "[cyan]↻ Reconectado a Discord[/cyan]"
+},
+{
+"id": "5f2abe99e1e1",
+"kind": "console",
+"en": "[cyan]⚔ PARRY SUCCESS - {1} in {2}s ({3})[/cyan]",
+"es": "[cyan]⚔ PARRY EXITOSO - {1} en {2}s ({3})[/cyan]"
+},
+{
+"id": "d1ef77f756f2",
+"kind": "console",
+"en": "[cyan]⚔ {1} - PARRY - {2}s[/cyan]",
+"es": "[cyan]⚔ {1} - PARRY - {2}s[/cyan]"
+},
+{
+"id": "ef7d1a65a9df",
+"kind": "console",
+"en": "[cyan]⚖️ AI Judge raw response: {1}[/cyan]",
+"es": "[cyan]⚖️ Respuesta sin procesar del Juez IA: {1}[/cyan]"
+},
+{
+"id": "ea8b202efacd",
+"kind": "console",
+"en": "[cyan]⚡ User {1} gained {2}% charge from counter[/cyan]",
+"es": "[cyan]⚡ El usuario {1} ganó {2}% de carga por contraataque[/cyan]"
+},
+{
+"id": "e3989a0f58a3",
+"kind": "console",
+"en": "[cyan]⚡ User {1} gained {2}% charge from dealing {3} damage[/cyan]",
+"es": "[cyan]⚡ El usuario {1} ganó {2}% de carga por infligir {3} de daño[/cyan]"
+},
+{
+"id": "95104b59a15f",
+"kind": "console",
+"en": "[cyan]⚡ User {1} gained {2}% charge from taking {3} damage[/cyan]",
+"es": "[cyan]⚡ El usuario {1} ganó {2}% de carga por recibir {3} de daño[/cyan]"
+},
+{
+"id": "b3a846d1304c",
+"kind": "console",
+"en": "[cyan]✓ Character registered: {1} -> {2}[/cyan]",
+"es": "[cyan]✓ Personaje registrado: {1} -> {2}[/cyan]"
+},
+{
+"id": "8f4124794590",
+"kind": "console",
+"en": "[cyan]✓ Loaded custom QTE settings[/cyan]",
+"es": "[cyan]✓ Configuración personalizada de QTE cargada[/cyan]"
+},
+{
+"id": "6bd76d5581b6",
+"kind": "console",
+"en": "[cyan]✓ Loaded saved QTE timings[/cyan]",
+"es": "[cyan]✓ Tiempos de QTE guardados cargados[/cyan]"
+},
+{
+"id": "e4d060c895b6",
+"kind": "console",
+"en": "[cyan]✓ Loaded saved channel configuration[/cyan]",
+"es": "[cyan]✓ Configuración de canal guardada cargada[/cyan]"
+},
+{
+"id": "d90b779e1988",
+"kind": "console",
+"en": "[cyan]✓ Loaded saved damage ranges[/cyan]",
+"es": "[cyan]✓ Rangos de daño guardados cargados[/cyan]"
+},
+{
+"id": "7b4313455ef6",
+"kind": "console",
+"en": "[cyan]✓ Loaded skill tree: {1}[/cyan]",
+"es": "[cyan]✓ Árbol de habilidades cargado: {1}[/cyan]"
+},
+{
+"id": "ea3e0e20dc1c",
+"kind": "console",
+"en": "[cyan]✓ QTE player cache updated: {1} active players[/cyan]",
+"es": "[cyan]✓ Caché de jugadores QTE actualizada: {1} jugadores activos[/cyan]"
+},
+{
+"id": "0a31cb62bea5",
+"kind": "console",
+"en": "[cyan]🌙 REFLECT! {1} damage x{2} = {3} to boss![/cyan]",
+"es": "[cyan]🌙 ¡REFLEJO! {1} de daño x{2} = {3} al jefe![/cyan]"
+},
+{
+"id": "979334556b3b",
+"kind": "console",
+"en": "[cyan]📊 GROUP QTE FINISHED (ID: {1})[/cyan]\n[green]Successful: {2}/{3}[/green]",
+"es": "[cyan]📊 QTE GRUPAL FINALIZADO (ID: {1})[/cyan]\n[green]Exitosos: {2}/{3}[/green]"
+},
+{
+"id": "d677ee06a025",
+"kind": "console",
+"en": "[cyan]📝 Logging to: {1}[/cyan]",
+"es": "[cyan]📝 Registrando en: {1}[/cyan]"
+},
+{
+"id": "285b1b242d6c",
+"kind": "console",
+"en": "[cyan]🔄 FAITH system reset for new event[/cyan]",
+"es": "[cyan]🔄 Sistema FAITH reiniciado para el nuevo evento[/cyan]"
+},
+{
+"id": "71a88235bb2b",
+"kind": "console",
+"en": "[cyan]🔄 Role change detected for {1} - refreshing cache[/cyan]",
+"es": "[cyan]🔄 Cambio de rol detectado para {1} - actualizando caché[/cyan]"
+},
+{
+"id": "4f0a3a566daa",
+"kind": "console",
+"en": "[cyan]🔄 Special objects reloaded: {1} loaded, {2} errors[/cyan]",
+"es": "[cyan]🔄 Objetos especiales recargados: {1} cargados, {2} errores[/cyan]"
+},
+{
+"id": "b91b9f92018f",
+"kind": "console",
+"en": "[cyan]🛡️ Damage reduction {1}%: {2} → {3} (-{4})[/cyan]",
+"es": "[cyan]🛡️ Reducción de daño {1}%: {2} → {3} (-{4})[/cyan]"
+},
+{
+"id": "84c23210902d",
+"kind": "console",
+"en": "[cyan]🤖 AI auto-response in #{1}[/cyan]",
+"es": "[cyan]🤖 Respuesta automática de IA en #{1}[/cyan]"
+},
+{
+"id": "18ca9a8111a8",
+"kind": "console",
+"en": "[cyan]🤖 AI config updated by {1}: {2}[/cyan]",
+"es": "[cyan]🤖 Configuración de IA actualizada por {1}: {2}[/cyan]"
+},
+{
+"id": "d094989b8a0d",
+"kind": "console",
+"en": "[cyan]🤖 AI prompt from {1}: {2}...[/cyan]",
+"es": "[cyan]🤖 Prompt de IA de {1}: {2}...[/cyan]"
+},
+{
+"id": "86efe7e98315",
+"kind": "console",
+"en": "[cyan]🤖 Initializing Ollama AI...[/cyan]",
+"es": "[cyan]🤖 Inicializando Ollama AI...[/cyan]"
+},
+{
+"id": "5654268616bb",
+"kind": "console",
+"en": "[dark_violet]🌌 Boss Domain '{1}' triggered by {2}[/dark_violet]",
+"es": "[dark_violet]🌌 Dominio del jefe '{1}' activado por {2}[/dark_violet]"
+},
+{
+"id": "dcf4ab31bc85",
+"kind": "console",
+"en": "[dark_violet]🌌 Boss domain expired[/dark_violet]",
+"es": "[dark_violet]🌌 El dominio del jefe expiró[/dark_violet]"
+},
+{
+"id": "89765849840d",
+"kind": "console",
+"en": "[dim]BF roll failed - Timing: {1}s (good!), Chance: {2} (bad luck)[/dim]",
+"es": "[dim]Tirada de BF fallida - Tiempo: {1}s (¡bien!), Probabilidad: {2} (mala suerte)[/dim]"
+},
+{
+"id": "5e31f38aa163",
+"kind": "console",
+"en": "[dim]Counter GIF lookup for user_id={1}: found={2}[/dim]",
+"es": "[dim]Búsqueda de GIF de contraataque para user_id={1}: encontrado={2}[/dim]"
+},
+{
+"id": "e1cce22e406a",
+"kind": "console",
+"en": "[dim]Resolved Tupper user: {1} -> user_id {2}[/dim]",
+"es": "[dim]Usuario Tupper resuelto: {1} -> user_id {2}[/dim]"
+},
+{
+"id": "4777a08e52bf",
+"kind": "console",
+"en": "[dim]Using random GIF from list ({1} total)[/dim]",
+"es": "[dim]Usando un GIF aleatorio de la lista ({1} en total)[/dim]"
+},
+{
+"id": "e53dc51165f9",
+"kind": "console",
+"en": "[dim]Using single GIF URL[/dim]",
+"es": "[dim]Usando una única URL de GIF[/dim]"
+},
+{
+"id": "9b17bd6ae9ab",
+"kind": "console",
+"en": "[dim]🤖 AI disabled in settings[/dim]",
+"es": "[dim]🤖 IA desactivada en la configuración[/dim]"
+},
+{
+"id": "31ae4a2978d6",
+"kind": "console",
+"en": "[gold1]⚡ User {1} {2} FULLY CHARGED![/gold1]",
+"es": "[gold1]⚡ ¡El usuario {1} {2} está COMPLETAMENTE CARGADO![/gold1]"
+},
+{
+"id": "15adcd188dad",
+"kind": "console",
+"en": "[gold1]⛩️ {1} achieved FLAWLESS VICTORY![/gold1]",
+"es": "[gold1]⛩️ ¡{1} logró una VICTORIA PERFECTA![/gold1]"
+},
+{
+"id": "c5081788d169",
+"kind": "console",
+"en": "[gold1]✓ Loaded {1} achievements[/gold1]",
+"es": "[gold1]✓ {1} logros cargados[/gold1]"
+},
+{
+"id": "a1944dab992c",
+"kind": "console",
+"en": "[gold1]✓ Loaded {1} boss defeat GIFs[/gold1]",
+"es": "[gold1]✓ {1} GIFs de derrota del jefe cargados[/gold1]"
+},
+{
+"id": "5fac32df9016",
+"kind": "console",
+"en": "[gold1]⭐ GM gave {1} SP to {2}[/gold1]",
+"es": "[gold1]⭐ El GM dio {1} SP a {2}[/gold1]"
+},
+{
+"id": "e1a447472968",
+"kind": "console",
+"en": "[gold1]🎉 Boss defeat GIF added (total: {1})[/gold1]",
+"es": "[gold1]🎉 GIF de derrota del jefe añadido (total: {1})[/gold1]"
+},
+{
+"id": "649b5f903874",
+"kind": "console",
+"en": "[gold1]🏆 ACHIEVEMENT UNLOCKED[/gold1]\n[yellow]User {1}: {2}[/yellow]\n[cyan]Rewards: {3}[/cyan]",
+"es": "[gold1]🏆 LOGRO DESBLOQUEADO[/gold1]\n[yellow]Usuario {1}: {2}[/yellow]\n[cyan]Recompensas: {3}[/cyan]"
+},
+{
+"id": "8af99fd0ed5b",
+"kind": "console",
+"en": "[gold1]🏆 GM granted {1} to {2}[/gold1]",
+"es": "[gold1]🏆 El GM otorgó {1} a {2}[/gold1]"
+},
+{
+"id": "f98605800afd",
+"kind": "console",
+"en": "[gold1]📬 Achievement DM sent to {1}[/gold1]",
+"es": "[gold1]📬 MD de logro enviado a {1}[/gold1]"
+},
+{
+"id": "4d34a7ef7c79",
+"kind": "console",
+"en": "[gold1]🗡️ WEAPON BONUS: Damage multiplied by {1}x![/gold1]",
+"es": "[gold1]🗡️ BONO DE ARMA: ¡Daño multiplicado por {1}x![/gold1]"
+},
+{
+"id": "4705deaaecd2",
+"kind": "console",
+"en": "[gold1]🗡️ Weapon {1} granted to {2}[/gold1]",
+"es": "[gold1]🗡️ Arma {1} otorgada a {2}[/gold1]"
+},
+{
+"id": "38244cf2d1b3",
+"kind": "console",
+"en": "[gold]✨ FAITH ACTIVATED - {1} resurrected![/gold]",
+"es": "[gold]✨ FE ACTIVADA - ¡{1} resucitó![/gold]"
+},
+{
+"id": "cbd653c6e163",
+"kind": "console",
+"en": "[gold]👹 Boss {1} DEFEATED![/gold]",
+"es": "[gold]👹 ¡Jefe {1} DERROTADO![/gold]"
+},
+{
+"id": "59ab6769312a",
+"kind": "console",
+"en": "[green]+ Added EASY QTE to batch ({1} total)[/green]",
+"es": "[green]+ QTE FÁCIL añadido al lote ({1} en total)[/green]"
+},
+{
+"id": "3965a21354b0",
+"kind": "console",
+"en": "[green]Keeping existing HP and charges[/green]",
+"es": "[green]Se mantienen los HP y las cargas actuales[/green]"
+},
+{
+"id": "6473dce4b14d",
+"kind": "console",
+"en": "[green]▶️ Resumed {1} cooldown for user {2}: {3}s[/green]",
+"es": "[green]▶️ Se reanudó la recarga de {1} del usuario {2}: {3}s[/green]"
+},
+{
+"id": "53fbc93dee1c",
+"kind": "console",
+"en": "[green]♾️ Evade streak: {1}[/green]",
+"es": "[green]♾️ Racha de esquivas: {1}[/green]"
+},
+{
+"id": "9e374d09d6c5",
+"kind": "console",
+"en": "[green]⚔️ FIGHT STARTED - Ultimate cooldowns now ticking![/green]",
+"es": "[green]⚔️ COMBATE INICIADO - ¡Las recargas de las definitivas ya están corriendo![/green]"
+},
+{
+"id": "8ab43b8ca654",
+"kind": "console",
+"en": "[green]⚖️ AI scored {1} argument: {2}/10[/green]",
+"es": "[green]⚖️ La IA puntuó el argumento de {1}: {2}/10[/green]"
+},
+{
+"id": "2c326b7682cc",
+"kind": "console",
+"en": "[green]⚙️ {1} updated Black Flash settings[/green]",
+"es": "[green]⚙️ {1} actualizó la configuración de Black Flash[/green]"
+},
+{
+"id": "c5162e5f6eb7",
+"kind": "console",
+"en": "[green]⚙️ {1} updated revenge mode settings[/green]",
+"es": "[green]⚙️ {1} actualizó la configuración del modo venganza[/green]"
+},
+{
+"id": "39db228be159",
+"kind": "console",
+"en": "[green]⚙️ {1} updated ultimate settings[/green]",
+"es": "[green]⚙️ {1} actualizó la configuración de definitivas[/green]"
+},
+{
+"id": "174aa4c19135",
+"kind": "console",
+"en": "[green]⚙️ {1} updated {2} QTE timing[/green]",
+"es": "[green]⚙️ {1} actualizó el tiempo de QTE de {2}[/green]"
+},
+{
+"id": "4f242f02eacb",
+"kind": "console",
+"en": "[green]⚙️ {1} updated {2} damage range[/green]",
+"es": "[green]⚙️ {1} actualizó el rango de daño de {2}[/green]"
+},
+{
+"id": "af62b671e0e5",
+"kind": "console",
+"en": "[green]✅ Model {1} loaded[/green]",
+"es": "[green]✅ Modelo {1} cargado[/green]"
+},
+{
+"id": "99c1692a6843",
+"kind": "console",
+"en": "[green]✓ AI ready with model {1}[/green]",
+"es": "[green]✓ IA lista con el modelo {1}[/green]"
+},
+{
+"id": "aa601052be71",
+"kind": "console",
+"en": "[green]✓ AI responded ({1} chars)[/green]",
+"es": "[green]✓ La IA respondió ({1} caracteres)[/green]"
+},
+{
+"id": "609c65d406d7",
+"kind": "console",
+"en": "[green]✓ Asset backed up locally: {1}[/green]",
+"es": "[green]✓ Recurso respaldado localmente: {1}[/green]"
+},
+{
+"id": "5ef9a4f3e691",
+"kind": "console",
+"en": "[green]✓ Auto-removed {1} old commands[/green]",
+"es": "[green]✓ {1} comandos antiguos eliminados automáticamente[/green]"
+},
+{
+"id": "81b84778ed00",
+"kind": "console",
+"en": "[green]✓ Channel set to #{1} by {2}[/green]",
+"es": "[green]✓ Canal establecido en #{1} por {2}[/green]"
+},
+{
+"id": "de9ddb2b5c14",
+"kind": "console",
+"en": "[green]✓ Commands manually synced by {1}[/green]",
+"es": "[green]✓ Comandos sincronizados manualmente por {1}[/green]"
+},
+{
+"id": "2c834f7838a4",
+"kind": "console",
+"en": "[green]✓ Configuration loaded[/green]",
+"es": "[green]✓ Configuración cargada[/green]"
+},
+{
+"id": "c0a3e48542be",
+"kind": "console",
+"en": "[green]✓ Created assets directory[/green]",
+"es": "[green]✓ Directorio de recursos creado[/green]"
+},
+{
+"id": "8eed76d15356",
+"kind": "console",
+"en": "[green]✓ Downloaded asset: {1}[/green]",
+"es": "[green]✓ Recurso descargado: {1}[/green]"
+},
+{
+"id": "289bb8549a5a",
+"kind": "console",
+"en": "[green]✓ EVADE SUCCESS - {1} in {2}s[/green]",
+"es": "[green]✓ ESQUIVA EXITOSA - {1} en {2}s[/green]"
+},
+{
+"id": "360d54764c49",
+"kind": "console",
+"en": "[green]✓ Force synced commands to {1}[/green]",
+"es": "[green]✓ Comandos sincronizados a la fuerza en {1}[/green]"
+},
+{
+"id": "ff096fe9a02c",
+"kind": "console",
+"en": "[green]✓ HP reset for {1} players by {2}[/green]",
+"es": "[green]✓ HP reiniciado para {1} jugadores por {2}[/green]"
+},
+{
+"id": "97863c632796",
+"kind": "console",
+"en": "[green]✓ Image persisted: {1}[/green]",
+"es": "[green]✓ Imagen guardada: {1}[/green]"
+},
+{
+"id": "d19fa6d73048",
+"kind": "console",
+"en": "[green]✓ Live configuration loaded from file[/green]",
+"es": "[green]✓ Configuración en vivo cargada desde el archivo[/green]"
+},
+{
+"id": "27940b3d7349",
+"kind": "console",
+"en": "[green]✓ Loaded keybinds from config.json[/green]",
+"es": "[green]✓ Teclas cargadas desde config.json[/green]"
+},
+{
+"id": "d4c51a67470a",
+"kind": "console",
+"en": "[green]✓ Ollama connected! {1} models available[/green]",
+"es": "[green]✓ ¡Ollama conectado! {1} modelos disponibles[/green]"
+},
+{
+"id": "cc72501144d8",
+"kind": "console",
+"en": "[green]✓ Periodic save task started (every 30s)[/green]",
+"es": "[green]✓ Tarea de guardado periódico iniciada (cada 30s)[/green]"
+},
+{
+"id": "dffe02ecf79d",
+"kind": "console",
+"en": "[green]✓ Removed old commands: {1}[/green]",
+"es": "[green]✓ Comandos antiguos eliminados: {1}[/green]"
+},
+{
+"id": "91dca6427b1d",
+"kind": "console",
+"en": "[green]✓ Special object approved: {1}[/green]",
+"es": "[green]✓ Objeto especial aprobado: {1}[/green]"
+},
+{
+"id": "f1bbba8ce82a",
+"kind": "console",
+"en": "[green]✓ Total commands available: {1}[/green]",
+"es": "[green]✓ Total de comandos disponibles: {1}[/green]"
+},
+{
+"id": "26b040aa43de",
+"kind": "console",
+"en": "[green]✓ {1} - EVADE - {2}s[/green]",
+"es": "[green]✓ {1} - ESQUIVAR - {2}s[/green]"
+},
+{
+"id": "97690150cc82",
+"kind": "console",
+"en": "[green]✓ {1} added to QTE player pool[/green]",
+"es": "[green]✓ {1} añadido al grupo de jugadores de QTE[/green]"
+},
+{
+"id": "64f46749cac9",
+"kind": "console",
+"en": "[green]✓ {1} learned {2} (rank {3})[/green]",
+"es": "[green]✓ {1} aprendió {2} (rango {3})[/green]"
+},
+{
+"id": "64c4dd65f1f9",
+"kind": "console",
+"en": "[green]✓ {1} marked as ACTIVE[/green]",
+"es": "[green]✓ {1} marcado como ACTIVO[/green]"
+},
+{
+"id": "c49a4b47f6ea",
+"kind": "console",
+"en": "[green]🎯 Direction QTE correct - {1}[/green]",
+"es": "[green]🎯 QTE de dirección correcto - {1}[/green]"
+},
+{
+"id": "ead3dd42e647",
+"kind": "console",
+"en": "[green]🏥 Checkpoint '{1}': Healed {2} players[/green]",
+"es": "[green]🏥 Checkpoint '{1}': {2} jugadores curados[/green]"
+},
+{
+"id": "c264b932a361",
+"kind": "console",
+"en": "[green]👁️ AUTO-EVADE (Soul Manipulator) - {1} auto-evades {2} QTE[/green]",
+"es": "[green]👁️ AUTO-ESQUIVAR (Soul Manipulator) - {1} esquiva automáticamente el QTE de {2}[/green]"
+},
+{
+"id": "1ba8595618c3",
+"kind": "console",
+"en": "[green]👻 Fake QTE passed - no responses[/green]",
+"es": "[green]👻 QTE falso superado - sin respuestas[/green]"
+},
+{
+"id": "4d52cccd2c8a",
+"kind": "console",
+"en": "[green]💚 Initialized HP for user {1}[/green]",
+"es": "[green]💚 HP inicializado para el usuario {1}[/green]"
+},
+{
+"id": "3ffcd34fdf07",
+"kind": "console",
+"en": "[green]💚 User {1} healed {2} HP! HP: {3}/{4}[/green]",
+"es": "[green]💚 ¡El usuario {1} se curó {2} HP! HP: {3}/{4}[/green]"
+},
+{
+"id": "468a1bb275c4",
+"kind": "console",
+"en": "[green]💾 Channel configuration saved[/green]",
+"es": "[green]💾 Configuración del canal guardada[/green]"
+},
+{
+"id": "7855a572c08f",
+"kind": "console",
+"en": "[green]💾 Data saved to disk[/green]",
+"es": "[green]💾 Datos guardados en disco[/green]"
+},
+{
+"id": "314587a0d062",
+"kind": "console",
+"en": "[green]💾 QTE settings saved[/green]",
+"es": "[green]💾 Ajustes de QTE guardados[/green]"
+},
+{
+"id": "10d24b1c5549",
+"kind": "console",
+"en": "[green]💾 {1} saved live config[/green]",
+"es": "[green]💾 {1} guardó la configuración en vivo[/green]"
+},
+{
+"id": "6b819de21b5a",
+"kind": "console",
+"en": "[green]🔥 COMBO QTE COMPLETE - {1}[/green]",
+"es": "[green]🔥 COMBO QTE COMPLETADO - {1}[/green]"
+},
+{
+"id": "6f0e41a49669",
+"kind": "console",
+"en": "[green]🤖 AI model reloaded: {1} by {2}[/green]",
+"es": "[green]🤖 Modelo de IA recargado: {1} por {2}[/green]"
+},
+{
+"id": "82082c79916d",
+"kind": "console",
+"en": "[green]🤖 AI model switched: {1} → {2} by {3}[/green]",
+"es": "[green]🤖 Modelo de IA cambiado: {1} → {2} por {3}[/green]"
+},
+{
+"id": "c150154422be",
+"kind": "console",
+"en": "[green]🪞 AUTO-EVADE (Group) - {1} auto-evades {2} QTE[/green]",
+"es": "[green]🪞 AUTOESQUIVA (Grupo) - {1} esquiva automáticamente el QTE {2}[/green]"
+},
+{
+"id": "1e97bdb6d8fc",
+"kind": "console",
+"en": "[green]🪞 AUTO-EVADE (Mirror Shard) - {1} auto-evades {2} QTE[/green]",
+"es": "[green]🪞 AUTO-ESQUIVA (Mirror Shard) - {1} esquiva automáticamente el QTE de {2}[/green]"
+},
+{
+"id": "1be0b939a409",
+"kind": "console",
+"en": "[green]🪞 All players auto-evaded group {1} QTE![/green]",
+"es": "[green]🪞 ¡Todos los jugadores esquivaron automáticamente el QTE de grupo {1}![/green]"
+},
+{
+"id": "bea6a4495b28",
+"kind": "console",
+"en": "[green]🪞 Mirror Shard heal: {1} → {2} (+{3})[/green]",
+"es": "[green]🪞 Curación de Mirror Shard: {1} → {2} (+{3})[/green]"
+},
+{
+"id": "a5bfeaccece3",
+"kind": "console",
+"en": "[magenta]  Role ID: {1}[/magenta]",
+"es": "[magenta]  ID del rol: {1}[/magenta]"
+},
+{
+"id": "152548ad19f5",
+"kind": "console",
+"en": "[magenta]+ Added IMPOSSIBLE QTE to batch ({1} total)[/magenta]",
+"es": "[magenta]+ QTE IMPOSIBLE añadido al lote ({1} en total)[/magenta]"
+},
+{
+"id": "f0f2ffb98744",
+"kind": "console",
+"en": "[magenta]{1} Status effect {2} applied to {3} for {4}s[/magenta]",
+"es": "[magenta]{1} Efecto de estado {2} aplicado a {3} durante {4}s[/magenta]"
+},
+{
+"id": "e5c95bbb5091",
+"kind": "console",
+"en": "[magenta]♾️ INFINITY AMPLIFIER: Counter damage tripled! ({1})[/magenta]",
+"es": "[magenta]♾️ INFINITY AMPLIFIER: ¡Daño de contraataque triplicado! ({1})[/magenta]"
+},
+{
+"id": "487d7ac74d75",
+"kind": "console",
+"en": "[magenta]♾️ Infinity domain amplifier expired for {1}[/magenta]",
+"es": "[magenta]♾️ El amplificador del dominio Infinity expiró para {1}[/magenta]"
+},
+{
+"id": "fe8aac5e3619",
+"kind": "console",
+"en": "[magenta]🌌 Active domain tracking cleared[/magenta]",
+"es": "[magenta]🌌 Seguimiento de dominios activos borrado[/magenta]"
+},
+{
+"id": "78c64280aa3c",
+"kind": "console",
+"en": "[magenta]🌌 All domains cancelled due to boss death[/magenta]",
+"es": "[magenta]🌌 Todos los dominios cancelados por la muerte del jefe[/magenta]"
+},
+{
+"id": "4a464fdb4035",
+"kind": "console",
+"en": "[magenta]🌌 Domain clash ended - {1} wins![/magenta]",
+"es": "[magenta]🌌 El choque de dominios terminó - ¡{1} gana![/magenta]"
+},
+{
+"id": "6ea468e8f51b",
+"kind": "console",
+"en": "[magenta]👁️ TRANSFIGURATION: Damage multiplied by {1}x![/magenta]",
+"es": "[magenta]👁️ TRANSFIGURATION: ¡Daño multiplicado por {1}x![/magenta]"
+},
+{
+"id": "654589be509c",
+"kind": "console",
+"en": "[magenta]💕 Cursed Partners domain ended for {1}[/magenta]",
+"es": "[magenta]💕 El dominio Cursed Partners terminó para {1}[/magenta]"
+},
+{
+"id": "8737ae33e76a",
+"kind": "console",
+"en": "[magenta]🔮 ADAPT - {1}: {2} {3} = {4} spins[/magenta]",
+"es": "[magenta]🔮 ADAPTACIÓN - {1}: {2} {3} = {4} giros[/magenta]"
+},
+{
+"id": "fa621e533660",
+"kind": "console",
+"en": "[magenta]🔮 ADAPT SUCCESS (during QTE) - {1}[/magenta]",
+"es": "[magenta]🔮 ADAPTACIÓN EXITOSA (durante el QTE) - {1}[/magenta]"
+},
+{
+"id": "2d61f251449f",
+"kind": "console",
+"en": "[magenta]🔮 ADAPT SUCCESS (during counter) - {1}[/magenta]",
+"es": "[magenta]🔮 ADAPTACIÓN EXITOSA (durante contraataque) - {1}[/magenta]"
+},
+{
+"id": "85d6ff85a1d5",
+"kind": "console",
+"en": "[magenta]🔮 ADAPT SUCCESS - {1}[/magenta]",
+"es": "[magenta]🔮 ADAPTACIÓN EXITOSA - {1}[/magenta]"
+},
+{
+"id": "c042bb1126f8",
+"kind": "console",
+"en": "[magenta]🛡 SAVE SUCCESS - {1} saved {2}[/magenta]",
+"es": "[magenta]🛡 SALVACIÓN EXITOSA - {1} salvó a {2}[/magenta]"
+},
+{
+"id": "c5735ab60fb9",
+"kind": "console",
+"en": "[magenta]🪞 MIRROR INVOKE - {1} reflected QTE at {2} for {3} damage[/magenta]",
+"es": "[magenta]🪞 MIRROR INVOKE - {1} reflejó un QTE en {2} por {3} de daño[/magenta]"
+},
+{
+"id": "733086651f1c",
+"kind": "console",
+"en": "[orange1]⚡ Counter image added for {1} (total: {2})[/orange1]",
+"es": "[orange1]⚡ Imagen de contraataque añadida para {1} (total: {2})[/orange1]"
+},
+{
+"id": "fa1ba2cae83a",
+"kind": "console",
+"en": "[purple]⚡ Initialized power charges for user {1}[/purple]",
+"es": "[purple]⚡ Cargas de poder inicializadas para el usuario {1}[/purple]"
+},
+{
+"id": "0fde1117859a",
+"kind": "console",
+"en": "[purple]⚡ Power registered: {1} for {2}[/purple]",
+"es": "[purple]⚡ Poder registrado: {1} para {2}[/purple]"
+},
+{
+"id": "21a07eec9923",
+"kind": "console",
+"en": "[purple]⚡ Trigger phrase detected: \"{1}\" -> {2}[/purple]",
+"es": "[purple]⚡ Frase de activación detectada: \"{1}\" -> {2}[/purple]"
+},
+{
+"id": "6b7ae3a3548d",
+"kind": "console",
+"en": "[purple]⚡ {1} used {2}[/purple]",
+"es": "[purple]⚡ {1} usó {2}[/purple]"
+},
+{
+"id": "dcc32031ba1f",
+"kind": "console",
+"en": "[purple]✓ Loaded charges for {1} players[/purple]",
+"es": "[purple]✓ Cargas cargadas para {1} jugadores[/purple]"
+},
+{
+"id": "1e37c6cee0c8",
+"kind": "console",
+"en": "[purple]✓ Loaded counter GIFs for {1} players[/purple]",
+"es": "[purple]✓ GIFs de contraataque cargados para {1} jugadores[/purple]"
+},
+{
+"id": "aa849d102238",
+"kind": "console",
+"en": "[purple]✓ Loaded powers for {1} characters[/purple]",
+"es": "[purple]✓ Poderes cargados para {1} personajes[/purple]"
+},
+{
+"id": "e8fc5bb4b4c2",
+"kind": "console",
+"en": "[purple]✓ Loaded {1} special objects[/purple]",
+"es": "[purple]✓ {1} objetos especiales cargados[/purple]"
+},
+{
+"id": "375b80e755c4",
+"kind": "console",
+"en": "[purple]🎰 JACKPOT - Auto-healing {1} (infinite heal active)[/purple]",
+"es": "[purple]🎰 JACKPOT - Autocurando a {1} (curación infinita activa)[/purple]"
+},
+{
+"id": "bc03752137a8",
+"kind": "console",
+"en": "[purple]🎰 JACKPOT ACTIVE - Cooldown reduced to {1}s![/purple]",
+"es": "[purple]🎰 JACKPOT ACTIVO - ¡Recarga reducida a {1}s![/purple]"
+},
+{
+"id": "757c2dbf1c8c",
+"kind": "console",
+"en": "[purple]🎰 Jackpot cancelled for {1} due to boss death[/purple]",
+"es": "[purple]🎰 Jackpot cancelado para {1} por la muerte del jefe[/purple]"
+},
+{
+"id": "974eede891d4",
+"kind": "console",
+"en": "[red bold]🚀 Starting Advanced QTE Bot...[/red bold]",
+"es": "[red bold]🚀 Iniciando Advanced QTE Bot...[/red bold]"
+},
+{
+"id": "11a891d709e0",
+"kind": "console",
+"en": "[red]  ✗ {1}[/red]",
+"es": "[red]  ✗ {1}[/red]"
+},
+{
+"id": "3c290a2e7fd2",
+"kind": "console",
+"en": "[red]+ Added HARD QTE to batch ({1} total)[/red]",
+"es": "[red]+ QTE DIFÍCIL añadido al lote ({1} en total)[/red]"
+},
+{
+"id": "388b3b974847",
+"kind": "console",
+"en": "[red]Achievement {1} not found in config[/red]",
+"es": "[red]Logro {1} no encontrado en la configuración[/red]"
+},
+{
+"id": "3a6209789dfa",
+"kind": "console",
+"en": "[red]Domain was interrupted during cast![/red]",
+"es": "[red]¡La expansión de dominio fue interrumpida durante el lanzamiento![/red]"
+},
+{
+"id": "4cfd1ea94610",
+"kind": "console",
+"en": "[red]Error announcing domain interrupt: {1}[/red]",
+"es": "[red]Error al anunciar la interrupción del dominio: {1}[/red]"
+},
+{
+"id": "9ec6b3cc8245",
+"kind": "console",
+"en": "[red]{1} {2} tick: Boss takes {3} damage[/red]",
+"es": "[red]{1} {2} tick: el jefe recibe {3} de daño[/red]"
+},
+{
+"id": "118878bc35fc",
+"kind": "console",
+"en": "[red]{1} {2} tick: {3} takes {4} damage[/red]",
+"es": "[red]{1} {2} tick: {3} recibe {4} de daño[/red]"
+},
+{
+"id": "7a1469164960",
+"kind": "console",
+"en": "[red]{1}[/red]",
+"es": "[red]{1}[/red]"
+},
+{
+"id": "75ab1f8ea47b",
+"kind": "console",
+"en": "[red]⛩️ SHRINE - Caster hit! Duration reduced: {1}s → {2}s[/red]",
+"es": "[red]⛩️ SHRINE - ¡Lanzador golpeado! Duración reducida: {1}s → {2}s[/red]"
+},
+{
+"id": "ec4a01e6e930",
+"kind": "console",
+"en": "[red]✗ ADAPT FAILED (mistimed) - {1} at {2}s[/red]",
+"es": "[red]✗ ADAPTACIÓN FALLIDA (a destiempo) - {1} a los {2}s[/red]"
+},
+{
+"id": "bf88d2946f32",
+"kind": "console",
+"en": "[red]✗ Batch QTE TIMEOUT - {1}[/red]",
+"es": "[red]✗ TIEMPO AGOTADO del QTE por lotes - {1}[/red]"
+},
+{
+"id": "b8c4fd2f48f8",
+"kind": "console",
+"en": "[red]✗ EVADE FAILED (too slow) - {1}[/red]",
+"es": "[red]✗ ESQUIVA FALLIDA (demasiado lento) - {1}[/red]"
+},
+{
+"id": "d8db4908b78d",
+"kind": "console",
+"en": "[red]✗ Error awarding achievement: {1}[/red]",
+"es": "[red]✗ Error al otorgar el logro: {1}[/red]"
+},
+{
+"id": "e7aa750f8841",
+"kind": "console",
+"en": "[red]✗ Error checking achievements: {1}[/red]",
+"es": "[red]✗ Error al comprobar los logros: {1}[/red]"
+},
+{
+"id": "af9179f34e5f",
+"kind": "console",
+"en": "[red]✗ Error completing domain expansion: {1}[/red]",
+"es": "[red]✗ Error al completar la expansión de dominio: {1}[/red]"
+},
+{
+"id": "50622d39701e",
+"kind": "console",
+"en": "[red]✗ Error finishing QTE failure: {1}[/red]",
+"es": "[red]✗ Error al finalizar el fallo del QTE: {1}[/red]"
+},
+{
+"id": "4c4a746b7dbb",
+"kind": "console",
+"en": "[red]✗ Error finishing group QTE: {1}[/red]",
+"es": "[red]✗ Error al finalizar el QTE grupal: {1}[/red]"
+},
+{
+"id": "0cc1553c24b7",
+"kind": "console",
+"en": "[red]✗ Error handling QTE response: {1}[/red]",
+"es": "[red]✗ Error al procesar la respuesta del QTE: {1}[/red]"
+},
+{
+"id": "41122f63b47e",
+"kind": "console",
+"en": "[red]✗ Error handling domain expansion: {1}[/red]",
+"es": "[red]✗ Error al gestionar la expansión de dominio: {1}[/red]"
+},
+{
+"id": "86d106e9ef6e",
+"kind": "console",
+"en": "[red]✗ Error in BF chain handler: {1}[/red]",
+"es": "[red]✗ Error en el manejador de cadena BF: {1}[/red]"
+},
+{
+"id": "6d9d3875649f",
+"kind": "console",
+"en": "[red]✗ Error in adapt handler: {1}[/red]",
+"es": "[red]✗ Error en el manejador de adaptación: {1}[/red]"
+},
+{
+"id": "9a42704fdd72",
+"kind": "console",
+"en": "[red]✗ Error in batch timeout handler: {1}[/red]",
+"es": "[red]✗ Error en el manejador de tiempo de espera del lote: {1}[/red]"
+},
+{
+"id": "888d6c4f47d0",
+"kind": "console",
+"en": "[red]✗ Error in combo QTE response: {1}[/red]",
+"es": "[red]✗ Error en la respuesta del QTE de combo: {1}[/red]"
+},
+{
+"id": "c46ed950c238",
+"kind": "console",
+"en": "[red]✗ Error in counter attack handler: {1}[/red]",
+"es": "[red]✗ Error en el manejador de contraataque: {1}[/red]"
+},
+{
+"id": "853ffa4f01b2",
+"kind": "console",
+"en": "[red]✗ Error in direction QTE response: {1}[/red]",
+"es": "[red]✗ Error en la respuesta del QTE de dirección: {1}[/red]"
+},
+{
+"id": "4727452f7282",
+"kind": "console",
+"en": "[red]✗ Error in fake QTE response: {1}[/red]",
+"es": "[red]✗ Error en la respuesta de QTE falso: {1}[/red]"
+},
+{
+"id": "6b6bf09f0c93",
+"kind": "console",
+"en": "[red]✗ Error in group QTE response handler: {1}[/red]",
+"es": "[red]✗ Error en el manejador de respuestas de QTE grupal: {1}[/red]"
+},
+{
+"id": "93073e5c90fb",
+"kind": "console",
+"en": "[red]✗ Error in single QTE response handler: {1}[/red]",
+"es": "[red]✗ Error en el manejador de respuesta de QTE individual: {1}[/red]"
+},
+{
+"id": "34eb4183f293",
+"kind": "console",
+"en": "[red]✗ Error in timeout handler: {1}[/red]",
+"es": "[red]✗ Error en el manejador de tiempo agotado: {1}[/red]"
+},
+{
+"id": "344683fc062f",
+"kind": "console",
+"en": "[red]✗ Error processing batch QTEs: {1}[/red]",
+"es": "[red]✗ Error al procesar los QTE en lote: {1}[/red]"
+},
+{
+"id": "d421c836057a",
+"kind": "console",
+"en": "[red]✗ Error processing player QTE queue: {1}[/red]",
+"es": "[red]✗ Error al procesar la cola de QTE del jugador: {1}[/red]"
+},
+{
+"id": "ed9df059ff62",
+"kind": "console",
+"en": "[red]✗ Error sending message: {1}[/red]",
+"es": "[red]✗ Error al enviar el mensaje: {1}[/red]"
+},
+{
+"id": "b39725dbfeb2",
+"kind": "console",
+"en": "[red]✗ Error syncing commands: {1}[/red]",
+"es": "[red]✗ Error al sincronizar los comandos: {1}[/red]"
+},
+{
+"id": "256e8ead6e0b",
+"kind": "console",
+"en": "[red]✗ Error triggering BF chain: {1}[/red]",
+"es": "[red]✗ Error al activar la cadena de BF: {1}[/red]"
+},
+{
+"id": "eb34d633fe37",
+"kind": "console",
+"en": "[red]✗ Error triggering combo QTE: {1}[/red]",
+"es": "[red]✗ Error al activar el combo QTE: {1}[/red]"
+},
+{
+"id": "3d310232f599",
+"kind": "console",
+"en": "[red]✗ Error triggering direction QTE: {1}[/red]",
+"es": "[red]✗ Error al activar el QTE de dirección: {1}[/red]"
+},
+{
+"id": "f2ee220ccb3c",
+"kind": "console",
+"en": "[red]✗ Error triggering fake QTE: {1}[/red]",
+"es": "[red]✗ Error al activar el QTE falso: {1}[/red]"
+},
+{
+"id": "758958f1f355",
+"kind": "console",
+"en": "[red]✗ Error triggering group QTE: {1}[/red]",
+"es": "[red]✗ Error al activar el QTE grupal: {1}[/red]"
+},
+{
+"id": "844847c77ea5",
+"kind": "console",
+"en": "[red]✗ Error triggering single QTE: {1}[/red]",
+"es": "[red]✗ Error al activar el QTE simple: {1}[/red]"
+},
+{
+"id": "b9f65f8d37c9",
+"kind": "console",
+"en": "[red]✗ Error updating QTE player cache: {1}[/red]",
+"es": "[red]✗ Error al actualizar la caché de jugadores QTE: {1}[/red]"
+},
+{
+"id": "72560fb8283c",
+"kind": "console",
+"en": "[red]✗ Error updating player stats: {1}[/red]",
+"es": "[red]✗ Error al actualizar las estadísticas del jugador: {1}[/red]"
+},
+{
+"id": "acc49e80a90a",
+"kind": "console",
+"en": "[red]✗ Failed to sync slash commands: {1}[/red]",
+"es": "[red]✗ No se pudieron sincronizar los comandos slash: {1}[/red]"
+},
+{
+"id": "69b1fd166407",
+"kind": "console",
+"en": "[red]✗ Fatal error running bot: {1}[/red]",
+"es": "[red]✗ Error fatal al ejecutar el bot: {1}[/red]"
+},
+{
+"id": "78c697145e55",
+"kind": "console",
+"en": "[red]✗ Fatal error: {1}[/red]",
+"es": "[red]✗ Error fatal: {1}[/red]"
+},
+{
+"id": "aaef05a751ee",
+"kind": "console",
+"en": "[red]✗ Group QTE TIMEOUT - {1} players failed[/red]",
+"es": "[red]✗ TIEMPO AGOTADO del QTE grupal - {1} jugadores fallaron[/red]"
+},
+{
+"id": "89a3ca08f23c",
+"kind": "console",
+"en": "[red]✗ No QTE players available![/red]",
+"es": "[red]✗ ¡No hay jugadores de QTE disponibles![/red]"
+},
+{
+"id": "b81bdca7b109",
+"kind": "console",
+"en": "[red]✗ PARRY FAILED (mistimed) - {1}[/red]",
+"es": "[red]✗ PARRY FALLIDO (a destiempo) - {1}[/red]"
+},
+{
+"id": "29c5cd639e10",
+"kind": "console",
+"en": "[red]✗ QTE channel not found![/red]",
+"es": "[red]✗ ¡Canal de QTE no encontrado![/red]"
+},
+{
+"id": "44773c044150",
+"kind": "console",
+"en": "[red]✗ QTE player role not found![/red]",
+"es": "[red]✗ ¡No se encontró el rol de jugador de QTE![/red]"
+},
+{
+"id": "f9067d2501c5",
+"kind": "console",
+"en": "[red]✗ SAVE FAILED (too slow) - {1}[/red]",
+"es": "[red]✗ SALVACIÓN FALLIDA (demasiado lento) - {1}[/red]"
+},
+{
+"id": "8219aa5b31d4",
+"kind": "console",
+"en": "[red]✗ Single QTE TIMEOUT - {1} failed[/red]",
+"es": "[red]✗ TIEMPO AGOTADO del QTE individual - {1} falló[/red]"
+},
+{
+"id": "b121e7550fb1",
+"kind": "console",
+"en": "[red]✗ {1} - EVADE FAILED - {2}s[/red]",
+"es": "[red]✗ {1} - ESQUIVA FALLIDA - {2}s[/red]"
+},
+{
+"id": "30272cfd87dc",
+"kind": "console",
+"en": "[red]✗ {1} - PARRY FAILED - {2}s[/red]",
+"es": "[red]✗ {1} - PARRY FALLIDO - {2}s[/red]"
+},
+{
+"id": "f71a2f825abe",
+"kind": "console",
+"en": "[red]❌ AI auto-response error: {1}[/red]",
+"es": "[red]❌ Error de respuesta automática de IA: {1}[/red]"
+},
+{
+"id": "414a17ff06b2",
+"kind": "console",
+"en": "[red]❌ Error in death sequence: {1}[/red]",
+"es": "[red]❌ Error en la secuencia de muerte: {1}[/red]"
+},
+{
+"id": "ea63e58fcd9f",
+"kind": "console",
+"en": "[red]❌ Error listing models: {1}[/red]",
+"es": "[red]❌ Error al listar los modelos: {1}[/red]"
+},
+{
+"id": "b4682772baaf",
+"kind": "console",
+"en": "[red]❌ Error loading model: {1}[/red]",
+"es": "[red]❌ Error al cargar el modelo: {1}[/red]"
+},
+{
+"id": "29f30c224445",
+"kind": "console",
+"en": "[red]❌ Failed to list models: {1}[/red]",
+"es": "[red]❌ Error al listar los modelos: {1}[/red]"
+},
+{
+"id": "dbd7c07a1281",
+"kind": "console",
+"en": "[red]❌ Failed to load model: {1}[/red]",
+"es": "[red]❌ No se pudo cargar el modelo: {1}[/red]"
+},
+{
+"id": "3a8ee3558926",
+"kind": "console",
+"en": "[red]❌ Ollama API error: {1} - {2}[/red]",
+"es": "[red]❌ Error de la API de Ollama: {1} - {2}[/red]"
+},
+{
+"id": "8dc6a160b0b5",
+"kind": "console",
+"en": "[red]❌ Ollama connection error: {1}[/red]",
+"es": "[red]❌ Error de conexión con Ollama: {1}[/red]"
+},
+{
+"id": "775238cc6a9a",
+"kind": "console",
+"en": "[red]❌ Ollama error: {1}[/red]",
+"es": "[red]❌ Error de Ollama: {1}[/red]"
+},
+{
+"id": "27bcbc391f69",
+"kind": "console",
+"en": "[red]❌ Ollama request timed out[/red]",
+"es": "[red]❌ La solicitud a Ollama agotó el tiempo de espera[/red]"
+},
+{
+"id": "c4ea920c7df0",
+"kind": "console",
+"en": "[red]🌌 Boss Domain tick: {1} damage to all players[/red]",
+"es": "[red]🌌 Tick del dominio del jefe: {1} de daño a todos los jugadores[/red]"
+},
+{
+"id": "85ee6db22bbb",
+"kind": "console",
+"en": "[red]🌌 DOMAIN INTERRUPTED - {1} took damage during cast![/red]",
+"es": "[red]🌌 DOMINIO INTERRUMPIDO - ¡{1} recibió daño durante el lanzamiento![/red]"
+},
+{
+"id": "25d08810b13d",
+"kind": "console",
+"en": "[red]🌌 Infinite Void dealt {1} damage to boss![/red]",
+"es": "[red]🌌 ¡Infinite Void infligió {1} de daño al jefe![/red]"
+},
+{
+"id": "afaa4edf2625",
+"kind": "console",
+"en": "[red]🏆 GM removed {1} from {2}[/red]",
+"es": "[red]🏆 El GM quitó {1} a {2}[/red]"
+},
+{
+"id": "35720b6ccbaa",
+"kind": "console",
+"en": "[red]👹 Boss registered: {1} with {2} HP[/red]",
+"es": "[red]👹 Jefe registrado: {1} con {2} HP[/red]"
+},
+{
+"id": "7eb0cb0241be",
+"kind": "console",
+"en": "[red]👻 Fake QTE triggered - {1} fell for it![/red]",
+"es": "[red]👻 QTE falso activado - ¡{1} cayó en la trampa![/red]"
+},
+{
+"id": "7cda9f42e35f",
+"kind": "console",
+"en": "[red]💔 User {1} took {2} damage! HP: {3}/{4}[/red]",
+"es": "[red]💔 ¡El usuario {1} recibió {2} de daño! HP: {3}/{4}[/red]"
+},
+{
+"id": "199740d42202",
+"kind": "console",
+"en": "[red]💥 Boss {1} took {2} damage! HP: {3}/{4}[/red]",
+"es": "[red]💥 ¡El jefe {1} recibió {2} de daño! HP: {3}/{4}[/red]"
+},
+{
+"id": "008670f6c232",
+"kind": "console",
+"en": "[red]🔄 Bot restart requested via command[/red]",
+"es": "[red]🔄 Reinicio del bot solicitado mediante comando[/red]"
+},
+{
+"id": "5234b9c136f6",
+"kind": "console",
+"en": "[yellow]\nBot stopped by user[/yellow]",
+"es": "[yellow]\nBot detenido por el usuario[/yellow]"
+},
+{
+"id": "d4dba0d6b048",
+"kind": "console",
+"en": "[yellow]  Admin Role ID: {1}[/yellow]",
+"es": "[yellow]  ID del rol de administrador: {1}[/yellow]"
+},
+{
+"id": "635912ca96f4",
+"kind": "console",
+"en": "[yellow]+ Added MEDIUM QTE to batch ({1} total)[/yellow]",
+"es": "[yellow]+ QTE MEDIO añadido al lote ({1} en total)[/yellow]"
+},
+{
+"id": "effcd93c108d",
+"kind": "console",
+"en": "[yellow]AI judge error: {1}[/yellow]",
+"es": "[yellow]Error del juez de IA: {1}[/yellow]"
+},
+{
+"id": "58825a9bcfdf",
+"kind": "console",
+"en": "[yellow]Boss defeat GIFs cleared[/yellow]",
+"es": "[yellow]GIFs de derrota del jefe borrados[/yellow]"
+},
+{
+"id": "be5011e5df6c",
+"kind": "console",
+"en": "[yellow]Bot shutdown complete[/yellow]",
+"es": "[yellow]Apagado del bot completado[/yellow]"
+},
+{
+"id": "4dd402b0e8fc",
+"kind": "console",
+"en": "[yellow]Could not send Authentic Mutual Love GIFs: {1}[/yellow]",
+"es": "[yellow]No se pudieron enviar los GIFs de Authentic Mutual Love: {1}[/yellow]"
+},
+{
+"id": "fdcae36845a9",
+"kind": "console",
+"en": "[yellow]Could not send Executioner Sword GIF: {1}[/yellow]",
+"es": "[yellow]No se pudo enviar el GIF de Executioner Sword: {1}[/yellow]"
+},
+{
+"id": "883bac2edf0b",
+"kind": "console",
+"en": "[yellow]Could not send Jackpot GIF: {1}[/yellow]",
+"es": "[yellow]No se pudo enviar el GIF de Jackpot: {1}[/yellow]"
+},
+{
+"id": "cf4add1d638d",
+"kind": "console",
+"en": "[yellow]Could not send Jackpot anticipation GIF: {1}[/yellow]",
+"es": "[yellow]No se pudo enviar el GIF de anticipación de Jackpot: {1}[/yellow]"
+},
+{
+"id": "cb06b5cb253b",
+"kind": "console",
+"en": "[yellow]Could not send Jacob's Ladder GIF: {1}[/yellow]",
+"es": "[yellow]No se pudo enviar el GIF de Jacob's Ladder: {1}[/yellow]"
+},
+{
+"id": "c2cda8fa26a9",
+"kind": "console",
+"en": "[yellow]Could not send VAR GIF: {1}[/yellow]",
+"es": "[yellow]No se pudo enviar el GIF de VAR: {1}[/yellow]"
+},
+{
+"id": "c1236da46cf5",
+"kind": "console",
+"en": "[yellow]Could not send court GIFs: {1}[/yellow]",
+"es": "[yellow]No se pudieron enviar los GIF del tribunal: {1}[/yellow]"
+},
+{
+"id": "f9826f7535c1",
+"kind": "console",
+"en": "[yellow]Domain expansion cancelled (task)[/yellow]",
+"es": "[yellow]Expansión de dominio cancelada (tarea)[/yellow]"
+},
+{
+"id": "6bc5f0065082",
+"kind": "console",
+"en": "[yellow]Domain stun expired[/yellow]",
+"es": "[yellow]El aturdimiento del dominio expiró[/yellow]"
+},
+{
+"id": "7071a554f582",
+"kind": "console",
+"en": "[yellow]⏱ BF Chain {1} ended (timeout) - {2}s parry cooldown[/yellow]",
+"es": "[yellow]⏱ Cadena BF {1} terminada (tiempo agotado) - {2}s de recarga de parry[/yellow]"
+},
+{
+"id": "9acb4335be17",
+"kind": "console",
+"en": "[yellow]⏱️ Set {1} cooldown: {2} (fight-time)[/yellow]",
+"es": "[yellow]⏱️ Recarga de {1} establecida: {2} (tiempo de combate)[/yellow]"
+},
+{
+"id": "b6361e92b618",
+"kind": "console",
+"en": "[yellow]⏸️ FIGHT ENDED - Ultimate cooldowns PAUSED![/yellow]",
+"es": "[yellow]⏸️ COMBATE TERMINADO - ¡Recargas de definitiva EN PAUSA![/yellow]"
+},
+{
+"id": "a2de500f7ed8",
+"kind": "console",
+"en": "[yellow]⏸️ Paused {1} cooldown for user {2}: {3}s remaining[/yellow]",
+"es": "[yellow]⏸️ Recarga de {1} en pausa para el usuario {2}: quedan {3}s[/yellow]"
+},
+{
+"id": "5f09ad1243ee",
+"kind": "console",
+"en": "[yellow]♾️ Evade streak reset (took damage) - was {1}[/yellow]",
+"es": "[yellow]♾️ Racha de esquivas reiniciada (recibió daño) - era {1}[/yellow]"
+},
+{
+"id": "bbf6d90535b9",
+"kind": "console",
+"en": "[yellow]⚔ BF Chain ended (no flash, {1}) - {2}[/yellow]",
+"es": "[yellow]⚔ Cadena BF terminada (sin flash, {1}) - {2}[/yellow]"
+},
+{
+"id": "d2879214958e",
+"kind": "console",
+"en": "[yellow]⚖️ Fallback scoring ({1} R{2}): {3}/10 (words:{4})[/yellow]",
+"es": "[yellow]⚖️ Puntuación de respaldo ({1} R{2}): {3}/10 (palabras:{4})[/yellow]"
+},
+{
+"id": "522367a6ef08",
+"kind": "console",
+"en": "[yellow]⚖️ Player {1} immune - in court trial[/yellow]",
+"es": "[yellow]⚖️ El jugador {1} es inmune - en juicio[/yellow]"
+},
+{
+"id": "cb7c6cff0b5d",
+"kind": "console",
+"en": "[yellow]⚙️  Game values updated by {1}[/yellow]",
+"es": "[yellow]⚙️  Valores del juego actualizados por {1}[/yellow]"
+},
+{
+"id": "7a870eda6c41",
+"kind": "console",
+"en": "[yellow]⚙️ {1} reset all config to defaults[/yellow]",
+"es": "[yellow]⚙️ {1} restableció toda la configuración a los valores por defecto[/yellow]"
+},
+{
+"id": "ba2eb91fbb87",
+"kind": "console",
+"en": "[yellow]⚠ Could not auto-cleanup commands: {1}[/yellow]",
+"es": "[yellow]⚠ No se pudieron limpiar los comandos automáticamente: {1}[/yellow]"
+},
+{
+"id": "84f9d2126150",
+"kind": "console",
+"en": "[yellow]⚠ Could not load channel config: {1}[/yellow]",
+"es": "[yellow]⚠ No se pudo cargar la configuración del canal: {1}[/yellow]"
+},
+{
+"id": "930d8e902d80",
+"kind": "console",
+"en": "[yellow]⚠ Could not load live config: {1}[/yellow]",
+"es": "[yellow]⚠ No se pudo cargar la configuración en vivo: {1}[/yellow]"
+},
+{
+"id": "56d1370e0331",
+"kind": "console",
+"en": "[yellow]⚠ Failed to download asset from {1}: {2}[/yellow]",
+"es": "[yellow]⚠ Error al descargar el recurso de {1}: {2}[/yellow]"
+},
+{
+"id": "9e5a6624b3da",
+"kind": "console",
+"en": "[yellow]⚠ {1} removed from QTE player pool[/yellow]",
+"es": "[yellow]⚠ {1} eliminado del grupo de jugadores de QTE[/yellow]"
+},
+{
+"id": "d0ef79530e35",
+"kind": "console",
+"en": "[yellow]⚠️  Enemy is stunned! Wait...[/yellow]",
+"es": "[yellow]⚠️  ¡El enemigo está aturdido! Espera...[/yellow]"
+},
+{
+"id": "f00195160d5c",
+"kind": "console",
+"en": "[yellow]⚠️  Global hotkeys disabled in settings[/yellow]",
+"es": "[yellow]⚠️  Atajos globales desactivados en la configuración[/yellow]"
+},
+{
+"id": "0bc841806ddf",
+"kind": "console",
+"en": "[yellow]⚠️  Global hotkeys unavailable (keyboard library missing) - use the buttons[/yellow]",
+"es": "[yellow]⚠️  Atajos globales no disponibles (falta la librería keyboard) - usa los botones[/yellow]"
+},
+{
+"id": "d8687ea5d79e",
+"kind": "console",
+"en": "[yellow]⚠️  Resetting HP, power charges, and buffs on startup[/yellow]",
+"es": "[yellow]⚠️  Restableciendo HP, cargas de poder y buffs al iniciar[/yellow]"
+},
+{
+"id": "c1d9af45d0ed",
+"kind": "console",
+"en": "[yellow]⚠️ 'elbot' model not found. Run: ollama create elbot -f Modelfile[/yellow]",
+"es": "[yellow]⚠️ Modelo 'elbot' no encontrado. Ejecuta: ollama create elbot -f Modelfile[/yellow]"
+},
+{
+"id": "ab011e577d90",
+"kind": "console",
+"en": "[yellow]⚠️ Could not DM achievement to {1}: {2}[/yellow]",
+"es": "[yellow]⚠️ No se pudo enviar el logro por DM a {1}: {2}[/yellow]"
+},
+{
+"id": "93a56dd69a14",
+"kind": "console",
+"en": "[yellow]⚠️ Could not get channel for image persistence, using temporary URL[/yellow]",
+"es": "[yellow]⚠️ No se pudo obtener el canal para guardar la imagen, usando URL temporal[/yellow]"
+},
+{
+"id": "3b9bc12299f8",
+"kind": "console",
+"en": "[yellow]⚠️ Could not load keybinds from config: {1}[/yellow]",
+"es": "[yellow]⚠️ No se pudieron cargar las teclas de la configuración: {1}[/yellow]"
+},
+{
+"id": "23b897726fa0",
+"kind": "console",
+"en": "[yellow]⚠️ Could not persist image, using temporary URL[/yellow]",
+"es": "[yellow]⚠️ No se pudo guardar la imagen, usando URL temporal[/yellow]"
+},
+{
+"id": "90cd5c2ef2f3",
+"kind": "console",
+"en": "[yellow]⚠️ Could not purge HP thread: {1}[/yellow]",
+"es": "[yellow]⚠️ No se pudo purgar el hilo de HP: {1}[/yellow]"
+},
+{
+"id": "66bab0fb8d3e",
+"kind": "console",
+"en": "[yellow]⚠️ Could not unload model (may not be loaded): {1}[/yellow]",
+"es": "[yellow]⚠️ No se pudo descargar el modelo (puede que no esté cargado): {1}[/yellow]"
+},
+{
+"id": "a3c6939bd814",
+"kind": "console",
+"en": "[yellow]⚠️ Model '{1}' is not installed in Ollama. Pick another one in Configuration. Installed: {2}[/yellow]",
+"es": "[yellow]⚠️ El modelo '{1}' no está instalado en Ollama. Elige otro en Configuration. Instalados: {2}[/yellow]"
+},
+{
+"id": "7ab01acfabcd",
+"kind": "console",
+"en": "[yellow]⚠️ Ollama init error: {1}[/yellow]",
+"es": "[yellow]⚠️ Error al iniciar Ollama: {1}[/yellow]"
+},
+{
+"id": "6db78cbf7a8e",
+"kind": "console",
+"en": "[yellow]⚠️ Ollama is not responding. AI features disabled.[/yellow]",
+"es": "[yellow]⚠️ Ollama no responde. Funciones de IA desactivadas.[/yellow]"
+},
+{
+"id": "96c70bf90f19",
+"kind": "console",
+"en": "[yellow]⚠️ QTE_CHANNEL_ID not set - use /setchannel to configure[/yellow]",
+"es": "[yellow]⚠️ QTE_CHANNEL_ID no configurado - usa /setchannel para configurarlo[/yellow]"
+},
+{
+"id": "608aab3a281a",
+"kind": "console",
+"en": "[yellow]⚠️ QTE_PLAYER_ROLE_ID not set - some features may be limited[/yellow]",
+"es": "[yellow]⚠️ QTE_PLAYER_ROLE_ID no definido - algunas funciones pueden estar limitadas[/yellow]"
+},
+{
+"id": "23abc652f19a",
+"kind": "console",
+"en": "[yellow]⚡ COUNTER ENABLED for {1}[/yellow]",
+"es": "[yellow]⚡ CONTRAATAQUE ACTIVADO para {1}[/yellow]"
+},
+{
+"id": "d8c3096f7191",
+"kind": "console",
+"en": "[yellow]⚡ User {1} consumed {2} charge![/yellow]",
+"es": "[yellow]⚡ ¡El usuario {1} consumió {2} de carga![/yellow]"
+},
+{
+"id": "d3572000ebca",
+"kind": "console",
+"en": "[yellow]⚡👁️ COUNTER ENABLED (Soul Manipulator auto-evade) for {1}[/yellow]",
+"es": "[yellow]⚡👁️ CONTRAATAQUE HABILITADO (auto-esquiva de Soul Manipulator) para {1}[/yellow]"
+},
+{
+"id": "2547cd467a4e",
+"kind": "console",
+"en": "[yellow]⚡🪞 COUNTER ENABLED (Mirror Shard guaranteed) for {1}[/yellow]",
+"es": "[yellow]⚡🪞 CONTRAATAQUE ACTIVADO (Mirror Shard garantizado) para {1}[/yellow]"
+},
+{
+"id": "9add640b475c",
+"kind": "console",
+"en": "[yellow]⚡🪞 COUNTER ENABLED (auto-evade) for {1}[/yellow]",
+"es": "[yellow]⚡🪞 CONTRAATAQUE ACTIVADO (esquiva automática) para {1}[/yellow]"
+},
+{
+"id": "37d2f1266bb7",
+"kind": "console",
+"en": "[yellow]✓ Character unregistered: {1}[/yellow]",
+"es": "[yellow]✓ Personaje eliminado del registro: {1}[/yellow]"
+},
+{
+"id": "531a0807afca",
+"kind": "console",
+"en": "[yellow]✓ HP thread cleared and data reset[/yellow]",
+"es": "[yellow]✓ Hilo de HP limpiado y datos reiniciados[/yellow]"
+},
+{
+"id": "6b14af21d808",
+"kind": "console",
+"en": "[yellow]✓ Loaded stats for {1} players[/yellow]",
+"es": "[yellow]✓ Estadísticas cargadas para {1} jugadores[/yellow]"
+},
+{
+"id": "e4273deeea15",
+"kind": "console",
+"en": "[yellow]✓ Loaded {1} character registrations[/yellow]",
+"es": "[yellow]✓ {1} registros de personajes cargados[/yellow]"
+},
+{
+"id": "0da39afcc836",
+"kind": "console",
+"en": "[yellow]✓ Slash commands synced globally[/yellow]",
+"es": "[yellow]✓ Comandos de barra sincronizados globalmente[/yellow]"
+},
+{
+"id": "2457e33f7bc2",
+"kind": "console",
+"en": "[yellow]✓ Synced {1} commands to guild: {2}[/yellow]",
+"es": "[yellow]✓ {1} comandos sincronizados con el servidor: {2}[/yellow]"
+},
+{
+"id": "299a316dc15e",
+"kind": "console",
+"en": "[yellow]❌ BF Chain ended (mistimed) - {1}[/yellow]",
+"es": "[yellow]❌ Cadena BF terminada (a destiempo) - {1}[/yellow]"
+},
+{
+"id": "3c1c69583260",
+"kind": "console",
+"en": "[yellow]🌙 Reflect domain ended for user {1}[/yellow]",
+"es": "[yellow]🌙 El dominio reflejo terminó para el usuario {1}[/yellow]"
+},
+{
+"id": "bfcf0c0ee4a1",
+"kind": "console",
+"en": "[yellow]🎰 Jackpot ended for user {1}[/yellow]",
+"es": "[yellow]🎰 Jackpot terminado para el usuario {1}[/yellow]"
+},
+{
+"id": "126975726ed6",
+"kind": "console",
+"en": "[yellow]💤 {1} marked as INACTIVE[/yellow]",
+"es": "[yellow]💤 {1} marcado como INACTIVO[/yellow]"
+},
+{
+"id": "0a9212ad82fb",
+"kind": "console",
+"en": "[yellow]📤 Model {1} unloaded from memory[/yellow]",
+"es": "[yellow]📤 Modelo {1} descargado de la memoria[/yellow]"
+},
+{
+"id": "32d7df0aeab5",
+"kind": "console",
+"en": "[yellow]📦 No QTEs queued in batch[/yellow]",
+"es": "[yellow]📦 No hay QTEs en cola en el lote[/yellow]"
+},
+{
+"id": "3075471fa285",
+"kind": "console",
+"en": "⚠️ Keyboard hotkeys not available. Install 'keyboard' or run with sudo for hotkey support.",
+"es": "⚠️ Atajos de teclado no disponibles. Instala 'keyboard' o ejecuta con sudo para tener atajos de teclado."
+},
+{
+"id": "8c05a2ae26f7",
+"kind": "console",
+"en": "⚠️ Keyboard library error: {1}",
+"es": "⚠️ Error de la biblioteca de teclado: {1}"
+},
+{
+"id": "7b93697cb131",
+"kind": "user",
+"en": "\n\n🌟 **MAX ADAPTATION REACHED!**\nFurther adapts on **{1}** provide no additional bonuses.",
+"es": "\n\n🌟 **¡ADAPTACIÓN MÁXIMA ALCANZADA!**\nMás adaptaciones a **{1}** no ofrecen bonificaciones adicionales."
+},
+{
+"id": "f020c3b7d240",
+"kind": "user",
+"en": "\n\n🌟 **MAX ADAPTATION REACHED!**\nFurther adapts provide no additional bonuses.",
+"es": "\n\n🌟 **¡ADAPTACIÓN MÁXIMA ALCANZADA!**\nMás adaptaciones no otorgan bonificaciones adicionales."
+},
+{
+"id": "8c737e3e3eca",
+"kind": "user",
+"en": "\n*Use `*domain*` or `*ult3*` to activate!*",
+"es": "\n*¡Usa `*domain*` o `*ult3*` para activarlo!*"
+},
+{
+"id": "1ecfa9c386ed",
+"kind": "user",
+"en": "\n🍀 **CRITICAL HIT!** (2x Damage)",
+"es": "\n🍀 **¡GOLPE CRÍTICO!** (Daño x2)"
+},
+{
+"id": "195d24c04899",
+"kind": "user",
+"en": "  └ Type: {1} | CD: {2}s | Effect: {3}\n",
+"es": "  └ Tipo: {1} | Recarga: {2}s | Efecto: {3}\n"
+},
+{
+"id": "d7bfdb440854",
+"kind": "user",
+"en": "  ⚡ Overspec missing: `spec{1}` (use during counter window)\n",
+"es": "  ⚡ Falta Overspec: `spec{1}` (úsalo durante la ventana de contraataque)\n"
+},
+{
+"id": "2c357558c68c",
+"kind": "user",
+"en": "  🔴 Normal specs missing: `spec{1}`\n",
+"es": "  🔴 Faltan las especificaciones normales: `spec{1}`\n"
+},
+{
+"id": "8ce9e2a9226e",
+"kind": "user",
+"en": "# {1}\n*{2}*\n\n**{3}** unleashes their Domain!",
+"es": "# {1}\n*{2}*\n\n¡**{3}** desata su Dominio!"
+},
+{
+"id": "46d61e5e9ad5",
+"kind": "user",
+"en": "# ♾️ ***VAR* ACTIVE!** ♾️\n🌀 **Boss STUNNED for 10s!**\nUse `*ult1*` for **spammable 50 damage** attacks!\n_Duration: {1}s_",
+"es": "# ♾️ ¡***VAR* ACTIVO!** ♾️\n🌀 **¡Jefe ATURDIDO durante 10s!**\n¡Usa `*ult1*` para ataques **spammeables de 50 de daño**!\n_Duración: {1}s_"
+},
+{
+"id": "25a896f7dd61",
+"kind": "user",
+"en": "# ♾️ **MURYOKUSHO *VAR*** ♾️\n*Quick deploy variant activating...*\n⏳ **2s cast** | 🌀 **10s STUN** | ⚡ **Spammable ult1**",
+"es": "# ♾️ **MURYOKUSHO *VAR*** ♾️\n*Activando variante de despliegue rápido...*\n⏳ **2s de lanzamiento** | 🌀 **10s de ATURDIMIENTO** | ⚡ **ult1 spameable**"
+},
+{
+"id": "8a164eec2604",
+"kind": "user",
+"en": "# ⚔️⚖️ **FINAL JUDGEMENT** ⚖️⚔️\n*{1}* vs **{2}**!\n\n🎮 **TUG OF WAR** - 30 seconds!\nType the letter combo **FIRST** to win the point!\nPoints swing like a pendulum - first to dominate wins!\n\n🏆 **Player wins:** 99% DAMAGE to boss!\n💀 **Boss wins:** Sword BREAKS + Boss heals 20%!\n\n⚔️ **CLASH BEGINS!**",
+"es": "# ⚔️⚖️ **FINAL JUDGEMENT** ⚖️⚔️\n*{1}* vs **{2}**\n\n🎮 **TIRA Y AFLOJA** - ¡30 segundos!\n¡Escribe la combinación de letras **PRIMERO** para ganar el punto!\nLos puntos oscilan como un péndulo: ¡el primero en dominar gana!\n\n🏆 **Si gana el jugador:** ¡99% de DAÑO al jefe!\n💀 **Si gana el jefe:** ¡La espada SE ROMPE + el jefe cura un 20%!\n\n⚔️ **¡COMIENZA EL CHOQUE!**"
+},
+{
+"id": "9a540e282f12",
+"kind": "user",
+"en": "# ⚔️🏆 **FINAL JUDGEMENT - GUILTY!** 🏆⚔️\n**Score: {1} - {2}**\n\n*The executioner's blade falls!*\n**{3} DAMAGE!!!** *(99% of total HP)*\n_\"DEATH SENTENCE EXECUTED!\"_",
+"es": "# ⚔️🏆 **JUICIO FINAL - ¡CULPABLE!** 🏆⚔️\n**Puntuación: {1} - {2}**\n\n*¡La hoja del verdugo cae!*\n**¡¡¡{3} DE DAÑO!!!** *(99% del HP total)*\n_\"¡SENTENCIA DE MUERTE EJECUTADA!\"_"
+},
+{
+"id": "b4fe293136ce",
+"kind": "user",
+"en": "# ⚔️💀 **FINAL JUDGEMENT - NOT GUILTY!** 💀⚔️\n**Score: {1} - {2}**\n\n*The defendant overpowers the executioner!*\n🗡️💔 **EXECUTIONER SWORD SHATTERED!**\n💚 **Boss heals {3} HP!** *(20% of total)*\n_\"The sentence has been overturned...\"_",
+"es": "# ⚔️💀 **VEREDICTO FINAL - ¡NO CULPABLE!** 💀⚔️\n**Puntuación: {1} - {2}**\n\n*¡El acusado supera al verdugo!*\n🗡️💔 **¡EXECUTIONER SWORD SE HA ROTO!**\n💚 **¡El jefe cura {3} HP!** *(20% del total)*\n_\"La sentencia ha sido anulada...\"_"
+},
+{
+"id": "42be48c83ad8",
+"kind": "user",
+"en": "# ⚖️ **DEADLY SENTENCING** - COURT IN SESSION! ⚖️\n👨‍⚖️ **PROSECUTOR:** <@{1}>\n🧑‍⚖️ **DEFENDANT:** {2}\n\n📜 **{3} rounds** of cross-examination\n🎯 **{4} points** max per round\n⏱️ **{5}s** time limit per argument\n\n**Verdicts (based on PROSECUTOR score):**\n  • **8-17 pts:** Break enemy defense\n  • **18-24 pts:** Remove one QTE type from boss\n  • **25+ pts:** 🗡️ **EXECUTIONER'S SWORD** granted!\n\n⚠️ **COURT IMMUNITY:** Participants cannot attack or be attacked!\n⚖️ *El Bot will judge each argument...*",
+"es": "# ⚖️ **DEADLY SENTENCING** - ¡TRIBUNAL EN SESIÓN! ⚖️\n👨‍⚖️ **FISCAL:** <@{1}>\n🧑‍⚖️ **ACUSADO:** {2}\n\n📜 **{3} rondas** de interrogatorio\n🎯 **{4} puntos** máximo por ronda\n⏱️ **{5}s** de límite de tiempo por argumento\n\n**Veredictos (según la puntuación del FISCAL):**\n  • **8-17 pts:** Rompe la defensa enemiga\n  • **18-24 pts:** Elimina un tipo de QTE del jefe\n  • **25+ pts:** ¡🗡️ **EXECUTIONER'S SWORD** concedida!\n\n⚠️ **INMUNIDAD DEL TRIBUNAL:** ¡Los participantes no pueden atacar ni ser atacados!\n⚖️ *El Bot juzgará cada argumento...*"
+},
+{
+"id": "42f3f93c04cc",
+"kind": "user",
+"en": "# ⚖️ **VERDICT: GUILTY!** ⚖️\n**Score: {1}/30**\n\nThe boss loses the ability to use one QTE type!\n🚫 **Boss QTE pool reduced!**",
+"es": "# ⚖️ **VEREDICTO: ¡CULPABLE!** ⚖️\n**Puntuación: {1}/30**\n\n¡El jefe pierde la capacidad de usar un tipo de QTE!\n🚫 **¡Reserva de QTE del jefe reducida!**"
+},
+{
+"id": "c1b3787f72a7",
+"kind": "user",
+"en": "# ⚖️ **VERDICT: INSUFFICIENT EVIDENCE** ⚖️\n**Score: {1}/30**\n\nThe case was WEAK. Minor damage dealt.",
+"es": "# ⚖️ **VEREDICTO: PRUEBAS INSUFICIENTES** ⚖️\n**Puntuación: {1}/30**\n\nEl caso fue DÉBIL. Se infligió daño menor."
+},
+{
+"id": "943c2cdf835f",
+"kind": "user",
+"en": "# ⚖️ **VERDICT: PARTIALLY GUILTY** ⚖️\n**Score: {1}/30**\n\nEnemy defenses BROKEN for 30 seconds!\n💔 **Boss cannot evade or parry!**",
+"es": "# ⚖️ **VEREDICTO: PARCIALMENTE CULPABLE** ⚖️\n**Puntuación: {1}/30**\n\n¡Las defensas enemigas se ROMPEN durante 30 segundos!\n💔 **¡El jefe no puede esquivar ni hacer parry!**"
+},
+{
+"id": "11f2f035c5c3",
+"kind": "user",
+"en": "# ⚖️ ROUND {1}/{2} - PROSECUTION\n**{3}**\n_<@{4}> has {5}s to make your argument..._",
+"es": "# ⚖️ RONDA {1}/{2} - ACUSACIÓN\n**{3}**\n_<@{4}> tiene {5}s para exponer su argumento..._"
+},
+{
+"id": "bb43bdf6ffc0",
+"kind": "user",
+"en": "# ⚖️🗡️ **VERDICT: DEATH SENTENCE!** 🗡️⚖️\n**EXCELLENT SCORE: {1}/30!**\n\n<@{2}> has been granted the **EXECUTIONER'S SWORD!**\n🗡️ **4x DAMAGE** on all attacks for 60 seconds!\nUse `*ult1*` and `*ult2*` for special sword attacks!",
+"es": "# ⚖️🗡️ **¡VEREDICTO: SENTENCIA DE MUERTE!** 🗡️⚖️\n**¡PUNTUACIÓN EXCELENTE: {1}/30!**\n\n¡<@{2}> ha recibido la **EXECUTIONER'S SWORD!**\n🗡️ ¡**4x DAÑO** en todos los ataques durante 60 segundos!\n¡Usa `*ult1*` y `*ult2*` para ataques especiales con la espada!"
+},
+{
+"id": "85ff9271bd43",
+"kind": "user",
+"en": "# 🌌🏆 DOMAIN CLASH WINNER! 🏆🌌\n**{1}**'s *{2}* **OVERPOWERS** the enemy!\nFinal Score: **{3}** {4} - {5} **{6}**",
+"es": "# 🌌🏆 ¡GANADOR DEL CHOQUE DE DOMINIOS! 🏆🌌\n¡*{2}* de **{1}** **SUPERA** al enemigo!\nPuntuación final: **{3}** {4} - {5} **{6}**"
+},
+{
+"id": "05b9f2a894d4",
+"kind": "user",
+"en": "# 🌌💥 DOMAIN CLASH - TIE! 💥🌌\nBoth domains **COLLAPSE**! No winner!\nFinal Score: **{1}** {2} - {3} **{4}**",
+"es": "# 🌌💥 CHOQUE DE DOMINIOS - ¡EMPATE! 💥🌌\n¡Ambos dominios **COLAPSAN**! ¡Sin ganador!\nPuntuación final: **{1}** {2} - {3} **{4}**"
+},
+{
+"id": "d6a10a985aea",
+"kind": "user",
+"en": "# 🎯 **DIRECTION QTE!** 🎯\n**{1}** {2} | {3}\n# {4}\n⚠️ **INPUT THE OPPOSITE DIRECTION!**\n_Commands: `*up*` `*down*` `*left*` `*right*`_",
+"es": "# 🎯 **¡QTE DE DIRECCIÓN!** 🎯\n**{1}** {2} | {3}\n# {4}\n⚠️ **¡INTRODUCE LA DIRECCIÓN OPUESTA!**\n_Comandos: `*up*` `*down*` `*left*` `*right*`_"
+},
+{
+"id": "d283534c7035",
+"kind": "user",
+"en": "# 🎰💰 ***JACKPOOOOOOOOOOOOOOTTTT!!!*** 💰🎰",
+"es": "# 🎰💰 ***¡¡¡JACKPOOOOOOOOOOOOOOTTTT!!!*** 💰🎰"
+},
+{
+"id": "e4ebc48ca0d8",
+"kind": "user",
+"en": "# 🎰💰 ***JACKPOOOOOOOOOOOOOOTTTT!!!*** 💰🎰\n*({1}% chance - Fate smiled upon you!)*",
+"es": "# 🎰💰 ***¡¡¡JACKPOOOOOOOOOOOOOOTTTT!!!*** 💰🎰\n*({1}% de probabilidad - ¡el destino te sonrió!)*"
+},
+{
+"id": "afbf2d952e83",
+"kind": "user",
+"en": "# 👻 **FAKE QTE!** 👻\n❌ {1} fell for it!\n_There was no real attack!_",
+"es": "# 👻 **¡QTE FALSO!** 👻\n❌ ¡{1} cayó en la trampa!\n_¡No había ningún ataque real!_"
+},
+{
+"id": "14165216dd42",
+"kind": "user",
+"en": "# 📝 Word {1}/{2}: **{3}**\n🔥 {4}: **{5}** | {6}: **{7}**",
+"es": "# 📝 Palabra {1}/{2}: **{3}**\n🔥 {4}: **{5}** | {6}: **{7}**"
+},
+{
+"id": "823d61787340",
+"kind": "user",
+"en": "# 🔥 **COMBO COMPLETE!** 🔥\n{1} completed all **{2}** hits!",
+"es": "# 🔥 **¡COMBO COMPLETADO!** 🔥\n¡{1} completó los **{2}** golpes!"
+},
+{
+"id": "913bae00a2c4",
+"kind": "user",
+"en": "# 🔥 **COMBO QTE!** 🔥\n**{1}** {2} | {3}\n⚡ Complete **{4} QTEs** in sequence!\n**First:** `*{5}*`",
+"es": "# 🔥 **¡QTE DE COMBO!** 🔥\n**{1}** {2} | {3}\n⚡ ¡Completa **{4} QTEs** en secuencia!\n**Primero:** `*{5}*`"
+},
+{
+"id": "c79d443f85dc",
+"kind": "user",
+"en": "# 🔥 **OPEN** 🔥\n*{1}* is charging **FURNACE**...\n⚠️ *INTERRUPTIBLE - {2}s cast!*",
+"es": "# 🔥 **OPEN** 🔥\n*{1}* está cargando **FURNACE**...\n⚠️ *INTERRUMPIBLE - ¡lanzamiento de {2}s!*"
+},
+{
+"id": "a184a848fde3",
+"kind": "user",
+"en": "# 🔥⚡ **FURNACE** ⚡🔥\n**{1} DAMAGE!!!**",
+"es": "# 🔥⚡ **FURNACE** ⚡🔥\n**¡¡¡{1} DE DAÑO!!!**"
+},
+{
+"id": "b563bedbf236",
+"kind": "user",
+"en": "# 🗡️⚡ **EXECUTIONER LUNGE** ⚡🗡️\n*{1}* prepares the killing blow...\n⚠️ **INTERRUPTIBLE** - {2}s cast!\n_Any damage will cancel this attack!_",
+"es": "# 🗡️⚡ **EXECUTIONER LUNGE** ⚡🗡️\n*{1}* prepara el golpe mortal...\n⚠️ **INTERRUMPIBLE** - ¡lanzamiento de {2}s!\n_¡Cualquier daño cancelará este ataque!_"
+},
+{
+"id": "db2825930e77",
+"kind": "user",
+"en": "# 🗡️💀 **EXECUTIONER LUNGE LANDS!** 💀🗡️\n*The blade finds its mark!*\n**{1} DAMAGE!!!** *(50% of total HP)*",
+"es": "# 🗡️💀 **¡LA EMBESTIDA DEL VERDUGO ACIERTA!** 💀🗡️\n*¡La hoja da en el blanco!*\n**¡¡¡{1} DE DAÑO!!!** *(50% del HP total)*"
+},
+{
+"id": "e59959926905",
+"kind": "user",
+"en": "# 🛡️ ROUND {1}/{2} - DEFENSE\n**{3}**\n_<@{4}> has {5}s to defend yourself..._",
+"es": "# 🛡️ RONDA {1}/{2} - DEFENSA\n**{3}**\n_<@{4}> tiene {5}s para defenderte..._"
+},
+{
+"id": "6470e6709c78",
+"kind": "user",
+"en": "# 🪜 **JACOB'S LADDER** 🪜\n*{1}* begins the divine ascent...\n⚠️ *INTERRUPTIBLE - {2}s cast!*",
+"es": "# 🪜 **JACOB'S LADDER** 🪜\n*{1}* comienza el ascenso divino...\n⚠️ *INTERRUMPIBLE - ¡lanzamiento de {2}s!*"
+},
+{
+"id": "ad6eb4af1dd6",
+"kind": "user",
+"en": "# 🪜✨ **JACOB'S LADDER** ✨🪜\n*The divine light descends!*\n**{1} DAMAGE!!!** *(80% of total HP)*",
+"es": "# 🪜✨ **JACOB'S LADDER** ✨🪜\n*¡La luz divina desciende!*\n**¡¡¡{1} DE DAÑO!!!** *(80% del HP total)*"
+},
+{
+"id": "462fb1809d75",
+"kind": "user",
+"en": "% charge per 10 damage dealt (0-20, default 2)",
+"es": "% de carga por cada 10 de daño infligido (0-20, por defecto 2)"
+},
+{
+"id": "8c58229d26d2",
+"kind": "user",
+"en": "% charge per 5 damage taken (0-20, default 5)",
+"es": "% de carga por cada 5 de daño recibido (0-20, por defecto 5)"
+},
+{
+"id": "4d97a6b03aaf",
+"kind": "user",
+"en": "% charge per counter (0-20, default 3)",
+"es": "% de carga por contraataque (0-20, por defecto 3)"
+},
+{
+"id": "a973a7c49633",
+"kind": "user",
+"en": "%(asctime)s | %(levelname)-8s | %(message)s",
+"es": "%(asctime)s | %(levelname)-8s | %(message)s"
+},
+{
+"id": "1cc503f5b8f9",
+"kind": "user",
+"en": "**ACCEPTABLE.** The court acknowledges your words.",
+"es": "**ACEPTABLE.** El tribunal reconoce tus palabras."
+},
+{
+"id": "e77449489f72",
+"kind": "user",
+"en": "**ADEQUATE.** The court acknowledges your defense.",
+"es": "**ADECUADO.** El tribunal reconoce tu defensa."
+},
+{
+"id": "7b9626e4c538",
+"kind": "user",
+"en": "**Auto-trigger**: Disabled",
+"es": "**Activación automática**: Desactivada"
+},
+{
+"id": "5699f22b3f3e",
+"kind": "user",
+"en": "**Auto-trigger**: Every {1} messages",
+"es": "**Activación automática**: Cada {1} mensajes"
+},
+{
+"id": "2c431bce9953",
+"kind": "user",
+"en": "**COMPELLING DEFENSE!** The jury considers your words carefully... 🤔",
+"es": "**¡DEFENSA CONVINCENTE!** El jurado considera tus palabras con atención... 🤔"
+},
+{
+"id": "c6ae21490a5b",
+"kind": "user",
+"en": "**COMPELLING!** Strong argument! 📜",
+"es": "**¡CONVINCENTE!** ¡Gran argumento! 📜"
+},
+{
+"id": "cfc6c7d21aad",
+"kind": "user",
+"en": "**Channel**: All channels",
+"es": "**Canal**: Todos los canales"
+},
+{
+"id": "03127df83b68",
+"kind": "user",
+"en": "**Character:** {1}\n**Boss HP:** {2}\n**Evade Chance:** {3}%\n**Counter Chance:** {4}%\n**Counter Damage:** {5}",
+"es": "**Personaje:** {1}\n**HP del jefe:** {2}\n**Probabilidad de esquivar:** {3}%\n**Probabilidad de contraataque:** {4}%\n**Daño de contraataque:** {5}"
+},
+{
+"id": "ea1a0eeb78ae",
+"kind": "user",
+"en": "**EXCEPTIONAL!** The jury is MOVED! 👏",
+"es": "**¡EXCEPCIONAL!** ¡El jurado está CONMOVIDO! 👏"
+},
+{
+"id": "d90d80001570",
+"kind": "user",
+"en": "**Evade Window:** {1}s\n**Parry Window:** {2}\n**Perfect Parry:** {3}s",
+"es": "**Ventana de esquiva:** {1}s\n**Ventana de parry:** {2}\n**Parry perfecto:** {3}s"
+},
+{
+"id": "10d8b0d85f63",
+"kind": "user",
+"en": "**Evade Window:** {1}s\n**Parry Window:** {2}\n**Perfect Parry:** {3}s\n**Damage:** {4}",
+"es": "**Ventana de esquiva:** {1}s\n**Ventana de parry:** {2}\n**Parry perfecto:** {3}s\n**Daño:** {4}"
+},
+{
+"id": "92c95bfe297d",
+"kind": "user",
+"en": "**HP**: {1}\n**Status**: ⚔️ **FIGHT IN PROGRESS!**\n\n🔥 Ultimate cooldowns are now active!",
+"es": "**HP**: {1}\n**Estado**: ⚔️ **¡COMBATE EN CURSO!**\n\n🔥 ¡Las recargas de definitiva ya están activas!"
+},
+{
+"id": "636366676b71",
+"kind": "user",
+"en": "**MASSIVE STUN!** (5+ counter streak!)",
+"es": "**¡ATURDIMIENTO MASIVO!** (¡racha de más de 5 contraataques!)"
+},
+{
+"id": "93264c114495",
+"kind": "user",
+"en": "**PATHETIC!** The court is DISPLEASED! 👎",
+"es": "**¡PATÉTICO!** ¡La corte está DESCONTENTA! 👎"
+},
+{
+"id": "9f3e7c78b237",
+"kind": "user",
+"en": "**REASONABLE DEFENSE.** Some jurors nod in agreement. 📜",
+"es": "**DEFENSA RAZONABLE.** Algunos jurados asienten. 📜"
+},
+{
+"id": "fb7d4433d9a5",
+"kind": "user",
+"en": "**Range:** {1}",
+"es": "**Rango:** {1}"
+},
+{
+"id": "0474dd506e93",
+"kind": "user",
+"en": "**Self-Recharge Mode**: {1}",
+"es": "**Modo de autorrecarga**: {1}"
+},
+{
+"id": "ba30677af7ba",
+"kind": "user",
+"en": "**Skill Points:** {1} ⭐\n\nUse `/learnsk <skill_id>` to learn a skill!",
+"es": "**Puntos de habilidad:** {1} ⭐\n\n¡Usa `/learnsk <skill_id>` para aprender una habilidad!"
+},
+{
+"id": "70649d9084de",
+"kind": "user",
+"en": "**Tupperbox Boss Mode:** {1}\n**Boss Spawned:** {2} - {3}\n\nConfigure your Tupperbox-controlled boss here.",
+"es": "**Modo jefe Tupperbox:** {1}\n**Jefe generado:** {2} - {3}\n\nConfigura aquí tu jefe controlado por Tupperbox."
+},
+{
+"id": "5077fe10c88d",
+"kind": "user",
+"en": "**UNCONVINCING.** The jury seems skeptical... 😐",
+"es": "**POCO CONVINCENTE.** El jurado parece escéptico... 😐"
+},
+{
+"id": "56d120701be3",
+"kind": "user",
+"en": "**Usage:** `/config blackflash <base_chance%> <max_chance%>`\n**Example:** `/config blackflash 2 20`\n(2% base chance, 20% max chance)",
+"es": "**Uso:** `/config blackflash <base_chance%> <max_chance%>`\n**Ejemplo:** `/config blackflash 2 20`\n(2% de probabilidad base, 20% de probabilidad máxima)"
+},
+{
+"id": "c29133b063da",
+"kind": "user",
+"en": "**Usage:** `/config damage <difficulty> <min> <max>`\n**Example:** `/config damage hard 1 10`",
+"es": "**Uso:** `/config damage <difficulty> <min> <max>`\n**Ejemplo:** `/config damage hard 1 10`"
+},
+{
+"id": "0890668c89fa",
+"kind": "user",
+"en": "**Usage:** `/config qte <difficulty> <evade> <parry_start> <parry_end>`\n**Example:** `/config qte medium 4.5 3.0 5.0`\n**Difficulties:** easy, medium, hard, impossible",
+"es": "**Uso:** `/config qte <difficulty> <evade> <parry_start> <parry_end>`\n**Ejemplo:** `/config qte medium 4.5 3.0 5.0`\n**Dificultades:** easy, medium, hard, impossible"
+},
+{
+"id": "30d797aa49d7",
+"kind": "user",
+"en": "**Usage:** `/config revenge <threshold%> <damage_mult> <bf_bonus%>`\n**Example:** `/config revenge 20 1.5 10`\n(20% HP threshold, 1.5x damage, +10% BF chance)",
+"es": "**Uso:** `/config revenge <threshold%> <damage_mult> <bf_bonus%>`\n**Ejemplo:** `/config revenge 20 1.5 10`\n(umbral de 20% de HP, daño x1.5, +10% de probabilidad de BF)"
+},
+{
+"id": "d1ed906ddf0a",
+"kind": "user",
+"en": "**Usage:** `/config ultimate <cooldown_sec> <charge_rate> <max_damage>`\n**Example:** `/config ultimate 600 2.0 500`\n(600s cooldown, 2% charge per damage, 500 max damage)",
+"es": "**Uso:** `/config ultimate <cooldown_sec> <charge_rate> <max_damage>`\n**Ejemplo:** `/config ultimate 600 2.0 500`\n(600s de recarga, 2% de carga por daño, 500 de daño máximo)"
+},
+{
+"id": "ec190cd76a4d",
+"kind": "user",
+"en": "**WEAK DEFENSE!** This doesn't help your case! 👎",
+"es": "**¡DEFENSA DÉBIL!** ¡Esto no ayuda a tu caso! 👎"
+},
+{
+"id": "1534f0bfc145",
+"kind": "user",
+"en": "**WEAK.** The jury is unconvinced... 😐",
+"es": "**DÉBIL.** El jurado no está convencido... 😐"
+},
+{
+"id": "e9dfebc4954c",
+"kind": "user",
+"en": "**Your Registered Characters:**\n{1}",
+"es": "**Tus personajes registrados:**\n{1}"
+},
+{
+"id": "1467501420f4",
+"kind": "user",
+"en": "**{1} commands** synced to **{2} guilds**\n\n",
+"es": "**{1} comandos** sincronizados en **{2} servidores**\n\n"
+},
+{
+"id": "42bc9afc0bd0",
+"kind": "user",
+"en": "**{1}** CHAINS INTO ANOTHER BLACK FLASH!\n\n💢 **{2} DEVASTATING DAMAGE!**\n🌀 Enemy stunned!\n🔥 Chain Level: **{3}/4**",
+"es": "**{1}** ¡ENCADENA OTRO BLACK FLASH!\n\n💢 **¡{2} DE DAÑO DEVASTADOR!**\n🌀 ¡Enemigo aturdido!\n🔥 Nivel de cadena: **{3}/4**"
+},
+{
+"id": "1c9e40bcd65a",
+"kind": "user",
+"en": "**{1}** GIF(s) in rotation",
+"es": "**{1}** GIF(s) en rotación"
+},
+{
+"id": "b2110e7786f9",
+"kind": "user",
+"en": "**{1}** achieved **12+ impossible** spins!\n\n🔥 **Mastery Effect Active!**",
+"es": "**{1}** ¡logró **12+ giros imposibles**!\n\n🔥 **¡Efecto de maestría activo!**"
+},
+{
+"id": "e53a43c234a4",
+"kind": "user",
+"en": "**{1}** channeled the Mirror Shard's power!\n\n💀 **{2} DAMAGE!** (40% Boss HP)\n🪞 Mirror Shard reset to 5 spins!\n🌀 Enemy stunned for 1s!\n🔥 **CHAIN OPPORTUNITY INCOMING!**",
+"es": "¡**{1}** canalizó el poder de Mirror Shard!\n\n💀 **¡{2} DE DAÑO!** (40% del HP del jefe)\n🪞 ¡Mirror Shard reiniciado a 5 giros!\n🌀 ¡Enemigo aturdido durante 1s!\n🔥 **¡OPORTUNIDAD DE CADENA INMINENTE!**"
+},
+{
+"id": "c2952c5ac0d5",
+"kind": "user",
+"en": "**{1}** counters with a devastating blow!\n\n💢 **{2} DAMAGE** to {3}!",
+"es": "¡**{1}** contraataca con un golpe devastador!\n\n💢 ¡**{2} DE DAÑO** a {3}!"
+},
+{
+"id": "ef965bea31f4",
+"kind": "user",
+"en": "**{1}** did not succumb.",
+"es": "**{1}** no sucumbió."
+},
+{
+"id": "78c65c920587",
+"kind": "user",
+"en": "**{1}** enters a state of desperation!\n\n💥 **+50% Damage**\n⚡ **Faster Parry Windows**\n🌟 **+10% Black Flash Chance**",
+"es": "**{1}** entra en un estado de desesperación.\n\n💥 **+50% de daño**\n⚡ **Ventanas de parry más rápidas**\n🌟 **+10% de probabilidad de Black Flash**"
+},
+{
+"id": "2be2008dce7e",
+"kind": "user",
+"en": "**{1}** evaded {2}'s counter attack!",
+"es": "**{1}** ¡esquivó el contraataque de {2}!"
+},
+{
+"id": "a0dd415156a5",
+"kind": "user",
+"en": "**{1}** expands their domain!\n\n*\"{2}\"*",
+"es": "¡**{1}** expande su dominio!\n\n*\"{2}\"*"
+},
+{
+"id": "9a9bd7827ef6",
+"kind": "user",
+"en": "**{1}** failed to evade the reflected attack!\n\n💢 **{2} damage** dealt!",
+"es": "**{1}** ¡no logró esquivar el ataque reflejado!\n\n💢 ¡**{2} de daño** infligido!"
+},
+{
+"id": "0a7286c4012e",
+"kind": "user",
+"en": "**{1}** given to {2}",
+"es": "**{1}** entregado a {2}"
+},
+{
+"id": "6607811ba58d",
+"kind": "user",
+"en": "**{1}** has been vanquished!\n\n🏆 **VICTORY!**\n⏸️ Ultimate cooldowns are now **paused** until next fight!",
+"es": "¡**{1}** ha sido derrotado!\n\n🏆 **¡VICTORIA!**\n⏸️ ¡Las recargas de las definitivas ahora están **en pausa** hasta el próximo combate!"
+},
+{
+"id": "eec43225e741",
+"kind": "user",
+"en": "**{1}** has entered the battlefield!\n\n❤️ **HP:** {2}\n⚔️ *The fight begins!*",
+"es": "¡**{1}** ha entrado al campo de batalla!\n\n❤️ **HP:** {2}\n⚔️ *¡El combate comienza!*"
+},
+{
+"id": "a8ae48421e72",
+"kind": "user",
+"en": "**{1}** held on to their faith.",
+"es": "**{1}** se aferró a su fe."
+},
+{
+"id": "9f2d6b90263d",
+"kind": "user",
+"en": "**{1}** image(s) in rotation",
+"es": "**{1}** imagen(es) en rotación"
+},
+{
+"id": "86b529afc994",
+"kind": "user",
+"en": "**{1}** image(s) in rotation\n\nImages cycle randomly when you counter!",
+"es": "**{1}** imagen(es) en rotación\n\n¡Las imágenes cambian al azar cuando contraatacas!"
+},
+{
+"id": "af5947f71ced",
+"kind": "user",
+"en": "**{1}** is forming the handsign...\n\n*⚠️ CAN BE INTERRUPTED BY DAMAGE!*",
+"es": "**{1}** está formando el sello de mano...\n\n*⚠️ ¡PUEDE SER INTERRUMPIDO POR DAÑO!*"
+},
+{
+"id": "88a7d410914c",
+"kind": "user",
+"en": "**{1}** is in the zone!\n\n🎯 Land another `*parry*` for **{2} DAMAGE!**\n⏱️ You have **3 seconds!**\n\n⭐ **AIM FOR {3}s** ⭐\n📍 Window: {4}s - {5}s\n\n*No damage on miss - just chain ends!*",
+"es": "¡**{1}** está en racha!\n\n🎯 ¡Logra otro `*parry*` por **{2} DE DAÑO!**\n⏱️ ¡Tienes **3 segundos!**\n\n⭐ **APUNTA A {3}s** ⭐\n📍 Ventana: {4}s - {5}s\n\n*¡Sin daño si fallas, solo termina la cadena!*"
+},
+{
+"id": "ab63321d4bb4",
+"kind": "user",
+"en": "**{1}** landed a **BLACK FLASH** in the chaos!\n\n💢 **{2} DAMAGE!**\n🔥 **CHAIN OPPORTUNITY!**",
+"es": "**{1}** ¡logró un **BLACK FLASH** en medio del caos!\n\n💢 **¡{2} DE DAÑO!**\n🔥 **¡OPORTUNIDAD DE CADENA!**"
+},
+{
+"id": "bb096b01875c",
+"kind": "user",
+"en": "**{1}** landed a **PERFECT BLACK FLASH!**\n\n💢 **{2} DAMAGE!**\n🌀 Enemy stunned for 1s!\n🔥 **CHAIN OPPORTUNITY INCOMING!**",
+"es": "¡**{1}** logró un **BLACK FLASH PERFECTO!**\n\n💢 **¡{2} DE DAÑO!**\n🌀 ¡Enemigo aturdido por 1s!\n🔥 **¡OPORTUNIDAD DE CADENA INMINENTE!**"
+},
+{
+"id": "e85703d270d8",
+"kind": "user",
+"en": "**{1}** model(s) installed",
+"es": "**{1}** modelo(s) instalado(s)"
+},
+{
+"id": "3f2f341bc600",
+"kind": "user",
+"en": "**{1}** object(s) in inventory",
+"es": "**{1}** objeto(s) en el inventario"
+},
+{
+"id": "0716ae161851",
+"kind": "user",
+"en": "**{1}** objects awaiting review",
+"es": "**{1}** objetos pendientes de revisión"
+},
+{
+"id": "2d2a5f6d8662",
+"kind": "user",
+"en": "**{1}** objects loaded",
+"es": "**{1}** objetos cargados"
+},
+{
+"id": "2f16198ecfe8",
+"kind": "user",
+"en": "**{1}** reached **{2} {3}** spins!\n\n📈 **New Effects Unlocked:**",
+"es": "**{1}** alcanzó **{2} {3}** giros.\n\n📈 **Nuevos efectos desbloqueados:**"
+},
+{
+"id": "66cec44cbc0c",
+"kind": "user",
+"en": "**{1}** registered for **{2}**",
+"es": "**{1}** registrado para **{2}**"
+},
+{
+"id": "032d7a9922a0",
+"kind": "user",
+"en": "**{1}** unleashes a devastating counterattack!\n\n💢 **{2} DAMAGE!**{3}\n🌀 Enemy stunned for {4}\n🔥 Counter Streak: **{5}**\n{6}",
+"es": "¡**{1}** desata un devastador contraataque!\n\n💢 **¡{2} DE DAÑO!**{3}\n🌀 Enemigo aturdido por {4}\n🔥 Racha de contraataques: **{5}**\n{6}"
+},
+{
+"id": "e305ab01826f",
+"kind": "user",
+"en": "**{1}** upgraded to rank {2}/{3}!\n\n*{4}*\n\nRemaining SP: {5}",
+"es": "¡**{1}** subió al rango {2}/{3}!\n\n*{4}*\n\nSP restantes: {5}"
+},
+{
+"id": "1296bf338875",
+"kind": "user",
+"en": "**{1}**'s *{2}*\n**VS**\n**{3}**'s *{4}*\n\n🎮 **TYPE THE WORDS FASTEST TO WIN!**\nFirst to win **{5}** words wins the clash!",
+"es": "**{2}** de **{1}**\n**VS**\n**{4}** de **{3}**\n\n🎮 **¡ESCRIBE LAS PALABRAS MÁS RÁPIDO PARA GANAR!**\n¡El primero en ganar **{5}** palabras gana el choque!"
+},
+{
+"id": "101b01cb2afa",
+"kind": "user",
+"en": "**{1}/{2}** slots used",
+"es": "**{1}/{2}** espacios usados"
+},
+{
+"id": "b03a0109c858",
+"kind": "user",
+"en": "*No adaptation tracking*",
+"es": "*Sin seguimiento de adaptación*"
+},
+{
+"id": "c1b0e670c895",
+"kind": "user",
+"en": "*No powers registered*",
+"es": "*Ningún poder registrado*"
+},
+{
+"id": "55fb7415ae21",
+"kind": "user",
+"en": "*None configured*",
+"es": "*Ninguno configurado*"
+},
+{
+"id": "25bd925f027e",
+"kind": "user",
+"en": "*Not found / None*",
+"es": "*No encontrado / Ninguno*"
+},
+{
+"id": "9f4fd59a12dc",
+"kind": "user",
+"en": "*Object not found*",
+"es": "*Objeto no encontrado*"
+},
+{
+"id": "4ecbb599db1c",
+"kind": "user",
+"en": "*Unclaimed*",
+"es": "*Sin reclamar*"
+},
+{
+"id": "5be9f091116c",
+"kind": "user",
+"en": "*{1} has fallen in combat...*\n\n{2} — Speak your final words...",
+"es": "*{1} ha caído en combate...*\n\n{2} — Di tus últimas palabras..."
+},
+{
+"id": "d0e0599d55b7",
+"kind": "user",
+"en": "*{1}*\n**Trigger:** `{2}`\n**Rewards:** {3}",
+"es": "*{1}*\n**Activador:** `{2}`\n**Recompensas:** {3}"
+},
+{
+"id": "f86af66cd6db",
+"kind": "user",
+"en": "+10% reduction",
+"es": "+10% de reducción"
+},
+{
+"id": "dfcbc315a718",
+"kind": "user",
+"en": "+50% reduction",
+"es": "+50% de reducción"
+},
+{
+"id": "67140acbcb35",
+"kind": "user",
+"en": "... and {1} more",
+"es": "... y {1} más"
+},
+{
+"id": "956bf0ec228e",
+"kind": "user",
+"en": "...and {1} more",
+"es": "...y {1} más"
+},
+{
+"id": "00add4d1e1af",
+"kind": "user",
+"en": "10 (dps) or 5 (stun seconds)",
+"es": "10 (dps) o 5 (segundos de aturdimiento)"
+},
+{
+"id": "282ea6f60c53",
+"kind": "user",
+"en": "<@{1}> unlocked **{2}**!\n\n*{3}*",
+"es": "¡<@{1}> desbloqueó **{2}**!\n\n*{3}*"
+},
+{
+"id": "76e6ce9e939f",
+"kind": "user",
+"en": "<@{1}> ⚡ **{2} FULLY CHARGED!** Use `*power{3}*` to unleash it!",
+"es": "<@{1}> ⚡ ¡**{2} COMPLETAMENTE CARGADO!** ¡Usa `*power{3}*` para liberarlo!"
+},
+{
+"id": "57e0d8752e0c",
+"kind": "user",
+"en": "Ability Name",
+"es": "Nombre de la habilidad"
+},
+{
+"id": "99f17319d566",
+"kind": "user",
+"en": "Achievements grant skill points and titles!",
+"es": "¡Los logros otorgan puntos de habilidad y títulos!"
+},
+{
+"id": "e4fa12e13121",
+"kind": "user",
+"en": "Action to perform",
+"es": "Acción a realizar"
+},
+{
+"id": "25c11ba532c1",
+"kind": "user",
+"en": "Add GIF",
+"es": "Añadir GIF"
+},
+{
+"id": "779d979b6d10",
+"kind": "user",
+"en": "Add Image",
+"es": "Añadir imagen"
+},
+{
+"id": "87cd66ee19ed",
+"kind": "user",
+"en": "Add a counter GIF/image. Multiple images will be randomized!",
+"es": "Añade un GIF/imagen de contraataque. ¡Si hay varias, se elegirán al azar!"
+},
+{
+"id": "5751b53fa7c1",
+"kind": "user",
+"en": "Against all odds, the hero prevails!",
+"es": "¡Contra todo pronóstico, el héroe prevalece!"
+},
+{
+"id": "46235b17fc9b",
+"kind": "user",
+"en": "All channels",
+"es": "Todos los canales"
+},
+{
+"id": "0a60b43dc084",
+"kind": "user",
+"en": "All players **stunned** (auto-fail QTEs) for {1}s!",
+"es": "¡Todos los jugadores están **aturdidos** (fallan los QTE automáticamente) durante {1}s!"
+},
+{
+"id": "3c7c955e70e2",
+"kind": "user",
+"en": "All players restored **{1} HP**!\n\n",
+"es": "¡Todos los jugadores recuperaron **{1} HP**!\n\n"
+},
+{
+"id": "7b46ed1b3ebb",
+"kind": "user",
+"en": "All players take **{1} damage/second** for {2}s!",
+"es": "¡Todos los jugadores reciben **{1} de daño/segundo** durante {2}s!"
+},
+{
+"id": "56f025f7af12",
+"kind": "user",
+"en": "Auto-created HP bar display thread",
+"es": "Hilo de visualización de la barra de HP creado automáticamente"
+},
+{
+"id": "16300e4903aa",
+"kind": "user",
+"en": "Auto-trigger",
+"es": "Activación automática"
+},
+{
+"id": "f6f97779b07b",
+"kind": "user",
+"en": "Avg Time",
+"es": "Tiempo promedio"
+},
+{
+"id": "9ef16705ef31",
+"kind": "user",
+"en": "BF Chance",
+"es": "Prob. de BF"
+},
+{
+"id": "80656cc5c206",
+"kind": "user",
+"en": "Base Cooldown: {1}s\nMax Damage: {2}\nCharge/Damage: {3}%",
+"es": "Recarga base: {1}s\nDaño máximo: {2}\nCarga/Daño: {3}%"
+},
+{
+"id": "d68b30686849",
+"kind": "user",
+"en": "Base: {1}% chance\nChain Window: {2}s",
+"es": "Base: {1}% de probabilidad\nVentana de cadena: {2}s"
+},
+{
+"id": "447e69b817dc",
+"kind": "user",
+"en": "Based on this recent conversation in a Discord server, provide a brief, natural response or comment. Don't repeat what others said. Be engaging but concise.\n\nRecent messages:\n{1}\n\nYour response (1-2 sentences max):",
+"es": "Basándote en esta conversación reciente de un servidor de Discord, da una respuesta o comentario breve y natural. No repitas lo que dijeron los demás. Sé atractivo pero conciso.\n\nMensajes recientes:\n{1}\n\nTu respuesta (máximo 1-2 frases):"
+},
+{
+"id": "1b30e77accde",
+"kind": "user",
+"en": "Best Parry Streak",
+"es": "Mejor racha de parry"
+},
+{
+"id": "2119074f5027",
+"kind": "user",
+"en": "Best Time",
+"es": "Mejor tiempo"
+},
+{
+"id": "95f7b97ad29d",
+"kind": "user",
+"en": "Black Flash Base Chance: {1}% → {2}%",
+"es": "Probabilidad base de Black Flash: {1}% → {2}%"
+},
+{
+"id": "eec789be99fb",
+"kind": "user",
+"en": "Black Flash Chance: {1}% | Response Time: {2}s",
+"es": "Probabilidad de Black Flash: {1}% | Tiempo de respuesta: {2}s"
+},
+{
+"id": "904f1e8aa05c",
+"kind": "user",
+"en": "Black Flash base chance % (0-100)",
+"es": "% de probabilidad base de Black Flash (0-100)"
+},
+{
+"id": "997cec2c0a2f",
+"kind": "user",
+"en": "Black Flashes",
+"es": "Black Flashes"
+},
+{
+"id": "1298102246a7",
+"kind": "user",
+"en": "Boss HP",
+"es": "HP del jefe"
+},
+{
+"id": "e51131547c7b",
+"kind": "user",
+"en": "Boss maximum HP (e.g., 1000)",
+"es": "HP máximos del jefe (p. ej., 1000)"
+},
+{
+"id": "2802c8bb9015",
+"kind": "user",
+"en": "Boss name (e.g., 'Shadow King')",
+"es": "Nombre del jefe (p. ej., 'Shadow King')"
+},
+{
+"id": "86cbfe8ed3bb",
+"kind": "user",
+"en": "Boss stunned! Black Flash opportunity!",
+"es": "¡Jefe aturdido! ¡Oportunidad de Black Flash!"
+},
+{
+"id": "f89c06933f21",
+"kind": "user",
+"en": "Branch name (combat, defense, utility)",
+"es": "Nombre de la rama (combat, defense, utility)"
+},
+{
+"id": "6164a5a16514",
+"kind": "user",
+"en": "CLOSING ARGUMENT! Summarize why the defendant deserves punishment!",
+"es": "¡ALEGATO FINAL! ¡Resume por qué el acusado merece un castigo!"
+},
+{
+"id": "83a8f5b9e11b",
+"kind": "user",
+"en": "COUNTER the evidence! Explain yourself!",
+"es": "¡CONTRARRESTA las pruebas! ¡Explícate!"
+},
+{
+"id": "1ed034e16df1",
+"kind": "user",
+"en": "CRIT!",
+"es": "¡CRÍTICO!"
+},
+{
+"id": "ebf04c3862af",
+"kind": "user",
+"en": "Cannot respond to QTEs",
+"es": "No puede responder a los QTE"
+},
+{
+"id": "b55f31935513",
+"kind": "user",
+"en": "Chain {1}/4 | ⭐=BF Window | Perfect ~{2}s",
+"es": "Cadena {1}/4 | ⭐=Ventana de BF | Perfecto ~{2}s"
+},
+{
+"id": "92df74685865",
+"kind": "user",
+"en": "Channel",
+"es": "Canal"
+},
+{
+"id": "55748692cd9f",
+"kind": "user",
+"en": "Character name (for editing powers)",
+"es": "Nombre del personaje (para editar poderes)"
+},
+{
+"id": "bc4691bcd97e",
+"kind": "user",
+"en": "Characters: **{1}**\nQTE Success Rate: **{2}%**\nBlack Flashes: **{3}**",
+"es": "Personajes: **{1}**\nTasa de éxito de QTE: **{2}%**\nBlack Flashes: **{3}**"
+},
+{
+"id": "117155ceafda",
+"kind": "user",
+"en": "Charge/10 Damage Dealt: {1}% → {2}%",
+"es": "Carga/10 de daño infligido: {1}% → {2}%"
+},
+{
+"id": "ba54eea9ea86",
+"kind": "user",
+"en": "Charge/5 Damage Taken: {1}% → {2}%",
+"es": "Carga/5 de daño recibido: {1}% → {2}%"
+},
+{
+"id": "a7573b7d8d9a",
+"kind": "user",
+"en": "Check your or another player's adaptation progress",
+"es": "Consulta tu progreso de adaptación o el de otro jugador"
+},
+{
+"id": "6bb7e5ef774f",
+"kind": "user",
+"en": "Choose a domain...",
+"es": "Elige un dominio..."
+},
+{
+"id": "d23234669390",
+"kind": "user",
+"en": "Choose a title to display with your actions!\n\n**Available titles:** {1}",
+"es": "¡Elige un título para mostrar con tus acciones!\n\n**Títulos disponibles:** {1}"
+},
+{
+"id": "57d2edeeceb4",
+"kind": "user",
+"en": "Choose a title...",
+"es": "Elige un título..."
+},
+{
+"id": "1e7fcc390e28",
+"kind": "user",
+"en": "Choose which domain to use when activating `*domain*` or `*ult3*`!\n\n**Available domains:** {1}",
+"es": "¡Elige qué dominio usar al activar `*domain*` o `*ult3*`!\n\n**Dominios disponibles:** {1}"
+},
+{
+"id": "7ba616b51dcb",
+"kind": "user",
+"en": "Clear All",
+"es": "Borrar todo"
+},
+{
+"id": "02ee3c1ec074",
+"kind": "user",
+"en": "Cleave, Roar, Dark Pulse, etc.",
+"es": "Cleave, Roar, Dark Pulse, etc."
+},
+{
+"id": "553a7d17c535",
+"kind": "user",
+"en": "Click a button below to explore!",
+"es": "¡Haz clic en un botón de abajo para explorar!"
+},
+{
+"id": "16dbd44b70b1",
+"kind": "user",
+"en": "Collection now has **{1}** GIF(s)!\nThey will be randomized on boss defeat.",
+"es": "¡La colección ahora tiene **{1}** GIF(s)!\nSe elegirán al azar al derrotar al jefe."
+},
+{
+"id": "c28beb2304c4",
+"kind": "user",
+"en": "Commands should appear in a few seconds. Try closing and reopening Discord if needed.",
+"es": "Los comandos deberían aparecer en unos segundos. Prueba a cerrar y volver a abrir Discord si es necesario."
+},
+{
+"id": "21c6cb100457",
+"kind": "user",
+"en": "Cooldown",
+"es": "Recarga"
+},
+{
+"id": "c46f10703c62",
+"kind": "user",
+"en": "Cooldown in seconds",
+"es": "Recarga en segundos"
+},
+{
+"id": "b405412d07a8",
+"kind": "user",
+"en": "Cooldown in seconds (e.g., 60 for 1 minute)",
+"es": "Recarga en segundos (p. ej., 60 para 1 minuto)"
+},
+{
+"id": "284a78c01cdb",
+"kind": "user",
+"en": "Could not connect to Ollama.\n\nMake sure:\n• Ollama is running (`ollama serve`)\n• Model is loaded (`ollama run dolphin-phi:2.7b`)\n• Endpoint is correct",
+"es": "No se pudo conectar con Ollama.\n\nAsegúrate de que:\n• Ollama esté en ejecución (`ollama serve`)\n• El modelo esté cargado (`ollama run dolphin-phi:2.7b`)\n• El endpoint sea correcto"
+},
+{
+"id": "8f6e5bfa1f31",
+"kind": "user",
+"en": "Could not load `{1}`. Reverted to `{2}`.",
+"es": "No se pudo cargar `{1}`. Se volvió a `{2}`."
+},
+{
+"id": "5cdfdf30fcd7",
+"kind": "user",
+"en": "Could not retrieve model list.\n\nMake sure Ollama is running.",
+"es": "No se pudo obtener la lista de modelos.\n\nAsegúrate de que Ollama esté en ejecución."
+},
+{
+"id": "a4d1bedc39cf",
+"kind": "user",
+"en": "Counter Chance (0-100%)",
+"es": "Probabilidad de contraataque (0-100%)"
+},
+{
+"id": "fc037f21d653",
+"kind": "user",
+"en": "Counter window in seconds (0.5-5, default 1.5)",
+"es": "Ventana de contraataque en segundos (0.5-5, por defecto 1.5)"
+},
+{
+"id": "4c281d3dcaa5",
+"kind": "user",
+"en": "Current",
+"es": "Actual"
+},
+{
+"id": "8579f9ed11de",
+"kind": "user",
+"en": "Current Domain",
+"es": "Dominio actual"
+},
+{
+"id": "11d1b4a26b26",
+"kind": "user",
+"en": "Current Model",
+"es": "Modelo actual"
+},
+{
+"id": "3c9d0e184850",
+"kind": "user",
+"en": "Current Settings",
+"es": "Configuración actual"
+},
+{
+"id": "7d3d2c57fbee",
+"kind": "user",
+"en": "Current Streak",
+"es": "Racha actual"
+},
+{
+"id": "71aea4aa16ee",
+"kind": "user",
+"en": "Current Title",
+"es": "Título actual"
+},
+{
+"id": "2e518c5d9dc2",
+"kind": "user",
+"en": "Current live settings (use `/config <action>` to modify)",
+"es": "Configuración actual en vivo (usa `/config <action>` para modificar)"
+},
+{
+"id": "52a866108c4c",
+"kind": "user",
+"en": "DISCORD_TOKEN not found in environment variables! Create a .env file.",
+"es": "¡No se encontró DISCORD_TOKEN en las variables de entorno! Crea un archivo .env."
+},
+{
+"id": "7f47b073daeb",
+"kind": "user",
+"en": "Damage",
+"es": "Daño"
+},
+{
+"id": "f0b372a8c49e",
+"kind": "user",
+"en": "Damage: **{1}**\nTargets hit: **{2}**",
+"es": "Daño: **{1}**\nObjetivos golpeados: **{2}**"
+},
+{
+"id": "d1f769158968",
+"kind": "user",
+"en": "Description",
+"es": "Descripción"
+},
+{
+"id": "88785ad4efd1",
+"kind": "user",
+"en": "Disabled",
+"es": "Desactivado"
+},
+{
+"id": "e5ca9bb2cbfa",
+"kind": "user",
+"en": "Domain GIF URL",
+"es": "URL del GIF de dominio"
+},
+{
+"id": "0833041fb972",
+"kind": "user",
+"en": "Domain Name",
+"es": "Nombre del dominio"
+},
+{
+"id": "19304ecaa47f",
+"kind": "user",
+"en": "Duration",
+"es": "Duración"
+},
+{
+"id": "5db92f48ea83",
+"kind": "user",
+"en": "Duration (seconds)",
+"es": "Duración (segundos)"
+},
+{
+"id": "484a152bde69",
+"kind": "user",
+"en": "Duration in seconds (0 = instant)",
+"es": "Duración en segundos (0 = instantáneo)"
+},
+{
+"id": "cc02f134cd4c",
+"kind": "user",
+"en": "Duration: {1}s",
+"es": "Duración: {1}s"
+},
+{
+"id": "3e6929b2c2ba",
+"kind": "user",
+"en": "Easy",
+"es": "Fácil"
+},
+{
+"id": "337552fb688a",
+"kind": "user",
+"en": "Easy QTE",
+"es": "QTE fácil"
+},
+{
+"id": "bc7e21cd4709",
+"kind": "user",
+"en": "Easy/Medium/Hard/Impossible",
+"es": "Fácil/Medio/Difícil/Imposible"
+},
+{
+"id": "c89ef89d73a0",
+"kind": "user",
+"en": "Edit Object Spins",
+"es": "Editar giros del objeto"
+},
+{
+"id": "a60672ccfba2",
+"kind": "user",
+"en": "Effect",
+"es": "Efecto"
+},
+{
+"id": "d0faa8b4d407",
+"kind": "user",
+"en": "Effect (damage/stun_duration)",
+"es": "Efecto (damage/stun_duration)"
+},
+{
+"id": "36aa4bd4630a",
+"kind": "user",
+"en": "Effect Code",
+"es": "Código de efecto"
+},
+{
+"id": "ae510e9c7ac7",
+"kind": "user",
+"en": "Effect Type",
+"es": "Tipo de efecto"
+},
+{
+"id": "85e552506f49",
+"kind": "user",
+"en": "Effect: 'damage:50', 'heal:30', 'stun', or 'buff:attack'",
+"es": "Efecto: 'damage:50', 'heal:30', 'stun' o 'buff:attack'"
+},
+{
+"id": "ea1994824833",
+"kind": "user",
+"en": "Effects",
+"es": "Efectos"
+},
+{
+"id": "c1f250a7e69f",
+"kind": "user",
+"en": "Empty!",
+"es": "¡Vacío!"
+},
+{
+"id": "0cf3a0a2a325",
+"kind": "user",
+"en": "Enable or disable AI features",
+"es": "Activar o desactivar las funciones de IA"
+},
+{
+"id": "280085d447f4",
+"kind": "user",
+"en": "Enabled",
+"es": "Activado"
+},
+{
+"id": "8ffe1cd72042",
+"kind": "user",
+"en": "Endpoint",
+"es": "Endpoint"
+},
+{
+"id": "58e9bd2362ad",
+"kind": "user",
+"en": "Enter number of easy spins",
+"es": "Introduce el número de giros fáciles"
+},
+{
+"id": "ebc04401b97b",
+"kind": "user",
+"en": "Enter number of hard spins",
+"es": "Introduce el número de giros difíciles"
+},
+{
+"id": "52eae707b614",
+"kind": "user",
+"en": "Enter number of impossible spins",
+"es": "Introduce el número de giros imposibles"
+},
+{
+"id": "51c6c56fd6c4",
+"kind": "user",
+"en": "Enter number of medium spins",
+"es": "Introduce el número de giros medios"
+},
+{
+"id": "5af700310a48",
+"kind": "user",
+"en": "Enter total number of spins",
+"es": "Introduce el número total de giros"
+},
+{
+"id": "792ab66f021a",
+"kind": "user",
+"en": "Eres El Bot, un JUEZ GENEROSO en esta corte del Yendaverse. Evalua este argumento de la {1} en la Ronda {2}.\n\nCRITERIOS (maximo 10 puntos - SE GENEROSO):\n- EMOCION y PASION en el argumento (4 pts) - valora el sentimiento!\n- Creatividad y originalidad (3 pts) - cualquier esfuerzo creativo cuenta!\n- Coherencia basica (2 pts) - si tiene sentido, puntos!\n- Participacion (1 pt) - por el simple hecho de responder!\n\nIMPORTANTE: Eres un juez JUSTO pero GENEROSO. Si el argumento muestra CUALQUIER esfuerzo o emocion, dale minimo 7 puntos. Solo argumentos muy vagos o de una palabra merecen menos de 6.\n\nARGUMENTO: \"{3}\"\n\nResponde SOLAMENTE con un numero del 1 al 10.",
+"es": "Eres El Bot, un JUEZ GENEROSO en esta corte del Yendaverse. Evalua este argumento de la {1} en la Ronda {2}.\n\nCRITERIOS (maximo 10 puntos - SE GENEROSO):\n- EMOCION y PASION en el argumento (4 pts) - valora el sentimiento!\n- Creatividad y originalidad (3 pts) - cualquier esfuerzo creativo cuenta!\n- Coherencia basica (2 pts) - si tiene sentido, puntos!\n- Participacion (1 pt) - por el simple hecho de responder!\n\nIMPORTANTE: Eres un juez JUSTO pero GENEROSO. Si el argumento muestra CUALQUIER esfuerzo o emocion, dale minimo 7 puntos. Solo argumentos muy vagos o de una palabra merecen menos de 6.\n\nARGUMENTO: \"{3}\"\n\nResponde SOLAMENTE con un numero del 1 al 10."
+},
+{
+"id": "360fa24a472b",
+"kind": "user",
+"en": "Evade Chance (0-100%)",
+"es": "Probabilidad de esquivar (0-100%)"
+},
+{
+"id": "8bb2ede85916",
+"kind": "user",
+"en": "Evade GIFs: **{1}**\nCounter GIFs: **{2}**",
+"es": "GIF de esquiva: **{1}**\nGIF de contraataque: **{2}**"
+},
+{
+"id": "2538f940390a",
+"kind": "user",
+"en": "Evade time window in seconds",
+"es": "Ventana de tiempo para esquivar en segundos"
+},
+{
+"id": "0d5519064e70",
+"kind": "user",
+"en": "Evades",
+"es": "Esquivas"
+},
+{
+"id": "433f301b24b8",
+"kind": "user",
+"en": "Every {1} messages",
+"es": "Cada {1} mensajes"
+},
+{
+"id": "a663a069a4b1",
+"kind": "user",
+"en": "Exact character name (must match registered name)",
+"es": "Nombre exacto del personaje (debe coincidir con el nombre registrado)"
+},
+{
+"id": "27f8008ddaf5",
+"kind": "user",
+"en": "Exact name of the Tupper",
+"es": "Nombre exacto del Tupper"
+},
+{
+"id": "71239350f603",
+"kind": "user",
+"en": "Extra cooldown seconds per damage point (0-5, default 0.5)",
+"es": "Segundos extra de recarga por punto de daño (0-5, por defecto 0.5)"
+},
+{
+"id": "6fadf22e317f",
+"kind": "user",
+"en": "FINAL PLEA! Why should the court show mercy?",
+"es": "¡ALEGATO FINAL! ¿Por qué debería el tribunal mostrar piedad?"
+},
+{
+"id": "d42b5d3d45f9",
+"kind": "user",
+"en": "Filename of the object to approve (e.g., my_object.json)",
+"es": "Nombre del archivo del objeto a aprobar (p. ej., my_object.json)"
+},
+{
+"id": "1a088a8e66b3",
+"kind": "user",
+"en": "Filename to reject",
+"es": "Nombre de archivo a rechazar"
+},
+{
+"id": "ba8541692682",
+"kind": "user",
+"en": "Filename to test",
+"es": "Nombre de archivo a probar"
+},
+{
+"id": "bbea6cd4606e",
+"kind": "user",
+"en": "First parameter (depends on action)",
+"es": "Primer parámetro (depende de la acción)"
+},
+{
+"id": "4d34f837701b",
+"kind": "user",
+"en": "Fourth parameter (depends on action)",
+"es": "Cuarto parámetro (depende de la acción)"
+},
+{
+"id": "da1d83ccb54d",
+"kind": "user",
+"en": "GIF URL",
+"es": "URL del GIF"
+},
+{
+"id": "767595f4fee8",
+"kind": "user",
+"en": "GIF URL (optional)",
+"es": "URL del GIF (opcional)"
+},
+{
+"id": "acd4967d7504",
+"kind": "user",
+"en": "GIF {1}",
+"es": "GIF {1}"
+},
+{
+"id": "935f191d122c",
+"kind": "user",
+"en": "GM Only | Use buttons to configure",
+"es": "Solo GM | Usa los botones para configurar"
+},
+{
+"id": "8e7219615ceb",
+"kind": "user",
+"en": "GMs can edit spins using the button below",
+"es": "Los GM pueden editar los giros con el botón de abajo"
+},
+{
+"id": "3f5250e08f5f",
+"kind": "user",
+"en": "HP Bar Thread",
+"es": "Hilo de la barra de HP"
+},
+{
+"id": "1b3d576c3d02",
+"kind": "user",
+"en": "HP bars appear here when players register and battles begin",
+"es": "Las barras de HP aparecen aquí cuando los jugadores se registran y comienzan los combates"
+},
+{
+"id": "3c74e18934fd",
+"kind": "user",
+"en": "Hard",
+"es": "Difícil"
+},
+{
+"id": "2c1fed8611fd",
+"kind": "user",
+"en": "Hard QTE",
+"es": "QTE difícil"
+},
+{
+"id": "6cd50f47c680",
+"kind": "user",
+"en": "Hello, respond with a brief greeting.",
+"es": "Hola, responde con un saludo breve."
+},
+{
+"id": "9ab8cf230f90",
+"kind": "user",
+"en": "ID",
+"es": "ID"
+},
+{
+"id": "7be95f26c5ef",
+"kind": "user",
+"en": "ID: `{1}`\n(unchanged)",
+"es": "ID: `{1}`\n(sin cambios)"
+},
+{
+"id": "4cab99ac07a2",
+"kind": "user",
+"en": "ID: `{1}`\nType: {2} | {3} {4}{5}",
+"es": "ID: `{1}`\nTipo: {2} | {3} {4}{5}"
+},
+{
+"id": "5bf50e213e4f",
+"kind": "user",
+"en": "Image URLs",
+"es": "URLs de imágenes"
+},
+{
+"id": "ac4cf823e5d7",
+"kind": "user",
+"en": "Image for **{1}** has been updated.",
+"es": "La imagen de **{1}** ha sido actualizada."
+},
+{
+"id": "794d2c7e29f2",
+"kind": "user",
+"en": "Image {1}",
+"es": "Imagen {1}"
+},
+{
+"id": "2df515df05e3",
+"kind": "user",
+"en": "Impossible",
+"es": "Imposible"
+},
+{
+"id": "e392e685e55e",
+"kind": "user",
+"en": "Install models with: ollama pull <model_name>",
+"es": "Instala modelos con: ollama pull <model_name>"
+},
+{
+"id": "dbfad87a2827",
+"kind": "user",
+"en": "Instant",
+"es": "Instantáneo"
+},
+{
+"id": "8566fc1c4f48",
+"kind": "user",
+"en": "Invalid effect format",
+"es": "Formato de efecto no válido"
+},
+{
+"id": "8103bc8d5653",
+"kind": "user",
+"en": "Learn or upgrade a skill from the skill tree",
+"es": "Aprende o mejora una habilidad del árbol de habilidades"
+},
+{
+"id": "fe35f81b845a",
+"kind": "user",
+"en": "List All Powers",
+"es": "Listar todos los poderes"
+},
+{
+"id": "9b9dd48d2e18",
+"kind": "user",
+"en": "List available models",
+"es": "Listar los modelos disponibles"
+},
+{
+"id": "7aac982cab07",
+"kind": "user",
+"en": "Lives set to: {1} (system pending)",
+"es": "Vidas establecidas en: {1} (sistema pendiente)"
+},
+{
+"id": "86f92d59e42a",
+"kind": "user",
+"en": "Loaded **{1}** objects",
+"es": "**{1}** objetos cargados"
+},
+{
+"id": "0e47c1a4f589",
+"kind": "user",
+"en": "Loaded Objects",
+"es": "Objetos cargados"
+},
+{
+"id": "cb90b9dddfab",
+"kind": "user",
+"en": "Log File",
+"es": "Archivo de registro"
+},
+{
+"id": "2cedf94ba436",
+"kind": "user",
+"en": "Lookup Result for str({1})",
+"es": "Resultado de búsqueda para str({1})"
+},
+{
+"id": "9c327e426db2",
+"kind": "user",
+"en": "Lookup Result for user_id={1}",
+"es": "Resultado de búsqueda para user_id={1}"
+},
+{
+"id": "ebcf27f54b39",
+"kind": "user",
+"en": "Lyra's Safeguard - One-time protection",
+"es": "Lyra's Safeguard - Protección de un solo uso"
+},
+{
+"id": "7f9979fa5898",
+"kind": "user",
+"en": "Malevolent Shrine",
+"es": "Malevolent Shrine"
+},
+{
+"id": "edaf8864e4d0",
+"kind": "user",
+"en": "Maximum damage",
+"es": "Daño máximo"
+},
+{
+"id": "3c1895a0a5d5",
+"kind": "user",
+"en": "Maximum number of inventory slots",
+"es": "Número máximo de espacios de inventario"
+},
+{
+"id": "b225657c15bb",
+"kind": "user",
+"en": "Medium",
+"es": "Medio"
+},
+{
+"id": "92ec5d287ea3",
+"kind": "user",
+"en": "Medium QTE",
+"es": "QTE medio"
+},
+{
+"id": "d1be3043139f",
+"kind": "user",
+"en": "Minimum damage",
+"es": "Daño mínimo"
+},
+{
+"id": "5e4ee8d6661a",
+"kind": "user",
+"en": "Mirror Shard 20→5 Spins | No Stun Required!",
+"es": "Mirror Shard 20→5 giros | ¡No requiere aturdimiento!"
+},
+{
+"id": "410f6650e8ce",
+"kind": "user",
+"en": "Misses",
+"es": "Fallos"
+},
+{
+"id": "4bf99cc3c74f",
+"kind": "user",
+"en": "Model",
+"es": "Modelo"
+},
+{
+"id": "d48ed07de685",
+"kind": "user",
+"en": "Model `{1}` is not installed.\n\nAvailable models:\n",
+"es": "El modelo `{1}` no está instalado.\n\nModelos disponibles:\n"
+},
+{
+"id": "d208056ad0fe",
+"kind": "user",
+"en": "Model `{1}` may not have loaded correctly. Try testing with `/aitest`.",
+"es": "Es posible que el modelo `{1}` no se haya cargado correctamente. Prueba con `/aitest`."
+},
+{
+"id": "c748b26a41b4",
+"kind": "user",
+"en": "Model name to switch to (for 'switch' action)",
+"es": "Nombre del modelo al que cambiar (para la acción 'switch')"
+},
+{
+"id": "706b12b53b58",
+"kind": "user",
+"en": "Models",
+"es": "Modelos"
+},
+{
+"id": "451ce37de019",
+"kind": "user",
+"en": "Name: {1}\nType: {2}",
+"es": "Nombre: {1}\nTipo: {2}"
+},
+{
+"id": "bea799a1743a",
+"kind": "user",
+"en": "New Spins",
+"es": "Nuevos giros"
+},
+{
+"id": "a89c2c813ac0",
+"kind": "user",
+"en": "New cooldown in seconds (for set_cooldown action)",
+"es": "Nueva recarga en segundos (para la acción set_cooldown)"
+},
+{
+"id": "211a67ada0d6",
+"kind": "user",
+"en": "No",
+"es": "No"
+},
+{
+"id": "486359aab4d5",
+"kind": "user",
+"en": "No branches",
+"es": "Sin ramas"
+},
+{
+"id": "570d629fb908",
+"kind": "user",
+"en": "No counter images set!\n\nUse `/setcountergif` to add images.",
+"es": "¡No hay imágenes de contraataque configuradas!\n\nUsa `/setcountergif` para añadir imágenes."
+},
+{
+"id": "ecc26192c233",
+"kind": "user",
+"en": "No crit",
+"es": "Sin crítico"
+},
+{
+"id": "01e10894874f",
+"kind": "user",
+"en": "No data yet!",
+"es": "¡Aún no hay datos!"
+},
+{
+"id": "6d22001e6258",
+"kind": "user",
+"en": "No objects in inventory.",
+"es": "No hay objetos en el inventario."
+},
+{
+"id": "fbc3f659c0f7",
+"kind": "user",
+"en": "No special objects found.",
+"es": "No se encontraron objetos especiales."
+},
+{
+"id": "e33e91b7c09c",
+"kind": "user",
+"en": "None",
+"es": "Ninguno"
+},
+{
+"id": "d877dbc9159f",
+"kind": "user",
+"en": "Number of lives (future feature)",
+"es": "Número de vidas (función futura)"
+},
+{
+"id": "74d623d13703",
+"kind": "user",
+"en": "Number of messages before auto-response (0 to disable)",
+"es": "Número de mensajes antes de la respuesta automática (0 para desactivar)"
+},
+{
+"id": "512e07782eba",
+"kind": "user",
+"en": "Number of skill points to give",
+"es": "Número de puntos de habilidad a dar"
+},
+{
+"id": "432ac11442cf",
+"kind": "user",
+"en": "Number of spins to set",
+"es": "Número de giros a establecer"
+},
+{
+"id": "62081f565c73",
+"kind": "user",
+"en": "Objects with adaptation in inventory",
+"es": "Objetos con adaptación en el inventario"
+},
+{
+"id": "bc2b26652c0d",
+"kind": "user",
+"en": "Old Spins",
+"es": "Giros anteriores"
+},
+{
+"id": "26857de7be00",
+"kind": "user",
+"en": "Ollama model name (default: dolphin-phi:2.7b)",
+"es": "Nombre del modelo de Ollama (por defecto: dolphin-phi:2.7b)"
+},
+{
+"id": "13760b9851a2",
+"kind": "user",
+"en": "Open your personal dashboard with stats, settings, and skill builder",
+"es": "Abre tu panel personal con estadísticas, ajustes y constructor de habilidades"
+},
+{
+"id": "91a9f213d28f",
+"kind": "user",
+"en": "Optional reason for rejection",
+"es": "Motivo del rechazo (opcional)"
+},
+{
+"id": "bb79e697bc95",
+"kind": "user",
+"en": "Optional: A phrase in quotes that auto-triggers this power (e.g., 'Domain Expansion')",
+"es": "Opcional: una frase entre comillas que active este poder automáticamente (p. ej., 'Domain Expansion')"
+},
+{
+"id": "5324bb16270c",
+"kind": "user",
+"en": "Optional: Upload an image/GIF for this power",
+"es": "Opcional: sube una imagen/GIF para este poder"
+},
+{
+"id": "cd51b0e4dc97",
+"kind": "user",
+"en": "Parries",
+"es": "Parries"
+},
+{
+"id": "e705a63def69",
+"kind": "user",
+"en": "Parry Streak",
+"es": "Racha de parry"
+},
+{
+"id": "251a306760f7",
+"kind": "user",
+"en": "Parry window end time in seconds",
+"es": "Fin de la ventana de parry en segundos"
+},
+{
+"id": "9ee488096247",
+"kind": "user",
+"en": "Parry window start time in seconds",
+"es": "Inicio de la ventana de parry en segundos"
+},
+{
+"id": "be39392b23b2",
+"kind": "user",
+"en": "Perfect parry timing (for Black Flash)",
+"es": "Momento perfecto de parry (para Black Flash)"
+},
+{
+"id": "99c626fe3ea6",
+"kind": "user",
+"en": "Player Max HP: {1} → {2}",
+"es": "HP máximo del jugador: {1} → {2}"
+},
+{
+"id": "240612b8b4c3",
+"kind": "user",
+"en": "Player to check (leave empty for self)",
+"es": "Jugador a consultar (déjalo vacío para ti mismo)"
+},
+{
+"id": "6da7c6f0d857",
+"kind": "user",
+"en": "Player's Inventory",
+"es": "Inventario del jugador"
+},
+{
+"id": "f8ff45b93cc4",
+"kind": "user",
+"en": "Power 1",
+"es": "Poder 1"
+},
+{
+"id": "cca915ad2fd0",
+"kind": "user",
+"en": "Power 1: **{1}%**\nPower 2: **{2}%**",
+"es": "Poder 1: **{1}%**\nPoder 2: **{2}%**"
+},
+{
+"id": "042efa1a5a8b",
+"kind": "user",
+"en": "Power 2",
+"es": "Poder 2"
+},
+{
+"id": "25d60e602f75",
+"kind": "user",
+"en": "Power level (depends on skill type)",
+"es": "Nivel de poder (depende del tipo de habilidad)"
+},
+{
+"id": "238d38898b1d",
+"kind": "user",
+"en": "Power name (e.g., 'Time Freeze', 'Divine Scythe')",
+"es": "Nombre del poder (p. ej., 'Time Freeze', 'Divine Scythe')"
+},
+{
+"id": "58e8b3253bfc",
+"kind": "user",
+"en": "Power slot: 1 (lore power) or 2 (story power)",
+"es": "Espacio de poder: 1 (poder de lore) o 2 (poder de historia)"
+},
+{
+"id": "60402f52ee5b",
+"kind": "user",
+"en": "Power {1}",
+"es": "Poder {1}"
+},
+{
+"id": "c8737478332b",
+"kind": "user",
+"en": "Present your DEFENSE! Why are you **INNOCENT**?",
+"es": "¡Presenta tu DEFENSA! ¿Por qué eres **INOCENTE**?"
+},
+{
+"id": "0455d5671d0e",
+"kind": "user",
+"en": "Present your EVIDENCE! What crimes has the defendant committed?",
+"es": "¡Presenta tus PRUEBAS! ¿Qué crímenes ha cometido el acusado?"
+},
+{
+"id": "11e20029b882",
+"kind": "user",
+"en": "Present your OPENING STATEMENT! Why should the defendant be found **GUILTY**?",
+"es": "¡Presenta tu ALEGATO DE APERTURA! ¿Por qué se debería declarar **CULPABLE** al acusado?"
+},
+{
+"id": "4f47dbc33446",
+"kind": "user",
+"en": "Previous",
+"es": "Anterior"
+},
+{
+"id": "4563f0f05f64",
+"kind": "user",
+"en": "Previous channel: {1}",
+"es": "Canal anterior: {1}"
+},
+{
+"id": "73ba1323e34d",
+"kind": "user",
+"en": "Prompt",
+"es": "Prompt"
+},
+{
+"id": "c16ab041b221",
+"kind": "user",
+"en": "QTE Player Role",
+"es": "Rol de jugador QTE"
+},
+{
+"id": "4bd984330acc",
+"kind": "user",
+"en": "QTE difficulty level",
+"es": "Nivel de dificultad del QTE"
+},
+{
+"id": "98fc5a83458b",
+"kind": "user",
+"en": "QTE system is now linked to this channel!",
+"es": "¡El sistema de QTE ahora está vinculado a este canal!"
+},
+{
+"id": "5a1c8e37fe9b",
+"kind": "user",
+"en": "Rarity",
+"es": "Rareza"
+},
+{
+"id": "fba492fe6310",
+"kind": "user",
+"en": "Raw Inventory Keys (first 10)",
+"es": "Claves de inventario sin procesar (primeras 10)"
+},
+{
+"id": "1f500ceafe64",
+"kind": "user",
+"en": "Reduces outgoing damage by 50%",
+"es": "Reduce el daño saliente en un 50%"
+},
+{
+"id": "3903bfb8ae96",
+"kind": "user",
+"en": "Reduces ultimate charge gain",
+"es": "Reduce la ganancia de carga de la definitiva"
+},
+{
+"id": "4c4e67b224ef",
+"kind": "user",
+"en": "Register a custom power/attack for your character. Character must be registered first!",
+"es": "Registra un poder/ataque personalizado para tu personaje. ¡El personaje debe estar registrado primero!"
+},
+{
+"id": "bd4df25e021c",
+"kind": "user",
+"en": "Register your Tupperbox character. Copy the EXACT character name from Tupperbox.",
+"es": "Registra tu personaje de Tupperbox. Copia el nombre EXACTO del personaje desde Tupperbox."
+},
+{
+"id": "c40408be9548",
+"kind": "user",
+"en": "Reload current model",
+"es": "Recargar el modelo actual"
+},
+{
+"id": "2e8d66780e4e",
+"kind": "user",
+"en": "Remove a character registration. You'll need to provide the exact character name.",
+"es": "Elimina el registro de un personaje. Debes indicar el nombre exacto del personaje."
+},
+{
+"id": "28319e291dc8",
+"kind": "user",
+"en": "Remove your title",
+"es": "Quita tu título"
+},
+{
+"id": "ebea7f8f1c5b",
+"kind": "user",
+"en": "Reset all adaptation spins for **{1}** ({2})\n\nPlayer: {3}",
+"es": "Restablecer todos los giros de adaptación de **{1}** ({2})\n\nJugador: {3}"
+},
+{
+"id": "4a09e2af17bc",
+"kind": "user",
+"en": "Response",
+"es": "Respuesta"
+},
+{
+"id": "4c0a822edd1f",
+"kind": "user",
+"en": "Rest in peace...",
+"es": "Descansa en paz..."
+},
+{
+"id": "c7249475430f",
+"kind": "user",
+"en": "Restrict AI to this channel only (leave empty for all channels)",
+"es": "Limita la IA solo a este canal (déjalo vacío para todos los canales)"
+},
+{
+"id": "f54648e5ae97",
+"kind": "user",
+"en": "Rewards",
+"es": "Recompensas"
+},
+{
+"id": "97509a1e96bb",
+"kind": "user",
+"en": "Saves",
+"es": "Salvaciones"
+},
+{
+"id": "13869499f622",
+"kind": "user",
+"en": "Second parameter (depends on action)",
+"es": "Segundo parámetro (depende de la acción)"
+},
+{
+"id": "a2ec0b2d9351",
+"kind": "user",
+"en": "Seconds between auto-responses",
+"es": "Segundos entre respuestas automáticas"
+},
+{
+"id": "7d126f0ac3fa",
+"kind": "user",
+"en": "Select ability...",
+"es": "Selecciona una habilidad..."
+},
+{
+"id": "ea61e2a4d413",
+"kind": "user",
+"en": "Select an ability to use:",
+"es": "Selecciona una habilidad para usar:"
+},
+{
+"id": "38c64150811b",
+"kind": "user",
+"en": "Set Power Cooldown",
+"es": "Definir recarga del poder"
+},
+{
+"id": "b30711e0e171",
+"kind": "user",
+"en": "Set max player HP (e.g., 150)",
+"es": "Define el HP máximo de los jugadores (p. ej., 150)"
+},
+{
+"id": "5f905555b0ec",
+"kind": "user",
+"en": "Set spins for **{1}** ({2})\n\nPlayer: {3}",
+"es": "Giros establecidos para **{1}** ({2})\n\nJugador: {3}"
+},
+{
+"id": "e4bc94ec09d5",
+"kind": "user",
+"en": "Skill Name",
+"es": "Nombre de la habilidad"
+},
+{
+"id": "5881f82b9324",
+"kind": "user",
+"en": "Slot",
+"es": "Espacio"
+},
+{
+"id": "e1d7dcb517c6",
+"kind": "user",
+"en": "Slots Required",
+"es": "Espacios requeridos"
+},
+{
+"id": "708d1cf19115",
+"kind": "user",
+"en": "Slots Used",
+"es": "Espacios usados"
+},
+{
+"id": "f9fc483ae780",
+"kind": "user",
+"en": "Slow but persistent damage",
+"es": "Daño lento pero persistente"
+},
+{
+"id": "23d52dac71c5",
+"kind": "user",
+"en": "Status",
+"es": "Estado"
+},
+{
+"id": "140d5397b566",
+"kind": "user",
+"en": "Status Effect (optional: type:chance:duration)",
+"es": "Efecto de estado (opcional: tipo:probabilidad:duración)"
+},
+{
+"id": "c6c580ca5867",
+"kind": "user",
+"en": "Status: {1}",
+"es": "Estado: {1}"
+},
+{
+"id": "9cdf5a8ae758",
+"kind": "user",
+"en": "Success Rate",
+"es": "Tasa de éxito"
+},
+{
+"id": "e5aa4e2d00e5",
+"kind": "user",
+"en": "Successful",
+"es": "Exitoso"
+},
+{
+"id": "5d0676e6dadd",
+"kind": "user",
+"en": "Successfully reloaded `{1}`",
+"es": "`{1}` recargado correctamente"
+},
+{
+"id": "ee132888fc9a",
+"kind": "user",
+"en": "Successfully switched from `{1}` to `{2}`",
+"es": "Cambiado correctamente de `{1}` a `{2}`"
+},
+{
+"id": "f953d093fc83",
+"kind": "user",
+"en": "Switch model",
+"es": "Cambiar de modelo"
+},
+{
+"id": "0557b2a80c1b",
+"kind": "user",
+"en": "Takes consistent fire damage over time",
+"es": "Recibe daño de fuego constante con el tiempo"
+},
+{
+"id": "6f23c1dcabcb",
+"kind": "user",
+"en": "Takes damage over time, stacks increase damage",
+"es": "Hace daño con el tiempo, las acumulaciones aumentan el daño"
+},
+{
+"id": "0c1132a35f6d",
+"kind": "user",
+"en": "Target",
+"es": "Objetivo"
+},
+{
+"id": "f42b3cac848f",
+"kind": "user",
+"en": "Target (self / ally / @username)",
+"es": "Objetivo (self / ally / @username)"
+},
+{
+"id": "91bbfe2868dd",
+"kind": "user",
+"en": "Target user (leave empty for self)",
+"es": "Usuario objetivo (déjalo vacío para ti mismo)"
+},
+{
+"id": "bec7b15faf21",
+"kind": "user",
+"en": "Test AI connection with a simple prompt",
+"es": "Prueba la conexión con la IA con un prompt sencillo"
+},
+{
+"id": "7242c39bb388",
+"kind": "user",
+"en": "Test prompt to send to the AI",
+"es": "Prompt de prueba para enviar a la IA"
+},
+{
+"id": "425be7134245",
+"kind": "user",
+"en": "The ID of the object",
+"es": "El ID del objeto"
+},
+{
+"id": "3f6da1eb0944",
+"kind": "user",
+"en": "The ID of the object (e.g., reactive_core)",
+"es": "El ID del objeto (p. ej., reactive_core)"
+},
+{
+"id": "a2de63075ecf",
+"kind": "user",
+"en": "The ID of the object to remove",
+"es": "El ID del objeto a eliminar"
+},
+{
+"id": "0fc6777f1ece",
+"kind": "user",
+"en": "The ID of the object to reset",
+"es": "El ID del objeto a reiniciar"
+},
+{
+"id": "c3a3d979c99f",
+"kind": "user",
+"en": "The ID of the object to view",
+"es": "El ID del objeto a ver"
+},
+{
+"id": "75d1541230c6",
+"kind": "user",
+"en": "The URL of the image (or 'clear' to remove)",
+"es": "La URL de la imagen (o 'clear' para quitarla)"
+},
+{
+"id": "70440d2faa2d",
+"kind": "user",
+"en": "The achievement ID to grant",
+"es": "El ID del logro a otorgar"
+},
+{
+"id": "4b2c91b2302e",
+"kind": "user",
+"en": "The achievement ID to remove",
+"es": "El ID del logro que se quitará"
+},
+{
+"id": "4bd3fceda9f1",
+"kind": "user",
+"en": "The beast is slain. Rest now, warrior.",
+"es": "La bestia ha caído. Descansa ahora, guerrero."
+},
+{
+"id": "f07bb21031d8",
+"kind": "user",
+"en": "The channel where QTE battles will happen",
+"es": "El canal donde ocurrirán los combates QTE"
+},
+{
+"id": "7a21d288d84d",
+"kind": "user",
+"en": "The goddess's protection shields **{1}**.",
+"es": "La protección de la diosa resguarda a **{1}**."
+},
+{
+"id": "5d1637962c71",
+"kind": "user",
+"en": "The player to give skill points to",
+"es": "El jugador al que dar puntos de habilidad"
+},
+{
+"id": "ddfc2648c405",
+"kind": "user",
+"en": "The player to give the achievement to",
+"es": "El jugador al que dar el logro"
+},
+{
+"id": "95d89ace81b2",
+"kind": "user",
+"en": "The player to give the object to",
+"es": "El jugador al que dar el objeto"
+},
+{
+"id": "c9c2f1ccbf4e",
+"kind": "user",
+"en": "The player to modify",
+"es": "El jugador a modificar"
+},
+{
+"id": "a0fedb582269",
+"kind": "user",
+"en": "The player to remove the achievement from",
+"es": "El jugador al que quitar el logro"
+},
+{
+"id": "3221bf589bcc",
+"kind": "user",
+"en": "The player to remove the object from",
+"es": "El jugador al que quitarle el objeto"
+},
+{
+"id": "e54187962de9",
+"kind": "user",
+"en": "The player to reset HP for (leave empty for all players)",
+"es": "El jugador cuyo HP reiniciar (déjalo vacío para todos los jugadores)"
+},
+{
+"id": "fead5d6dd697",
+"kind": "user",
+"en": "The player to target",
+"es": "El jugador objetivo"
+},
+{
+"id": "b8c1181880c7",
+"kind": "user",
+"en": "The player to view/edit",
+"es": "El jugador a ver/editar"
+},
+{
+"id": "1891b455e36e",
+"kind": "user",
+"en": "The player whose object spins to reset",
+"es": "El jugador cuyos giros de objeto se reiniciarán"
+},
+{
+"id": "64a8391a420f",
+"kind": "user",
+"en": "The player whose object spins to set",
+"es": "El jugador cuyos giros de objeto se establecerán"
+},
+{
+"id": "86cc76ab436b",
+"kind": "user",
+"en": "The role for QTE players (optional - keeps current if not set)",
+"es": "El rol para los jugadores de QTE (opcional - mantiene el actual si no se indica)"
+},
+{
+"id": "dd55332f0aab",
+"kind": "user",
+"en": "The skill ID to learn (shown in /skillbranch)",
+"es": "El ID de la habilidad a aprender (se muestra en /skillbranch)"
+},
+{
+"id": "b46a4282c815",
+"kind": "user",
+"en": "The tyrant falls... their reign ends here.",
+"es": "El tirano cae... su reinado termina aquí."
+},
+{
+"id": "d4acd802b5b0",
+"kind": "user",
+"en": "Third parameter (depends on action)",
+"es": "Tercer parámetro (depende de la acción)"
+},
+{
+"id": "084a27d85833",
+"kind": "user",
+"en": "This thread displays live HP bars for all players and bosses.\n\n**This thread is managed by the bot.**\nHP bars will automatically update during battles.",
+"es": "Este hilo muestra las barras de HP en vivo de todos los jugadores y jefes.\n\n**Este hilo lo gestiona el bot.**\nLas barras de HP se actualizarán automáticamente durante los combates."
+},
+{
+"id": "33c87bbaa741",
+"kind": "user",
+"en": "Threshold: {1}% HP\nDamage Mult: {2}x\nBF Bonus: +{3}%",
+"es": "Umbral: {1}% de HP\nMultiplicador de daño: {2}x\nBonus de BF: +{3}%"
+},
+{
+"id": "76079653bd78",
+"kind": "user",
+"en": "Timing",
+"es": "Sincronización"
+},
+{
+"id": "933351448ccb",
+"kind": "user",
+"en": "Toggle Self-Recharge",
+"es": "Alternar autorrecarga"
+},
+{
+"id": "af4e10a5af6e",
+"kind": "user",
+"en": "Toggle self-recharge (for toggle_recharge action)",
+"es": "Alterna la autorrecarga (para la acción toggle_recharge)"
+},
+{
+"id": "f6e714c4526c",
+"kind": "user",
+"en": "Toggle your QTE participation status",
+"es": "Activa o desactiva tu participación en los QTE"
+},
+{
+"id": "541c48f7c4db",
+"kind": "user",
+"en": "Total Attempts",
+"es": "Intentos totales"
+},
+{
+"id": "fa764754b45a",
+"kind": "user",
+"en": "Total Inventories",
+"es": "Inventarios totales"
+},
+{
+"id": "668d64792127",
+"kind": "user",
+"en": "Total Spins",
+"es": "Giros totales"
+},
+{
+"id": "006feed97ad1",
+"kind": "user",
+"en": "Total players: {1}",
+"es": "Total de jugadores: {1}"
+},
+{
+"id": "058bb32f386a",
+"kind": "user",
+"en": "Track your special object adaptation progress per difficulty.",
+"es": "Sigue tu progreso de adaptación del objeto especial por dificultad."
+},
+{
+"id": "b1d4ad22442e",
+"kind": "user",
+"en": "Tradeable",
+"es": "Intercambiable"
+},
+{
+"id": "088043723830",
+"kind": "user",
+"en": "Tupperbox Character Name",
+"es": "Nombre del personaje de Tupperbox"
+},
+{
+"id": "c8563862cf5d",
+"kind": "user",
+"en": "Type",
+"es": "Tipo"
+},
+{
+"id": "453c734bf93b",
+"kind": "user",
+"en": "Type (simple/dps/stun)",
+"es": "Tipo (simple/dps/stun)"
+},
+{
+"id": "6a5553bbca64",
+"kind": "user",
+"en": "Type of support to cast",
+"es": "Tipo de apoyo a lanzar"
+},
+{
+"id": "54f7222ffdf6",
+"kind": "user",
+"en": "Type: destructive, support, defend, build, or control",
+"es": "Tipo: destructive, support, defend, build o control"
+},
+{
+"id": "f540d18f7210",
+"kind": "user",
+"en": "Type: {1}",
+"es": "Tipo: {1}"
+},
+{
+"id": "39c6df758312",
+"kind": "user",
+"en": "Type: {1} | 💡 Cooldowns tick during fights only!",
+"es": "Tipo: {1} | 💡 ¡Las recargas solo avanzan durante los combates!"
+},
+{
+"id": "8432f7bb161d",
+"kind": "user",
+"en": "Ult Cooldown Per Damage: {1}s → {2}s",
+"es": "Recarga de definitiva por daño: {1}s → {2}s"
+},
+{
+"id": "a6b42b640f39",
+"kind": "user",
+"en": "Unique",
+"es": "Único"
+},
+{
+"id": "3c5741f025bb",
+"kind": "user",
+"en": "Unknown effect type: {1}",
+"es": "Tipo de efecto desconocido: {1}"
+},
+{
+"id": "57547a33687c",
+"kind": "user",
+"en": "Unlocked: **{1}** / **{2}**",
+"es": "Desbloqueados: **{1}** / **{2}**"
+},
+{
+"id": "213f15a4b6f2",
+"kind": "user",
+"en": "Updated **{1}** spins for **{2}**",
+"es": "Se actualizaron los giros de **{1}** para **{2}**"
+},
+{
+"id": "0c9bc6492bd1",
+"kind": "user",
+"en": "Upload a victory GIF/image to ADD to the collection.",
+"es": "Sube un GIF/imagen de victoria para AÑADIRLO a la colección."
+},
+{
+"id": "a46cdebae208",
+"kind": "user",
+"en": "Upload an image or GIF for the boss display",
+"es": "Sube una imagen o GIF para mostrar al jefe"
+},
+{
+"id": "26db7c79d439",
+"kind": "user",
+"en": "Upload your counter GIF or image to ADD to your collection.",
+"es": "Sube tu GIF o imagen de contraataque para AÑADIRLO a tu colección."
+},
+{
+"id": "ed78d42f31e5",
+"kind": "user",
+"en": "Use *power1* or *power2* when at 100% to activate!",
+"es": "¡Usa *power1* o *power2* al 100% para activarlo!"
+},
+{
+"id": "a75be97a1db8",
+"kind": "user",
+"en": "Use --your message to prompt the AI directly",
+"es": "Usa --tu mensaje para dirigirte directamente a la IA"
+},
+{
+"id": "d7145659c799",
+"kind": "user",
+"en": "Use /aimodel action:Switch model_name:<name> to change",
+"es": "Usa /aimodel action:Switch model_name:<name> para cambiarlo"
+},
+{
+"id": "c4823552a407",
+"kind": "user",
+"en": "Use /bossdefeatgif to add custom victory GIFs!",
+"es": "¡Usa /bossdefeatgif para añadir GIFs de victoria personalizados!"
+},
+{
+"id": "e58797a5a07b",
+"kind": "user",
+"en": "Use /config <action> to modify values",
+"es": "Usa /config <action> para modificar los valores"
+},
+{
+"id": "8d5d81fbe92a",
+"kind": "user",
+"en": "Use /learnsk <skill_id> to learn a skill",
+"es": "Usa /learnsk <skill_id> para aprender una habilidad"
+},
+{
+"id": "70f87ecf9920",
+"kind": "user",
+"en": "Use /registerpower to add powers!",
+"es": "¡Usa /registerpower para añadir poderes!"
+},
+{
+"id": "0f07c0484cce",
+"kind": "user",
+"en": "Use /setcountergif add to add more, or clear to remove all",
+"es": "Usa /setcountergif add para añadir más, o clear para quitarlas todas"
+},
+{
+"id": "505e5f586eb9",
+"kind": "user",
+"en": "Use /setobjectspins to change values | /resetobjectspins to reset",
+"es": "Usa /setobjectspins para cambiar valores | /resetobjectspins para reiniciar"
+},
+{
+"id": "d9f126853e42",
+"kind": "user",
+"en": "Use /skillbranch <branch> to view skills in a branch",
+"es": "Usa /skillbranch <branch> para ver las habilidades de una rama"
+},
+{
+"id": "3f04b49e0757",
+"kind": "user",
+"en": "Use Mirror Shard to invoke a QTE against the enemy (requires 20 total spins)",
+"es": "Usa Mirror Shard para invocar un QTE contra el enemigo (requiere 20 giros en total)"
+},
+{
+"id": "238880729ecd",
+"kind": "user",
+"en": "Use QTE commands to engage the boss!",
+"es": "¡Usa los comandos de QTE para enfrentarte al jefe!"
+},
+{
+"id": "93a899bc62cd",
+"kind": "user",
+"en": "Use `/giveachievement` with these IDs",
+"es": "Usa `/giveachievement` con estos IDs"
+},
+{
+"id": "5f3b0a43e67e",
+"kind": "user",
+"en": "Use a support skill to buff yourself or an ally!",
+"es": "¡Usa una habilidad de apoyo para potenciarte a ti o a un aliado!"
+},
+{
+"id": "f0aadb4cf247",
+"kind": "user",
+"en": "Use this effect code in /registerpower",
+"es": "Usa este código de efecto en /registerpower"
+},
+{
+"id": "99ed82da5e58",
+"kind": "user",
+"en": "User ID: `{1}` (type: {2})",
+"es": "ID de usuario: `{1}` (tipo: {2})"
+},
+{
+"id": "9e6903b5ddd7",
+"kind": "user",
+"en": "Victory! The darkness recedes...",
+"es": "¡Victoria! La oscuridad retrocede..."
+},
+{
+"id": "63bd87463bf7",
+"kind": "user",
+"en": "View Collection",
+"es": "Ver colección"
+},
+{
+"id": "8c7a7ac59937",
+"kind": "user",
+"en": "View all Tupperbox characters you have registered to your Discord account",
+"es": "Ver todos los personajes de Tupperbox registrados en tu cuenta de Discord"
+},
+{
+"id": "f45a69320cd4",
+"kind": "user",
+"en": "View detailed info about a special object",
+"es": "Ver información detallada de un objeto especial"
+},
+{
+"id": "5a6f310867d5",
+"kind": "user",
+"en": "View skills in a specific branch",
+"es": "Ver las habilidades de una rama específica"
+},
+{
+"id": "9740fdb76b3d",
+"kind": "user",
+"en": "View the top players by various stats",
+"es": "Ver a los mejores jugadores según distintas estadísticas"
+},
+{
+"id": "90ce70a3c2b3",
+"kind": "user",
+"en": "View your QTE performance stats: attempts, success rate, best time, Black Flashes, etc.",
+"es": "Mira tus estadísticas de QTE: intentos, tasa de éxito, mejor tiempo, Black Flashes, etc."
+},
+{
+"id": "f2d6d01f5874",
+"kind": "user",
+"en": "View your current ultimate power charge percentages and cooldowns",
+"es": "Ver los porcentajes de carga y las recargas de tus poderes definitivos actuales"
+},
+{
+"id": "820fb6654062",
+"kind": "user",
+"en": "View your skill tree and available skills",
+"es": "Mira tu árbol de habilidades y las habilidades disponibles"
+},
+{
+"id": "e7d7a32e1c05",
+"kind": "user",
+"en": "View your special objects inventory or another player's",
+"es": "Consulta tu inventario de objetos especiales o el de otro jugador"
+},
+{
+"id": "161f28ee4ca3",
+"kind": "user",
+"en": "View your unlocked achievements",
+"es": "Consulta tus logros desbloqueados"
+},
+{
+"id": "cfce970a30f0",
+"kind": "user",
+"en": "Welcome to your personal QTE dashboard!",
+"es": "¡Te damos la bienvenida a tu panel personal de QTE!"
+},
+{
+"id": "73f6254222c2",
+"kind": "user",
+"en": "What the power does (e.g., 'Stops time for 2 seconds')",
+"es": "Qué hace el poder (p. ej., 'Detiene el tiempo durante 2 segundos')"
+},
+{
+"id": "645cc2479fdd",
+"kind": "user",
+"en": "What to do: view, qte, damage, revenge, blackflash, ultimate, save, reset",
+"es": "Qué hacer: view, qte, damage, revenge, blackflash, ultimate, save, reset"
+},
+{
+"id": "a49445b6911d",
+"kind": "user",
+"en": "What to rank by",
+"es": "Criterio de clasificación"
+},
+{
+"id": "eb6a9e9d98e7",
+"kind": "user",
+"en": "Which difficulty to edit",
+"es": "Qué dificultad editar"
+},
+{
+"id": "6355554218f1",
+"kind": "user",
+"en": "Yes",
+"es": "Sí"
+},
+{
+"id": "eaae38852780",
+"kind": "user",
+"en": "You are a helpful assistant in a Discord server focused on roleplaying and QTE combat. Keep responses brief and engaging.",
+"es": "Eres un asistente útil en un servidor de Discord centrado en el rol y el combate QTE. Mantén las respuestas breves y atractivas."
+},
+{
+"id": "cd4f38caf92e",
+"kind": "user",
+"en": "You don't have any special objects yet!\n\nAsk a GM to grant you items with `/giveobject`.",
+"es": "¡Aún no tienes ningún objeto especial!\n\nPídele a un GM que te otorgue objetos con `/giveobject`."
+},
+{
+"id": "4dde6d853b35",
+"kind": "user",
+"en": "You now have **{1}** counter image(s)!\nThey will be randomized when you counter.",
+"es": "¡Ahora tienes **{1}** imagen(es) de contraataque!\nSe elegirán al azar cuando contraataques."
+},
+{
+"id": "56ce6ca21867",
+"kind": "user",
+"en": "Your Domains",
+"es": "Tus dominios"
+},
+{
+"id": "845dfe7050b2",
+"kind": "user",
+"en": "[ADMIN] Adjust game values in real-time",
+"es": "[ADMIN] Ajusta valores del juego en tiempo real"
+},
+{
+"id": "2782b8247e69",
+"kind": "user",
+"en": "[ADMIN] Approve a pending special object",
+"es": "[ADMIN] Aprueba un objeto especial pendiente"
+},
+{
+"id": "f082d7c98f5d",
+"kind": "user",
+"en": "[ADMIN] Configure AI/Ollama integration",
+"es": "[ADMIN] Configura la integración de IA/Ollama"
+},
+{
+"id": "de690a614a76",
+"kind": "user",
+"en": "[ADMIN] Debug: Show raw inventory data for a player",
+"es": "[ADMIN] Depuración: mostrar los datos brutos del inventario de un jugador"
+},
+{
+"id": "3b6cfabc1349",
+"kind": "user",
+"en": "[ADMIN] Edit QTE timing and damage values",
+"es": "[ADMIN] Edita los tiempos y valores de daño de los QTE"
+},
+{
+"id": "648d00e49491",
+"kind": "user",
+"en": "[ADMIN] Give a special object to a player",
+"es": "[ADMIN] Dar un objeto especial a un jugador"
+},
+{
+"id": "bafbda3d6120",
+"kind": "user",
+"en": "[ADMIN] Hot-reload all special objects",
+"es": "[ADMIN] Recarga en caliente todos los objetos especiales"
+},
+{
+"id": "4d67e1e59ff1",
+"kind": "user",
+"en": "[ADMIN] List all approved special objects",
+"es": "[ADMIN] Listar todos los objetos especiales aprobados"
+},
+{
+"id": "1505736c74b5",
+"kind": "user",
+"en": "[ADMIN] List available AI models or switch to a different one",
+"es": "[ADMIN] Lista los modelos de IA disponibles o cambia a otro"
+},
+{
+"id": "2b1ba0256a5f",
+"kind": "user",
+"en": "[ADMIN] List special objects awaiting approval",
+"es": "[ADMIN] Lista los objetos especiales pendientes de aprobación"
+},
+{
+"id": "3f19b2e7dd37",
+"kind": "user",
+"en": "[ADMIN] Manage boss defeat celebration GIFs. Multiple GIFs will be randomized!",
+"es": "[ADMIN] Gestiona los GIFs de celebración por derrotar al jefe. ¡Se elegirán al azar!"
+},
+{
+"id": "ff7777b5f840",
+"kind": "user",
+"en": "[ADMIN] Manually sync slash commands with Discord. Use if commands aren't showing.",
+"es": "[ADMIN] Sincroniza manualmente los comandos con Discord. Úsalo si no aparecen."
+},
+{
+"id": "6432058ab01c",
+"kind": "user",
+"en": "[ADMIN] Register a boss. Provide: name, max HP, and upload an image/GIF.",
+"es": "[ADMIN] Registra un jefe. Indica: nombre, HP máximo y sube una imagen/GIF."
+},
+{
+"id": "cee201d6f6e9",
+"kind": "user",
+"en": "[ADMIN] Reject a pending special object",
+"es": "[ADMIN] Rechazar un objeto especial pendiente"
+},
+{
+"id": "30687facc164",
+"kind": "user",
+"en": "[ADMIN] Remove a special object from a player",
+"es": "[ADMIN] Quitar un objeto especial a un jugador"
+},
+{
+"id": "dd0a5d5393ee",
+"kind": "user",
+"en": "[ADMIN] Remove old/deprecated commands from Discord. Cleans up command list.",
+"es": "[ADMIN] Elimina comandos antiguos/obsoletos de Discord. Limpia la lista de comandos."
+},
+{
+"id": "f0fde7676f04",
+"kind": "user",
+"en": "[ADMIN] Reset HP for a specific player or all players",
+"es": "[ADMIN] Reinicia el HP de un jugador concreto o de todos los jugadores"
+},
+{
+"id": "0d59cffdc1ac",
+"kind": "user",
+"en": "[ADMIN] Reset adaptation spins for a player's special object",
+"es": "[ADMIN] Restablecer los giros de adaptación del objeto especial de un jugador"
+},
+{
+"id": "b8ed60106c20",
+"kind": "user",
+"en": "[ADMIN] Restart the bot gracefully. Saves all data before restarting.",
+"es": "[ADMIN] Reinicia el bot de forma controlada. Guarda todos los datos antes de reiniciar."
+},
+{
+"id": "848319310652",
+"kind": "user",
+"en": "[ADMIN] Set adaptation spins for a player's special object",
+"es": "[ADMIN] Establecer los giros de adaptación del objeto especial de un jugador"
+},
+{
+"id": "3f3482a20deb",
+"kind": "user",
+"en": "[ADMIN] Set max inventory slots for a player",
+"es": "[ADMIN] Establece los espacios máximos de inventario de un jugador"
+},
+{
+"id": "a05407df78c0",
+"kind": "user",
+"en": "[ADMIN] Set the image URL for a special object",
+"es": "[ADMIN] Establece la URL de la imagen de un objeto especial"
+},
+{
+"id": "ada4f373a482",
+"kind": "user",
+"en": "[ADMIN] Set up QTE channel and auto-create HP bar thread",
+"es": "[ADMIN] Configura el canal de QTE y crea automáticamente el hilo de la barra de HP"
+},
+{
+"id": "772de25ef090",
+"kind": "user",
+"en": "[ADMIN] Show performance timing report",
+"es": "[ADMIN] Mostrar el informe de tiempos de rendimiento"
+},
+{
+"id": "95c714c7646f",
+"kind": "user",
+"en": "[ADMIN] Target a specific player with a QTE",
+"es": "[ADMIN] Elegir a un jugador concreto como objetivo de un QTE"
+},
+{
+"id": "e84171490dad",
+"kind": "user",
+"en": "[ADMIN] Validate a pending object without approving",
+"es": "[ADMIN] Valida un objeto pendiente sin aprobarlo"
+},
+{
+"id": "4ee06d929046",
+"kind": "user",
+"en": "[ADMIN] View and manage any player's object spins",
+"es": "[ADMIN] Ve y gestiona los giros de objetos de cualquier jugador"
+},
+{
+"id": "61fc79061791",
+"kind": "user",
+"en": "[ADMIN] View and manage registered ultimates, cooldowns, and settings.",
+"es": "[ADMIN] Ve y gestiona las definitivas registradas, recargas y ajustes."
+},
+{
+"id": "996d17177402",
+"kind": "user",
+"en": "[GM Only] Open the Tupperbox Boss control dashboard",
+"es": "[GM Only] Abre el panel de control de Tupperbox Boss"
+},
+{
+"id": "fc23aea8fa6d",
+"kind": "user",
+"en": "[GM/ADMIN] View and modify bot settings live",
+"es": "[GM/ADMIN] Ver y modificar la configuración del bot en vivo"
+},
+{
+"id": "70b4d7c5dd8c",
+"kind": "user",
+"en": "[GM] Give skill points to a player",
+"es": "[GM] Da puntos de habilidad a un jugador"
+},
+{
+"id": "50854f8f754b",
+"kind": "user",
+"en": "[GM] Grant an achievement to a player",
+"es": "[GM] Otorgar un logro a un jugador"
+},
+{
+"id": "ab5ab9e79442",
+"kind": "user",
+"en": "[GM] List all available achievements and their IDs",
+"es": "[GM] Lista todos los logros disponibles y sus IDs"
+},
+{
+"id": "a71a9abef47f",
+"kind": "user",
+"en": "[GM] Remove an achievement from a player",
+"es": "[GM] Quitar un logro a un jugador"
+},
+{
+"id": "09967edc23ec",
+"kind": "user",
+"en": "[Link]({1})",
+"es": "[Link]({1})"
+},
+{
+"id": "92d9ebd5aff5",
+"kind": "user",
+"en": "[No Title]",
+"es": "[Sin título]"
+},
+{
+"id": "7565d98b9b79",
+"kind": "user",
+"en": "[bold gold1]CRITICAL![/bold gold1] ",
+"es": "[bold gold1]¡CRÍTICO![/bold gold1] "
+},
+{
+"id": "a0af412143a9",
+"kind": "user",
+"en": "[cyan]⚡ SINGLE QTE TRIGGERED[/cyan]",
+"es": "[cyan]⚡ QTE INDIVIDUAL ACTIVADO[/cyan]"
+},
+{
+"id": "222cfe8e4d5e",
+"kind": "user",
+"en": "[magenta]🚨 GROUP QTE TRIGGERED[/magenta]",
+"es": "[magenta]🚨 QTE GRUPAL ACTIVADO[/magenta]"
+},
+{
+"id": "10fd8a7dee09",
+"kind": "user",
+"en": "[white]Difficulty:[/white] [magenta]{1}[/magenta]",
+"es": "[white]Dificultad:[/white] [magenta]{1}[/magenta]"
+},
+{
+"id": "107db4f66135",
+"kind": "user",
+"en": "[white]Difficulty:[/white] [red]{1}[/red]",
+"es": "[white]Dificultad:[/white] [red]{1}[/red]"
+},
+{
+"id": "0157cd34e326",
+"kind": "user",
+"en": "[white]ID:[/white] [magenta]{1}[/magenta]",
+"es": "[white]ID:[/white] [magenta]{1}[/magenta]"
+},
+{
+"id": "8fbbb10acb30",
+"kind": "user",
+"en": "[white]ID:[/white] [red]{1}[/red]",
+"es": "[white]ID:[/white] [red]{1}[/red]"
+},
+{
+"id": "e22226ecefbd",
+"kind": "user",
+"en": "[white]Players:[/white] [cyan]{1}[/cyan] (auto-evaded: {2})",
+"es": "[white]Jugadores:[/white] [cyan]{1}[/cyan] (esquivados automáticamente: {2})"
+},
+{
+"id": "580ca1aaec14",
+"kind": "user",
+"en": "[white]Target:[/white] [green]{1}[/green]",
+"es": "[white]Objetivo:[/white] [green]{1}[/green]"
+},
+{
+"id": "0efc1b77608d",
+"kind": "user",
+"en": "_Hit all 3 specs in BOTH normal AND overspec mode to unlock!_",
+"es": "_¡Consigue las 3 especificaciones tanto en modo normal COMO en modo overspec para desbloquear!_"
+},
+{
+"id": "91ea2e37c9ab",
+"kind": "user",
+"en": "```{1}```\n**{2}/{3} HP** ({4}%){5}",
+"es": "```{1}```\n**{2}/{3} HP** ({4}%){5}"
+},
+{
+"id": "705dcd72c407",
+"kind": "user",
+"en": "`{1}`\n**{2}/{3} HP** ({4}%)",
+"es": "`{1}`\n**{2}/{3} HP** ({4}%)"
+},
+{
+"id": "0aa3ea5b4c79",
+"kind": "user",
+"en": "achievements/achievements_config",
+"es": "achievements/achievements_config"
+},
+{
+"id": "2fdf9d057909",
+"kind": "user",
+"en": "achievements/player_achievements",
+"es": "achievements/player_achievements"
+},
+{
+"id": "a0c1a795e3e8",
+"kind": "user",
+"en": "alt+f9 (Toggle batch on/off)",
+"es": "alt+f9 (Activar/desactivar lote)"
+},
+{
+"id": "d1ffbca096f2",
+"kind": "user",
+"en": "bf_boost:10 / damage_boost:20 / heal:30 / ult_charge:15",
+"es": "bf_boost:10 / damage_boost:20 / heal:30 / ult_charge:15"
+},
+{
+"id": "0632fb79808f",
+"kind": "user",
+"en": "blackflash - Set BF settings (base_chance, max_chance)",
+"es": "blackflash - Configura los ajustes de BF (base_chance, max_chance)"
+},
+{
+"id": "c6c86feeddae",
+"kind": "user",
+"en": "bleed:50:60 or burn:100:120",
+"es": "bleed:50:60 o burn:100:120"
+},
+{
+"id": "638be97fac36",
+"kind": "user",
+"en": "damage - Set damage range (diff, min, max)",
+"es": "damage - Configura el rango de daño (diff, min, max)"
+},
+{
+"id": "2f3f87f4d6d2",
+"kind": "user",
+"en": "e.g., Divine Blessing",
+"es": "p. ej., Divine Blessing"
+},
+{
+"id": "d43039e2a98e",
+"kind": "user",
+"en": "qte - Set timing (diff, evade, parry_start, parry_end)",
+"es": "qte - Establece los tiempos (diff, evade, parry_start, parry_end)"
+},
+{
+"id": "29a3ed88e4c2",
+"kind": "user",
+"en": "reset - Reset to default values",
+"es": "reset - Restablecer a los valores por defecto"
+},
+{
+"id": "a4aab6a64acf",
+"kind": "user",
+"en": "revenge - Set revenge mode (threshold, multiplier, bf_bonus)",
+"es": "revenge - Configura el modo venganza (threshold, multiplier, bf_bonus)"
+},
+{
+"id": "ae38d25c19f9",
+"kind": "user",
+"en": "save - Save current config to file",
+"es": "save - Guardar la configuración actual en un archivo"
+},
+{
+"id": "665ecfa3e042",
+"kind": "user",
+"en": "skill_trees/player_skills",
+"es": "skill_trees/player_skills"
+},
+{
+"id": "f4797cec398b",
+"kind": "user",
+"en": "ultimate - Set ultimate (cooldown, charge_rate, max_damage)",
+"es": "ultimate - Configurar la definitiva (cooldown, charge_rate, max_damage)"
+},
+{
+"id": "a4b0100fb9e7",
+"kind": "user",
+"en": "view - Show current settings",
+"es": "view - Mostrar la configuración actual"
+},
+{
+"id": "5d60b1e15422",
+"kind": "user",
+"en": "{1}\n*Cost: {2} SP | ID: `{3}`*",
+"es": "{1}\n*Costo: {2} SP | ID: `{3}`*"
+},
+{
+"id": "1266d9b06b9b",
+"kind": "user",
+"en": "{1}\nID: `{2}`",
+"es": "{1}\nID: `{2}`"
+},
+{
+"id": "dc860eeeadb9",
+"kind": "user",
+"en": "{1} (Best: {2}) | {3}x DMG",
+"es": "{1} (Mejor: {2}) | {3}x de DAÑO"
+},
+{
+"id": "299c4e29dff9",
+"kind": "user",
+"en": "{1} (Chance: {2}%)",
+"es": "{1} (Probabilidad: {2}%)"
+},
+{
+"id": "75c0cc5e006c",
+"kind": "user",
+"en": "{1} (Force sync slash commands)",
+"es": "{1} (Forzar sincronización de comandos slash)"
+},
+{
+"id": "fa36ea75acb5",
+"kind": "user",
+"en": "{1} (Heal all +30 HP)",
+"es": "{1} (Cura a todos +30 HP)"
+},
+{
+"id": "56acf669beeb",
+"kind": "user",
+"en": "{1} **BOSS: {2}**",
+"es": "{1} **JEFE: {2}**"
+},
+{
+"id": "120a499d48ce",
+"kind": "user",
+"en": "{1} **{2}** applied to {3}{4}! ({5}s)",
+"es": "{1} **{2}** aplicado a {3}{4}. ({5}s)"
+},
+{
+"id": "1691861add93",
+"kind": "user",
+"en": "{1} **{2}** doesn't have Power {3}!",
+"es": "{1} ¡**{2}** no tiene el Poder {3}!"
+},
+{
+"id": "3f27d4ff1521",
+"kind": "user",
+"en": "{1} - Easy Spins",
+"es": "{1} - Giros fáciles"
+},
+{
+"id": "fde0108a000f",
+"kind": "user",
+"en": "{1} - Hard Spins",
+"es": "{1} - Giros difíciles"
+},
+{
+"id": "67fb3f9a48f7",
+"kind": "user",
+"en": "{1} - Impossible Spins",
+"es": "{1} - Giros imposibles"
+},
+{
+"id": "f2e57f2cd365",
+"kind": "user",
+"en": "{1} - Medium Spins",
+"es": "{1} - Giros medios"
+},
+{
+"id": "c278825605f2",
+"kind": "user",
+"en": "{1} - Total Spins",
+"es": "{1} - Giros totales"
+},
+{
+"id": "24b77b4efbd6",
+"kind": "user",
+"en": "{1} ACHIEVEMENT UNLOCKED!",
+"es": "¡{1} LOGRO DESBLOQUEADO!"
+},
+{
+"id": "9944e2e72b15",
+"kind": "user",
+"en": "{1} No powers registered for **{2}**!",
+"es": "{1} ¡No hay poderes registrados para **{2}**!"
+},
+{
+"id": "5fb8d4a38b40",
+"kind": "user",
+"en": "{1} None of your characters have **Power {2}** registered!",
+"es": "{1} ¡Ninguno de tus personajes tiene registrado el **Poder {2}**!"
+},
+{
+"id": "c3772baceb42",
+"kind": "user",
+"en": "{1} Object Granted!",
+"es": "¡Objeto {1} otorgado!"
+},
+{
+"id": "32bf48ae00dc",
+"kind": "user",
+"en": "{1} You need to register a character first! Use `/register`",
+"es": "{1} ¡Primero debes registrar un personaje! Usa `/register`"
+},
+{
+"id": "a6feee92811f",
+"kind": "user",
+"en": "{1} {2} **parried [{3}] but no Black Flash!** Chain ends.\nParry cooldown: **{4}s**",
+"es": "{1} {2} **¡hizo parry [{3}] pero sin Black Flash!** La cadena termina.\nRecarga del parry: **{4}s**"
+},
+{
+"id": "aad81fc93467",
+"kind": "user",
+"en": "{1} {2} **parried!** [{3}] ({4}s)",
+"es": "{1} {2} **¡hizo parry!** [{3}] ({4}s)"
+},
+{
+"id": "6338749fc3de",
+"kind": "user",
+"en": "{1} ⏱️ **Infinite Void** (VAR or normal) on cooldown! **{2}m {3}s**",
+"es": "{1} ⏱️ ¡**Infinite Void** (VAR o normal) en recarga! **{2}m {3}s**"
+},
+{
+"id": "a3b01bd403b3",
+"kind": "user",
+"en": "{1} ⏱️ **Spec{2}** on cooldown! **{3}s**",
+"es": "{1} ⏱️ ¡**Spec{2}** en recarga! **{3}s**"
+},
+{
+"id": "b779bd1c915c",
+"kind": "user",
+"en": "{1} ⏱️ Domain on cooldown! **{2}m {3}s** remaining.",
+"es": "{1} ⏱️ ¡Dominio en recarga! Quedan **{2}m {3}s**."
+},
+{
+"id": "58dbd44086ba",
+"kind": "user",
+"en": "{1} ⏱️ Power on cooldown! **{2}m {3}s** remaining.\n💡 Cooldowns only tick during active fights!",
+"es": "{1} ⏱️ ¡Poder en recarga! Quedan **{2}m {3}s**.\n💡 ¡Las recargas solo avanzan durante los combates activos!"
+},
+{
+"id": "c35288f9c3e8",
+"kind": "user",
+"en": "{1} ⏳ Already casting!",
+"es": "{1} ⏳ ¡Ya estás lanzando!"
+},
+{
+"id": "786b21525053",
+"kind": "user",
+"en": "{1} ⏳ Domain already being cast! Focus on the handsign!",
+"es": "{1} ⏳ ¡Ya se está lanzando un dominio! ¡Concéntrate en el sello de mano!"
+},
+{
+"id": "683eca650bc7",
+"kind": "user",
+"en": "{1} ⚔️ **No active fight!** Domain Expansion can only be used during boss fights.",
+"es": "{1} ⚔️ **¡No hay combate activo!** La expansión de dominio solo se puede usar durante los combates contra el jefe."
+},
+{
+"id": "bdf27bb8a7b4",
+"kind": "user",
+"en": "{1} ⚔️ **No active fight!** Ultimate can only be used during boss fights.",
+"es": "{1} ⚔️ **¡No hay combate activo!** La definitiva solo se puede usar durante los combates contra el jefe."
+},
+{
+"id": "8198fddfbc27",
+"kind": "user",
+"en": "{1} ⚔️ Final Judgement already in progress!",
+"es": "{1} ⚔️ ¡Ya hay un Veredicto Final en curso!"
+},
+{
+"id": "01c08c249206",
+"kind": "user",
+"en": "{1} ⚔️ No active fight!",
+"es": "{1} ⚔️ ¡No hay ningún combate activo!"
+},
+{
+"id": "711c0069d04b",
+"kind": "user",
+"en": "{1} ⚡ **Not enough charge!** Current: {2}% | Required: {3}%",
+"es": "{1} ⚡ **¡Carga insuficiente!** Actual: {2}% | Requerida: {3}%"
+},
+{
+"id": "ca559ac3d620",
+"kind": "user",
+"en": "{1} ❌ **JACOB'S LADDER LOCKED!**\n",
+"es": "{1} ❌ ¡**JACOB'S LADDER BLOQUEADA!**\n"
+},
+{
+"id": "e26b7f5f5fff",
+"kind": "user",
+"en": "{1} ❌ **VAR** can only be used when **Infinite Void** is your active domain! (Currently: **{2}**)",
+"es": "{1} ❌ ¡**VAR** solo se puede usar cuando **Infinite Void** es tu dominio activo! (Actualmente: **{2}**)"
+},
+{
+"id": "83af0d5bad0b",
+"kind": "user",
+"en": "{1} ❌ Domain configuration not found!",
+"es": "{1} ❌ ¡No se encontró la configuración del dominio!"
+},
+{
+"id": "82ae60a74759",
+"kind": "user",
+"en": "{1} ❌ Executioner Sword expired during cast!",
+"es": "{1} ❌ ¡Executioner Sword expiró durante el lanzamiento!"
+},
+{
+"id": "37c8327f48ab",
+"kind": "user",
+"en": "{1} ❌ Executioner Sword not active!",
+"es": "{1} ❌ ¡Executioner Sword no está activa!"
+},
+{
+"id": "649d33689071",
+"kind": "user",
+"en": "{1} ❌ No active boss!",
+"es": "{1} ❌ ¡No hay ningún jefe activo!"
+},
+{
+"id": "ad4033da56c7",
+"kind": "user",
+"en": "{1} ❌ VAR mode not active!",
+"es": "{1} ❌ ¡El modo VAR no está activo!"
+},
+{
+"id": "e5f46448999e",
+"kind": "user",
+"en": "{1} ❌ You don't have a domain.",
+"es": "{1} ❌ No tienes un dominio."
+},
+{
+"id": "ae3ff6dbde36",
+"kind": "user",
+"en": "{1} ❌ You need **Authentic Mutual Love** domain active!",
+"es": "{1} ❌ ¡Necesitas tener activo el dominio **Authentic Mutual Love**!"
+},
+{
+"id": "8b15948a8379",
+"kind": "user",
+"en": "{1} ❌ You need **Infinite Void** domain!",
+"es": "{1} ❌ ¡Necesitas el dominio **Infinite Void**!"
+},
+{
+"id": "80082d9f2bea",
+"kind": "user",
+"en": "{1} 🌌 **A Domain is already active!** You cannot cast another domain inside an active domain!",
+"es": "{1} 🌌 **¡Ya hay un dominio activo!** ¡No puedes lanzar otro dominio dentro de un dominio activo!"
+},
+{
+"id": "d1f38ab29d3b",
+"kind": "user",
+"en": "{1} 🎰 **JACKPOT MODE ACTIVE!** You cannot cast a domain while in jackpot mode - focus on your slots!",
+"es": "{1} 🎰 ¡**MODO JACKPOT ACTIVO!** No puedes lanzar un dominio en modo jackpot - ¡concéntrate en tus tragaperras!"
+},
+{
+"id": "04b3d051e6ab",
+"kind": "user",
+"en": "{1} 🎰 **JACKPOT MODE ACTIVE!** You cannot use VAR while in jackpot mode - focus on your slots!",
+"es": "{1} 🎰 ¡**MODO JACKPOT ACTIVO!** No puedes usar VAR mientras estás en modo jackpot, ¡concéntrate en tus tragamonedas!"
+},
+{
+"id": "9ae41b58491f",
+"kind": "user",
+"en": "{1}'s Domain Expansion was **BROKEN**!\n\n*Took {2} damage during the handsign formation!*",
+"es": "¡La expansión de dominio de {1} fue **ROTA**!\n\n*¡Recibió {2} de daño durante la formación del sello de mano!*"
+},
+{
+"id": "de7fd090fe0a",
+"kind": "user",
+"en": "{1}/{2} slots",
+"es": "{1}/{2} espacios"
+},
+{
+"id": "5270b5cc4fa1",
+"kind": "user",
+"en": "{1}: avg={2}ms, max={3}ms, count={4}, total={5}s",
+"es": "{1}: prom={2}ms, máx={3}ms, cantidad={4}, total={5}s"
+},
+{
+"id": "a315217452de",
+"kind": "user",
+"en": "⏰ **TIME'S UP!** <@{1}> failed to respond!",
+"es": "⏰ **¡SE ACABÓ EL TIEMPO!** ¡<@{1}> no respondió!"
+},
+{
+"id": "12b8c6215131",
+"kind": "user",
+"en": "⏰ **TIME'S UP!** <@{1}> failed to respond! **0 points** this round.",
+"es": "⏰ **¡SE ACABÓ EL TIEMPO!** ¡<@{1}> no respondió! **0 puntos** esta ronda."
+},
+{
+"id": "81d5e5e93a97",
+"kind": "user",
+"en": "⏰ **Time's up!** No one typed **{1}** fast enough!",
+"es": "⏰ **¡Se acabó el tiempo!** ¡Nadie escribió **{1}** lo bastante rápido!"
+},
+{
+"id": "34bcf49cc25f",
+"kind": "user",
+"en": "⏱️ **Chain ended!** {1} - Parry cooldown: **{2}s**",
+"es": "⏱️ **¡Cadena terminada!** {1} - Recarga de parry: **{2}s**"
+},
+{
+"id": "c020c752b4fc",
+"kind": "user",
+"en": "⏱️ **{1}** (fight-time only!)",
+"es": "⏱️ **{1}** (¡solo durante el combate!)"
+},
+{
+"id": "6225b021662f",
+"kind": "user",
+"en": "⏱️ Best Response Time",
+"es": "⏱️ Mejor tiempo de respuesta"
+},
+{
+"id": "dc88a133f06c",
+"kind": "user",
+"en": "⏱️ Cooldowns reduced by **{1}s**!",
+"es": "⏱️ ¡Recargas reducidas en **{1}s**!"
+},
+{
+"id": "c4b3ce3e4980",
+"kind": "user",
+"en": "⏱️ Performance Timing Report",
+"es": "⏱️ Informe de rendimiento de tiempos"
+},
+{
+"id": "3d4e148c1db2",
+"kind": "user",
+"en": "⏱️ QTE Timing",
+"es": "⏱️ Tiempos del QTE"
+},
+{
+"id": "c9c571c79f15",
+"kind": "user",
+"en": "⏱️ {1} **Parry on cooldown!** {2}s remaining",
+"es": "⏱️ {1} **¡Parry en recarga!** Quedan {2}s"
+},
+{
+"id": "5fb8424d994e",
+"kind": "user",
+"en": "⏱️ {1} **Save limit exceeded!** Max 2 saves per minute",
+"es": "⏱️ {1} **¡Límite de guardados superado!** Máximo 2 guardados por minuto"
+},
+{
+"id": "e7af9a5f2dc4",
+"kind": "user",
+"en": "⏳ Pending Special Objects",
+"es": "⏳ Objetos especiales pendientes"
+},
+{
+"id": "457db329bad8",
+"kind": "user",
+"en": "☠️ Domain Effect",
+"es": "☠️ Efecto del dominio"
+},
+{
+"id": "a1ff58d7eab6",
+"kind": "user",
+"en": "♾️ ***VAR* MODE ENDED** <@{1}>",
+"es": "♾️ ***VAR* MODO TERMINADO** <@{1}>"
+},
+{
+"id": "bc694cc5d775",
+"kind": "user",
+"en": "♾️ *Normal domain cancelled for VAR mode...*",
+"es": "♾️ *Dominio normal cancelado por el modo VAR...*"
+},
+{
+"id": "7c59c1974fe8",
+"kind": "user",
+"en": "♾️ Domain Expansions Unlocked",
+"es": "♾️ Expansiones de dominio desbloqueadas"
+},
+{
+"id": "4d45589f653e",
+"kind": "user",
+"en": "♾️⚡ **VAR ULT1!** {1} deals **{2} damage!**",
+"es": "♾️⚡ **¡VAR ULT1!** ¡{1} inflige **{2} de daño!**"
+},
+{
+"id": "2e7fb7d9d5c3",
+"kind": "user",
+"en": "⚔️ **TYPE:** `{1}`\n📊 {2}\n👤 Player: **{3}** | Boss: **{4}** 👹\n⏱️ {5}s remaining",
+"es": "⚔️ **TIPO:** `{1}`\n📊 {2}\n👤 Jugador: **{3}** | Jefe: **{4}** 👹\n⏱️ {5}s restantes"
+},
+{
+"id": "695dcc1289ea",
+"kind": "user",
+"en": "⚔️ Abilities",
+"es": "⚔️ Habilidades"
+},
+{
+"id": "7c716d38829d",
+"kind": "user",
+"en": "⚔️ Add Boss Ability",
+"es": "⚔️ Añadir habilidad de jefe"
+},
+{
+"id": "5e786963c79d",
+"kind": "user",
+"en": "⚔️ BOSS FIGHT STARTED: {1}",
+"es": "⚔️ COMBATE CONTRA EL JEFE INICIADO: {1}"
+},
+{
+"id": "bab1248c2a3d",
+"kind": "user",
+"en": "⚔️ Best Parry Streak",
+"es": "⚔️ Mejor racha de parry"
+},
+{
+"id": "2ae1333b72e3",
+"kind": "user",
+"en": "⚔️ Damage Boost (%)",
+"es": "⚔️ Aumento de daño (%)"
+},
+{
+"id": "828770a292bb",
+"kind": "user",
+"en": "⚔️ Parry Streak",
+"es": "⚔️ Racha de parry"
+},
+{
+"id": "a705d5d6d767",
+"kind": "user",
+"en": "⚔️ {1} parried! ({2}s)",
+"es": "⚔️ ¡{1} hizo parry! ({2}s)"
+},
+{
+"id": "2449b44d14d9",
+"kind": "user",
+"en": "⚖️ **EL BOT RULES:** {1}\n**+{2} points!** (Prosecutor Total: **{3}**)",
+"es": "⚖️ **EL BOT DICTAMINA:** {1}\n**¡+{2} puntos!** (Total del fiscal: **{3}**)"
+},
+{
+"id": "f9ba3b2da939",
+"kind": "user",
+"en": "⚖️ {1} **OBJECTION!** You must **PING** your defendant!\n_Use `*domain* @defendant` to accuse someone!_",
+"es": "⚖️ {1} ¡**OBJECIÓN!** ¡Debes **MENCIONAR** a tu acusado!\n_¡Usa `*domain* @defendant` para acusar a alguien!_"
+},
+{
+"id": "dd681912327e",
+"kind": "user",
+"en": "⚙️ Basic Settings",
+"es": "⚙️ Ajustes básicos"
+},
+{
+"id": "42dd8a86a1a7",
+"kind": "user",
+"en": "⚙️ Boss Basic Settings",
+"es": "⚙️ Ajustes básicos del jefe"
+},
+{
+"id": "c9c794642037",
+"kind": "user",
+"en": "⚙️ Bot Configuration",
+"es": "⚙️ Configuración del bot"
+},
+{
+"id": "45bd13032239",
+"kind": "user",
+"en": "⚙️ Game Values Updated",
+"es": "⚙️ Valores del juego actualizados"
+},
+{
+"id": "d7c197cf19d2",
+"kind": "user",
+"en": "⚠️ **{1}** uses per-difficulty tracking. Use the dashboard Edit Spins button to set individual difficulties.",
+"es": "⚠️ **{1}** usa seguimiento por dificultad. Usa el botón Edit Spins del panel para ajustar cada dificultad por separado."
+},
+{
+"id": "052b35a635a5",
+"kind": "user",
+"en": "⚠️ Error reading file",
+"es": "⚠️ Error al leer el archivo"
+},
+{
+"id": "204f129d041b",
+"kind": "user",
+"en": "⚠️ Errors",
+"es": "⚠️ Errores"
+},
+{
+"id": "b7227578f18b",
+"kind": "user",
+"en": "⚠️ Please attach an image or GIF to add!",
+"es": "⚠️ ¡Adjunta una imagen o GIF para añadir!"
+},
+{
+"id": "c29fb6f05e31",
+"kind": "user",
+"en": "⚠️ Please upload an image or GIF file!",
+"es": "⚠️ ¡Sube un archivo de imagen o GIF!"
+},
+{
+"id": "039d99dbd44f",
+"kind": "user",
+"en": "⚠️ Please upload an image to add!",
+"es": "⚠️ ¡Sube una imagen para añadir!"
+},
+{
+"id": "4f1eb156fd10",
+"kind": "user",
+"en": "⚠️ Reload May Have Failed",
+"es": "⚠️ Es posible que la recarga haya fallado"
+},
+{
+"id": "2f6ca37e68cc",
+"kind": "user",
+"en": "⚠️ Updated in memory but failed to save: {1}",
+"es": "⚠️ Actualizado en memoria pero no se pudo guardar: {1}"
+},
+{
+"id": "c2215ca696f3",
+"kind": "user",
+"en": "⚠️ Warnings",
+"es": "⚠️ Advertencias"
+},
+{
+"id": "3dad00800529",
+"kind": "user",
+"en": "⚡ **Ultimate Self-Recharge**: {1}\n\nWhen ON: Landing an ultimate also recharges your ultimate meter!",
+"es": "⚡ **Autorrecarga de definitiva**: {1}\n\nCuando está activada: ¡lograr una definitiva también recarga tu medidor de definitiva!"
+},
+{
+"id": "77f077ee3150",
+"kind": "user",
+"en": "⚡ **{1} QTE** {2}",
+"es": "⚡ **QTE de {1}** {2}"
+},
+{
+"id": "99b902ce3814",
+"kind": "user",
+"en": "⚡ **{1} QTE** {2} | {3}",
+"es": "⚡ **QTE {1}** {2} | {3}"
+},
+{
+"id": "da62132b202e",
+"kind": "user",
+"en": "⚡ **{1} QTE** {2} | {3}{4}",
+"es": "⚡ **QTE de {1}** {2} | {3}{4}"
+},
+{
+"id": "a5e1bc310443",
+"kind": "user",
+"en": "⚡ **{1}** breaks free from the Domain!",
+"es": "⚡ ¡**{1}** se libera del dominio!"
+},
+{
+"id": "d9c159b94121",
+"kind": "user",
+"en": "⚡ +{1}% Black Flash chance",
+"es": "⚡ +{1}% de probabilidad de Black Flash"
+},
+{
+"id": "1cbee3fdbde3",
+"kind": "user",
+"en": "⚡ Black Flash",
+"es": "⚡ Black Flash"
+},
+{
+"id": "e2bd043307bd",
+"kind": "user",
+"en": "⚡ Black Flash Ready!",
+"es": "⚡ ¡Black Flash listo!"
+},
+{
+"id": "eef12b4935a6",
+"kind": "user",
+"en": "⚡ Black Flashes",
+"es": "⚡ Black Flashes"
+},
+{
+"id": "431b8f90226f",
+"kind": "user",
+"en": "⚡ Counter Image Added!",
+"es": "⚡ ¡Imagen de contraataque añadida!"
+},
+{
+"id": "67b7695eacaf",
+"kind": "user",
+"en": "⚡ Domain Effect",
+"es": "⚡ Efecto de dominio"
+},
+{
+"id": "d7a9048c8508",
+"kind": "user",
+"en": "⚡ Power Registered",
+"es": "⚡ Poder registrado"
+},
+{
+"id": "5efe9b68f190",
+"kind": "user",
+"en": "⚡ QTE Settings Updated: {1}",
+"es": "⚡ Ajustes de QTE actualizados: {1}"
+},
+{
+"id": "c53c691a37fe",
+"kind": "user",
+"en": "⚡ QTE Settings: {1}",
+"es": "⚡ Ajustes de QTE: {1}"
+},
+{
+"id": "64af44958897",
+"kind": "user",
+"en": "⚡ REVENGE MODE ACTIVATED ⚡",
+"es": "⚡ MODO VENGANZA ACTIVADO ⚡"
+},
+{
+"id": "5d90f9402f7e",
+"kind": "user",
+"en": "⚡ Registered Ultimate Powers",
+"es": "⚡ Poderes definitivos registrados"
+},
+{
+"id": "1f68284c3c21",
+"kind": "user",
+"en": "⚡ Targeting **{1}** with **{2}** QTE!",
+"es": "⚡ ¡Apuntando a **{1}** con un QTE **{2}**!"
+},
+{
+"id": "4e0a22f8fd9a",
+"kind": "user",
+"en": "⚡ Ultimate Charge (%)",
+"es": "⚡ Carga de definitiva (%)"
+},
+{
+"id": "9fe3ffdd6d0a",
+"kind": "user",
+"en": "⚡ Ultimate Charges",
+"es": "⚡ Cargas de definitiva"
+},
+{
+"id": "f31cddf02397",
+"kind": "user",
+"en": "⚡ Ultimate Power Charges",
+"es": "⚡ Cargas de poder definitivo"
+},
+{
+"id": "575f2da67b48",
+"kind": "user",
+"en": "⚡💥 BLACK FLASH! 💥⚡",
+"es": "⚡💥 ¡BLACK FLASH! 💥⚡"
+},
+{
+"id": "35ea3d7ebb9c",
+"kind": "user",
+"en": "⚡💥💥 {1} BLACK FLASH! 💥💥⚡",
+"es": "⚡💥💥 ¡BLACK FLASH {1}! 💥💥⚡"
+},
+{
+"id": "b66080a86d46",
+"kind": "user",
+"en": "⚡🔥 {1} BLACK FLASH CHAIN! 🔥⚡",
+"es": "⚡🔥 ¡CADENA DE {1} BLACK FLASH! 🔥⚡"
+},
+{
+"id": "14a5fa4df8dd",
+"kind": "user",
+"en": "⛩️ **MALEVOLENT SHRINE** activated!\n💀 **{1} damage/second** to boss\n🔥 After {2} damage OR {3}s: **OPEN, FURNACE**",
+"es": "⛩️ ¡**MALEVOLENT SHRINE** activado!\n💀 **{1} de daño/segundo** al jefe\n🔥 Tras {2} de daño O {3}s: **OPEN, FURNACE**"
+},
+{
+"id": "dfbf14f47515",
+"kind": "user",
+"en": "⛩️ **MALEVOLENT SHRINE** fades... {1} total damage dealt.",
+"es": "⛩️ **MALEVOLENT SHRINE** se desvanece... {1} de daño total infligido."
+},
+{
+"id": "1201ebf3d328",
+"kind": "user",
+"en": "⛩️ **SHRINE** dealing damage... Total: **{1}** | Remaining: **{2}s**",
+"es": "⛩️ **SHRINE** infligiendo daño... Total: **{1}** | Restante: **{2}s**"
+},
+{
+"id": "f12180396875",
+"kind": "user",
+"en": "⛩️ **SHRINE** interrupted! Duration -5s (remaining: **{1}s**)",
+"es": "⛩️ ¡**SHRINE** interrumpido! Duración -5s (restante: **{1}s**)"
+},
+{
+"id": "a95b5521e424",
+"kind": "user",
+"en": "✅ **Black Flash updated:**\nBase Chance: {1}%\nMax Chance: {2}%",
+"es": "✅ **Black Flash actualizado:**\nProbabilidad base: {1}%\nProbabilidad máxima: {2}%"
+},
+{
+"id": "e0d61e3b0f9c",
+"kind": "user",
+"en": "✅ **DIRECTION CORRECT!** {1}\n_Shown: {2} → Input: {3} (opposite)_",
+"es": "✅ **¡DIRECCIÓN CORRECTA!** {1}\n_Mostrado: {2} → Ingresado: {3} (opuesto)_"
+},
+{
+"id": "bc2a84fbddb4",
+"kind": "user",
+"en": "✅ **FAKE QTE!** No one fell for it! 👻",
+"es": "✅ **¡QTE FALSO!** ¡Nadie cayó en la trampa! 👻"
+},
+{
+"id": "12007b3f15cf",
+"kind": "user",
+"en": "✅ **Revenge mode updated:**\nThreshold: {1}% HP\nDamage Mult: {2}x\nBF Bonus: +{3}%",
+"es": "✅ **Modo venganza actualizado:**\nUmbral: {1}% de HP\nMult. de daño: {2}x\nBonus de BF: +{3}%"
+},
+{
+"id": "5be005af2b4a",
+"kind": "user",
+"en": "✅ **Ultimate settings updated:**\nBase Cooldown: {1}s\nCharge Rate: {2}%/damage\nMax Damage: {3}",
+"es": "✅ **Ajustes de definitiva actualizados:**\nRecarga base: {1}s\nTasa de carga: {2}%/daño\nDaño máximo: {3}"
+},
+{
+"id": "249008f2a4a5",
+"kind": "user",
+"en": "✅ **{1} QTE timing updated:**\nEvade: {2}s, Parry: {3}-{4}s",
+"es": "✅ **Tiempos del QTE de {1} actualizados:**\nEsquiva: {2}s, Parry: {3}-{4}s"
+},
+{
+"id": "b22fbc5e1990",
+"kind": "user",
+"en": "✅ **{1} damage updated:** {2}-{3}",
+"es": "✅ **Daño de {1} actualizado:** {2}-{3}"
+},
+{
+"id": "3b5292cc62e2",
+"kind": "user",
+"en": "✅ **{1}** got it in **{2}s**!",
+"es": "✅ ¡**{1}** lo logró en **{2}s**!"
+},
+{
+"id": "cd09262e966a",
+"kind": "user",
+"en": "✅ **{1}** spawned as boss with **{2} HP**!",
+"es": "✅ ¡**{1}** apareció como jefe con **{2} HP**!"
+},
+{
+"id": "c8bd52d0db0a",
+"kind": "user",
+"en": "✅ **{1}/{2}!** Next: `*{3}*`",
+"es": "✅ **¡{1}/{2}!** Siguiente: `*{3}*`"
+},
+{
+"id": "0e0e5c8b233a",
+"kind": "user",
+"en": "✅ Ability **{1}** added!",
+"es": "✅ ¡Habilidad **{1}** añadida!"
+},
+{
+"id": "98727996961e",
+"kind": "user",
+"en": "✅ Active domain set to: 🌌 **{1}**\n\n*Use `*domain*` or `*ult3*` to activate it!*",
+"es": "✅ Dominio activo establecido en: 🌌 **{1}**\n\n*¡Usa `*domain*` o `*ult3*` para activarlo!*"
+},
+{
+"id": "2d0c1e5125e0",
+"kind": "user",
+"en": "✅ All boss defeat GIFs cleared! Using default now.",
+"es": "✅ ¡Se borraron todos los GIF de derrota del jefe! Ahora se usa el predeterminado."
+},
+{
+"id": "b13dcf4ade6d",
+"kind": "user",
+"en": "✅ All counter images cleared! Using default now.",
+"es": "✅ ¡Se borraron todas las imágenes de contraataque! Ahora se usa la predeterminada."
+},
+{
+"id": "ca812730e7dd",
+"kind": "user",
+"en": "✅ All settings reset to defaults!",
+"es": "✅ ¡Todos los ajustes restablecidos a los valores por defecto!"
+},
+{
+"id": "e4dbab8ee48e",
+"kind": "user",
+"en": "✅ Boss Domain **{1}** configured!",
+"es": "✅ ¡Dominio del jefe **{1}** configurado!"
+},
+{
+"id": "8500a81980df",
+"kind": "user",
+"en": "✅ Channel Configuration Saved",
+"es": "✅ Configuración del canal guardada"
+},
+{
+"id": "fd60b0d60af3",
+"kind": "user",
+"en": "✅ Character **{1}** registered to your account!",
+"es": "✅ ¡El personaje **{1}** fue registrado en tu cuenta!"
+},
+{
+"id": "fb4446525e0a",
+"kind": "user",
+"en": "✅ Character **{1}** unregistered!",
+"es": "✅ ¡Personaje **{1}** eliminado del registro!"
+},
+{
+"id": "4316d7bd1ad0",
+"kind": "user",
+"en": "✅ Cleared image for **{1}**",
+"es": "✅ Imagen de **{1}** borrada"
+},
+{
+"id": "c085b6968599",
+"kind": "user",
+"en": "✅ Commands Synced Successfully",
+"es": "✅ Comandos sincronizados correctamente"
+},
+{
+"id": "2bc9e6496763",
+"kind": "user",
+"en": "✅ Configuration saved to `live_config.json`!",
+"es": "✅ ¡Configuración guardada en `live_config.json`!"
+},
+{
+"id": "5cd39408c8a8",
+"kind": "user",
+"en": "✅ Gave **{1} skill points** to {2}!\nThey now have **{3} SP**",
+"es": "✅ ¡Se dieron **{1} puntos de habilidad** a {2}!\nAhora tiene **{3} SP**"
+},
+{
+"id": "96f533165505",
+"kind": "user",
+"en": "✅ Granted **{1}** to {2}!",
+"es": "✅ ¡Se concedió **{1}** a {2}!"
+},
+{
+"id": "1505849b154b",
+"kind": "user",
+"en": "✅ Image Set!",
+"es": "✅ ¡Imagen establecida!"
+},
+{
+"id": "763b8bbfa0e4",
+"kind": "user",
+"en": "✅ Model Reloaded!",
+"es": "✅ ¡Modelo recargado!"
+},
+{
+"id": "32900a9ee2c8",
+"kind": "user",
+"en": "✅ Model Switched!",
+"es": "✅ ¡Modelo cambiado!"
+},
+{
+"id": "1afa4ef92e52",
+"kind": "user",
+"en": "✅ No old commands found!",
+"es": "✅ ¡No se encontraron comandos antiguos!"
+},
+{
+"id": "3aee72a4c811",
+"kind": "user",
+"en": "✅ No pending objects!",
+"es": "✅ ¡No hay objetos pendientes!"
+},
+{
+"id": "9de24d939b72",
+"kind": "user",
+"en": "✅ ON",
+"es": "✅ ACTIVADO"
+},
+{
+"id": "e696d55fda1e",
+"kind": "user",
+"en": "✅ Object Spins Set",
+"es": "✅ Giros del objeto establecidos"
+},
+{
+"id": "0545c8172b0d",
+"kind": "user",
+"en": "✅ Object Spins Updated",
+"es": "✅ Giros de objeto actualizados"
+},
+{
+"id": "90f394a94833",
+"kind": "user",
+"en": "✅ Removed achievement **{1}** from {2}!{3}",
+"es": "✅ ¡Logro **{1}** quitado a {2}!{3}"
+},
+{
+"id": "71083b227b6e",
+"kind": "user",
+"en": "✅ Removed {1} old commands: {2}",
+"es": "✅ Se eliminaron {1} comandos antiguos: {2}"
+},
+{
+"id": "2cf6458d584f",
+"kind": "user",
+"en": "✅ Reset HP for **{1} players** to {2}!",
+"es": "✅ ¡HP reiniciado para **{1} jugadores** a {2}!"
+},
+{
+"id": "19ac3b0516ed",
+"kind": "user",
+"en": "✅ Reset HP for **{1}** to {2}!",
+"es": "✅ ¡HP de **{1}** reiniciado a {2}!"
+},
+{
+"id": "a3ded3e58c08",
+"kind": "user",
+"en": "✅ Set {1}'s inventory slots: **{2}** → **{3}**",
+"es": "✅ Espacios de inventario de {1} definidos: **{2}** → **{3}**"
+},
+{
+"id": "81efc1a06d59",
+"kind": "user",
+"en": "✅ Support Skill Created!",
+"es": "✅ ¡Habilidad de apoyo creada!"
+},
+{
+"id": "fcf10bbec3a3",
+"kind": "user",
+"en": "✅ Title removed!",
+"es": "✅ ¡Título eliminado!"
+},
+{
+"id": "c4860c5b4abd",
+"kind": "user",
+"en": "✅ Title set to: **{1}**",
+"es": "✅ Título establecido: **{1}**"
+},
+{
+"id": "5d9bccd8f715",
+"kind": "user",
+"en": "✅ Tupperbox Boss Mode **{1}**!",
+"es": "✅ ¡Modo jefe Tupperbox **{1}**!"
+},
+{
+"id": "beb652af3380",
+"kind": "user",
+"en": "✅ Updated cooldowns for **{1}**:\n",
+"es": "✅ Recargas actualizadas para **{1}**:\n"
+},
+{
+"id": "6f1de9cbd1fa",
+"kind": "user",
+"en": "✅ Used **{1}**!",
+"es": "✅ ¡Usaste **{1}**!"
+},
+{
+"id": "64c388c000ce",
+"kind": "user",
+"en": "✅ Valid",
+"es": "✅ Válido"
+},
+{
+"id": "c366d90b5d35",
+"kind": "user",
+"en": "✅ Yes",
+"es": "✅ Sí"
+},
+{
+"id": "b5a0b22dc1f9",
+"kind": "user",
+"en": "✅ You are now **active** for QTE events!",
+"es": "✅ ¡Ahora estás **activo** para los eventos QTE!"
+},
+{
+"id": "7ab09407e9b3",
+"kind": "user",
+"en": "✅ {1} **evaded!** ({2}s) | ⚡ **COUNTER** `*attack*` <t:{3}:R>",
+"es": "✅ ¡{1} **esquivó!** ({2}s) | ⚡ **CONTRAATAQUE** `*attack*` <t:{3}:R>"
+},
+{
+"id": "a8fe8be4265c",
+"kind": "user",
+"en": "✅ {1} GIF added!",
+"es": "✅ ¡GIF de {1} añadido!"
+},
+{
+"id": "3fdfcc226c63",
+"kind": "user",
+"en": "✅ {1} evaded! ({2}s)",
+"es": "✅ ¡{1} esquivó! ({2}s)"
+},
+{
+"id": "515469990e41",
+"kind": "user",
+"en": "✏️ Edit Spins (GM Only)",
+"es": "✏️ Editar giros (solo GM)"
+},
+{
+"id": "a3bd08de4311",
+"kind": "user",
+"en": "✓ **{1}** wore off on {2}",
+"es": "✓ **{1}** se desvaneció en {2}"
+},
+{
+"id": "cfbc71b0d075",
+"kind": "user",
+"en": "✨ **JACKPOT BONUS ACTIVE!** +{1}% chance on first roll!",
+"es": "✨ **¡BONUS DE JACKPOT ACTIVO!** ¡+{1}% de probabilidad en la primera tirada!"
+},
+{
+"id": "455123df9d83",
+"kind": "user",
+"en": "✨ **{1}** buff applied! (+{2}% for {3}s)",
+"es": "✨ ¡Buff de **{1}** aplicado! (+{2}% durante {3}s)"
+},
+{
+"id": "03000d2f4f0b",
+"kind": "user",
+"en": "✨ Black Flash Boost (%)",
+"es": "✨ Aumento de Black Flash (%)"
+},
+{
+"id": "6c2e5f50b5cd",
+"kind": "user",
+"en": "✨ Black Flash chance +**{1}%** {2}",
+"es": "✨ Probabilidad de Black Flash +**{1}%** {2}"
+},
+{
+"id": "8656d875fadb",
+"kind": "user",
+"en": "✨ FAITH ✨",
+"es": "✨ FAITH ✨"
+},
+{
+"id": "aa84fd13732a",
+"kind": "user",
+"en": "✨ Skill Learned!",
+"es": "✨ ¡Habilidad aprendida!"
+},
+{
+"id": "a1cc0372fde9",
+"kind": "user",
+"en": "❌ **COMBO BROKEN!** {1} used wrong action! Expected `*{2}*`",
+"es": "❌ **¡COMBO ROTO!** ¡{1} usó la acción equivocada! Se esperaba `*{2}*`"
+},
+{
+"id": "7b2c509f9d78",
+"kind": "user",
+"en": "❌ **COMBO BROKEN!** {1} was too slow!",
+"es": "❌ **¡COMBO ROTO!** ¡{1} fue demasiado lento!"
+},
+{
+"id": "4e81d9ce0a5f",
+"kind": "user",
+"en": "❌ **COMBO FAILED!** {1} only completed {2}/{3}!",
+"es": "❌ **¡COMBO FALLIDO!** ¡{1} solo completó {2}/{3}!"
+},
+{
+"id": "f566500df948",
+"kind": "user",
+"en": "❌ **DIRECTION QTE FAILED!** {1} didn't respond!",
+"es": "❌ **¡QTE DE DIRECCIÓN FALLIDO!** ¡{1} no respondió!"
+},
+{
+"id": "56ef441b413d",
+"kind": "user",
+"en": "❌ **WRONG DIRECTION!** {1}\n_Shown: {2} → You input: {3} (needed {4})_",
+"es": "❌ **¡DIRECCIÓN INCORRECTA!** {1}\n_Mostrado: {2} → Tu entrada: {3} (se necesitaba {4})_"
+},
+{
+"id": "2c6432df4aef",
+"kind": "user",
+"en": "❌ AI Test Failed",
+"es": "❌ Falló la prueba de IA"
+},
+{
+"id": "c7a75d2315ea",
+"kind": "user",
+"en": "❌ AI is currently disabled. Use `/ai enable:True` to enable it.",
+"es": "❌ La IA está desactivada actualmente. Usa `/ai enable:True` para activarla."
+},
+{
+"id": "1da6deec14e6",
+"kind": "user",
+"en": "❌ Achievement `{1}` not found!\n\n**Available:** {2}",
+"es": "❌ ¡Logro `{1}` no encontrado!\n\n**Disponibles:** {2}"
+},
+{
+"id": "54dcdedfd34e",
+"kind": "user",
+"en": "❌ Achievement system not configured!",
+"es": "❌ ¡El sistema de logros no está configurado!"
+},
+{
+"id": "9929c34f6115",
+"kind": "user",
+"en": "❌ Admin only!",
+"es": "❌ ¡Solo para administradores!"
+},
+{
+"id": "8ab6cb0349d9",
+"kind": "user",
+"en": "❌ An error occurred during sync.",
+"es": "❌ Ocurrió un error durante la sincronización."
+},
+{
+"id": "a8223665774b",
+"kind": "user",
+"en": "❌ An error occurred.",
+"es": "❌ Ocurrió un error."
+},
+{
+"id": "60fafeb3bf50",
+"kind": "user",
+"en": "❌ Black Flash percentage must be between 0-100!",
+"es": "❌ ¡El porcentaje de Black Flash debe estar entre 0 y 100!"
+},
+{
+"id": "2e86e691cb77",
+"kind": "user",
+"en": "❌ Branch '{1}' not found!",
+"es": "❌ ¡Rama '{1}' no encontrada!"
+},
+{
+"id": "310e06a445c1",
+"kind": "user",
+"en": "❌ Character '{1}' has no powers!",
+"es": "❌ ¡El personaje '{1}' no tiene poderes!"
+},
+{
+"id": "6814dfb15208",
+"kind": "user",
+"en": "❌ Character '{1}' not registered!",
+"es": "❌ ¡El personaje '{1}' no está registrado!"
+},
+{
+"id": "64ab9a00776a",
+"kind": "user",
+"en": "❌ Character **{1}** is already registered!",
+"es": "❌ ¡El personaje **{1}** ya está registrado!"
+},
+{
+"id": "7541585c64bf",
+"kind": "user",
+"en": "❌ Character **{1}** is not registered to you!",
+"es": "❌ ¡El personaje **{1}** no está registrado a tu nombre!"
+},
+{
+"id": "e75e643d52b6",
+"kind": "user",
+"en": "❌ Character **{1}** is not registered!",
+"es": "❌ ¡El personaje **{1}** no está registrado!"
+},
+{
+"id": "3a6764c70294",
+"kind": "user",
+"en": "❌ Charge per counter must be 0-20!",
+"es": "❌ ¡La carga por contraataque debe estar entre 0 y 20!"
+},
+{
+"id": "6a5f24c03047",
+"kind": "user",
+"en": "❌ Charge per damage dealt must be 0-20!",
+"es": "❌ ¡La carga por daño infligido debe estar entre 0 y 20!"
+},
+{
+"id": "c533108a6e9f",
+"kind": "user",
+"en": "❌ Charge per damage taken must be 0-20!",
+"es": "❌ ¡La carga por daño recibido debe estar entre 0 y 20!"
+},
+{
+"id": "5d6aabd60930",
+"kind": "user",
+"en": "❌ Counter window must be 0.5-5 seconds!",
+"es": "❌ ¡La ventana de contraataque debe estar entre 0.5 y 5 segundos!"
+},
+{
+"id": "082114d90072",
+"kind": "user",
+"en": "❌ Error updating spins: {1}",
+"es": "❌ Error al actualizar los giros: {1}"
+},
+{
+"id": "9329517172f8",
+"kind": "user",
+"en": "❌ Error: {1}",
+"es": "❌ Error: {1}"
+},
+{
+"id": "4493e4556dcd",
+"kind": "user",
+"en": "❌ Errors",
+"es": "❌ Errores"
+},
+{
+"id": "bf8ff145b32b",
+"kind": "user",
+"en": "❌ Failed to grant achievement (may already be unlocked)",
+"es": "❌ No se pudo conceder el logro (puede que ya esté desbloqueado)"
+},
+{
+"id": "5e260bc168f9",
+"kind": "user",
+"en": "❌ File not found: {1}",
+"es": "❌ Archivo no encontrado: {1}"
+},
+{
+"id": "fbbaac8f1504",
+"kind": "user",
+"en": "❌ GM only!",
+"es": "❌ ¡Solo para GM!"
+},
+{
+"id": "be9cae0ea547",
+"kind": "user",
+"en": "❌ GM/Admin only!",
+"es": "❌ ¡Solo para GM/Admin!"
+},
+{
+"id": "c59e42d1b5e4",
+"kind": "user",
+"en": "❌ Invalid",
+"es": "❌ Inválido"
+},
+{
+"id": "bc3a6ad5e2ec",
+"kind": "user",
+"en": "❌ Invalid difficulty: {1}",
+"es": "❌ Dificultad no válida: {1}"
+},
+{
+"id": "8669dfd5b4ef",
+"kind": "user",
+"en": "❌ Invalid input! Please enter numbers only.",
+"es": "❌ ¡Entrada no válida! Introduce solo números."
+},
+{
+"id": "43d8aea5e616",
+"kind": "user",
+"en": "❌ Invalid numbers provided",
+"es": "❌ Números no válidos"
+},
+{
+"id": "7ca4650273b2",
+"kind": "user",
+"en": "❌ Min damage must be ≤ max damage!",
+"es": "❌ ¡El daño mínimo debe ser ≤ al daño máximo!"
+},
+{
+"id": "00e60191dfc4",
+"kind": "user",
+"en": "❌ Mirror Shard needs **20 total spins** to invoke QTE!\nYour current spins: **{1}/20**",
+"es": "❌ ¡Mirror Shard necesita **20 giros en total** para invocar un QTE!\nTus giros actuales: **{1}/20**"
+},
+{
+"id": "40e07fde6a55",
+"kind": "user",
+"en": "❌ Missing permissions! I need:\n• `Manage Threads` to create the HP bar thread\n• `Send Messages` in the channel",
+"es": "❌ ¡Faltan permisos! Necesito:\n• `Manage Threads` para crear el hilo de la barra de HP\n• `Send Messages` en el canal"
+},
+{
+"id": "f776066a2e21",
+"kind": "user",
+"en": "❌ Missing prerequisites: {1}",
+"es": "❌ Faltan requisitos previos: {1}"
+},
+{
+"id": "34f7f752e094",
+"kind": "user",
+"en": "❌ Model Not Found",
+"es": "❌ Modelo no encontrado"
+},
+{
+"id": "51534b950df4",
+"kind": "user",
+"en": "❌ Model Switch Failed",
+"es": "❌ Error al cambiar de modelo"
+},
+{
+"id": "c63c2ae92fb5",
+"kind": "user",
+"en": "❌ Must provide both damage_min and damage_max!",
+"es": "❌ ¡Debes indicar tanto damage_min como damage_max!"
+},
+{
+"id": "770394d57c3a",
+"kind": "user",
+"en": "❌ Must provide both parry_start and parry_end!",
+"es": "❌ ¡Debes indicar tanto parry_start como parry_end!"
+},
+{
+"id": "8115ba59bf15",
+"kind": "user",
+"en": "❌ No",
+"es": "❌ No"
+},
+{
+"id": "d92099bdcd9c",
+"kind": "user",
+"en": "❌ No Models Found",
+"es": "❌ No se encontraron modelos"
+},
+{
+"id": "1553d2116c6a",
+"kind": "user",
+"en": "❌ No abilities configured!",
+"es": "❌ ¡No hay habilidades configuradas!"
+},
+{
+"id": "3fa74a84ba01",
+"kind": "user",
+"en": "❌ No achievements configured!",
+"es": "❌ ¡No hay logros configurados!"
+},
+{
+"id": "7710dfefdde9",
+"kind": "user",
+"en": "❌ No active boss to invoke QTE against!\nWait for a boss to appear in combat.",
+"es": "❌ ¡No hay ningún jefe activo contra el que invocar un QTE!\nEspera a que aparezca un jefe en combate."
+},
+{
+"id": "c2cbd459d23d",
+"kind": "user",
+"en": "❌ No boss domain configured!",
+"es": "❌ ¡No hay ningún dominio de jefe configurado!"
+},
+{
+"id": "fc476f79c634",
+"kind": "user",
+"en": "❌ No characters registered! Use `/register` first.",
+"es": "❌ ¡No hay personajes registrados! Usa `/register` primero."
+},
+{
+"id": "2afe4c6f0076",
+"kind": "user",
+"en": "❌ No player stats yet!",
+"es": "❌ ¡Aún no hay estadísticas de jugador!"
+},
+{
+"id": "bba0d6f5f33e",
+"kind": "user",
+"en": "❌ No valid targets!",
+"es": "❌ ¡No hay objetivos válidos!"
+},
+{
+"id": "0e945d8f6031",
+"kind": "user",
+"en": "❌ No valid values provided!",
+"es": "❌ ¡No se indicó ningún valor válido!"
+},
+{
+"id": "38469604a7c1",
+"kind": "user",
+"en": "❌ Not enough skill points! Need {1}, have {2}",
+"es": "❌ ¡No tienes suficientes puntos de habilidad! Necesitas {1}, tienes {2}"
+},
+{
+"id": "916cb004621f",
+"kind": "user",
+"en": "❌ OFF",
+"es": "❌ DESACTIVADO"
+},
+{
+"id": "f5bc353e2485",
+"kind": "user",
+"en": "❌ Object '{1}' not found.",
+"es": "❌ No se encontró el objeto '{1}'."
+},
+{
+"id": "3c7e53559d96",
+"kind": "user",
+"en": "❌ Only GMs/Admins can edit object spins!",
+"es": "❌ ¡Solo los GMs/Admins pueden editar los giros de objetos!"
+},
+{
+"id": "226403675a2a",
+"kind": "user",
+"en": "❌ Parry start must be less than parry end!",
+"es": "❌ ¡El inicio del parry debe ser menor que el final del parry!"
+},
+{
+"id": "1921b3bd6414",
+"kind": "user",
+"en": "❌ Please specify a model name to switch to!",
+"es": "❌ ¡Especifica el nombre de un modelo al que cambiar!"
+},
+{
+"id": "5ed332ee7506",
+"kind": "user",
+"en": "❌ Provide character_name!",
+"es": "❌ ¡Indica el character_name!"
+},
+{
+"id": "115e29fa4ac0",
+"kind": "user",
+"en": "❌ Provide valid new_cooldown (>= 0)!",
+"es": "❌ ¡Indica un new_cooldown válido (>= 0)!"
+},
+{
+"id": "3659ad8efe50",
+"kind": "user",
+"en": "❌ QTE channel not found!",
+"es": "❌ ¡Canal de QTE no encontrado!"
+},
+{
+"id": "135a29da50ce",
+"kind": "user",
+"en": "❌ Set a character name first!",
+"es": "❌ ¡Primero establece un nombre de personaje!"
+},
+{
+"id": "04f812214d53",
+"kind": "user",
+"en": "❌ Skill '{1}' not found!",
+"es": "❌ ¡No se encontró la habilidad '{1}'!"
+},
+{
+"id": "96c969edc437",
+"kind": "user",
+"en": "❌ Skill already maxed!",
+"es": "❌ ¡La habilidad ya está al máximo!"
+},
+{
+"id": "e7597889af65",
+"kind": "user",
+"en": "❌ Slot must be 1 or 2!",
+"es": "❌ ¡El espacio debe ser 1 o 2!"
+},
+{
+"id": "32cd052e014b",
+"kind": "user",
+"en": "❌ Slots must be at least 1!",
+"es": "❌ ¡Los espacios deben ser al menos 1!"
+},
+{
+"id": "1a380c07a513",
+"kind": "user",
+"en": "❌ Sorry, I couldn't generate a response. Is Ollama running?",
+"es": "❌ Lo siento, no pude generar una respuesta. ¿Ollama está en ejecución?"
+},
+{
+"id": "fbe5eae3ab77",
+"kind": "user",
+"en": "❌ Spins must be non-negative!",
+"es": "❌ ¡Los giros no pueden ser negativos!"
+},
+{
+"id": "f209b34ed2c2",
+"kind": "user",
+"en": "❌ Spins must be non-negative! ({1})",
+"es": "❌ ¡Los giros no pueden ser negativos! ({1})"
+},
+{
+"id": "eae147633328",
+"kind": "user",
+"en": "❌ This command is for GMs only (still in development).",
+"es": "❌ Este comando es solo para GMs (aún en desarrollo)."
+},
+{
+"id": "7414a1ef078c",
+"kind": "user",
+"en": "❌ This command is for GMs only!",
+"es": "❌ ¡Este comando es solo para GM!"
+},
+{
+"id": "210378a35b25",
+"kind": "user",
+"en": "❌ This user has no special objects!",
+"es": "❌ ¡Este usuario no tiene objetos especiales!"
+},
+{
+"id": "64f0f222b2d8",
+"kind": "user",
+"en": "❌ Type must be: {1}",
+"es": "❌ El tipo debe ser: {1}"
+},
+{
+"id": "4df7b716ad1d",
+"kind": "user",
+"en": "❌ Ult cooldown/dmg must be 0-5!",
+"es": "❌ ¡La recarga/daño de la definitiva debe estar entre 0 y 5!"
+},
+{
+"id": "4b6fb27a7f66",
+"kind": "user",
+"en": "❌ You don't have permission to use this command!",
+"es": "❌ ¡No tienes permiso para usar este comando!"
+},
+{
+"id": "ec22f0ad9ee1",
+"kind": "user",
+"en": "❌ You don't have the **Mirror Shard**!",
+"es": "❌ ¡No tienes el **Mirror Shard**!"
+},
+{
+"id": "e365d3a76727",
+"kind": "user",
+"en": "❌ You don't own this character!",
+"es": "❌ ¡No eres el dueño de este personaje!"
+},
+{
+"id": "1987b52d754c",
+"kind": "user",
+"en": "❌ You have no registered characters. Use `/register` to add one!",
+"es": "❌ No tienes personajes registrados. ¡Usa `/register` para añadir uno!"
+},
+{
+"id": "35a25e5769ab",
+"kind": "user",
+"en": "❌ You have no stats yet! Participate in some QTEs first.",
+"es": "❌ ¡Aún no tienes estadísticas! Participa primero en algunos QTE."
+},
+{
+"id": "1e48b80da2ce",
+"kind": "user",
+"en": "❌ You haven't earned any titles yet!\n*Unlock achievements to earn titles.*",
+"es": "❌ ¡Aún no has conseguido ningún título!\n*Desbloquea logros para conseguir títulos.*"
+},
+{
+"id": "d09b57e0f9e8",
+"kind": "user",
+"en": "❌ You haven't unlocked any Domain Expansions yet!\n*Complete domain achievements to unlock them.*\n\n**Hint:** Dodge 5 attacks in a row to unlock **Infinity**!",
+"es": "❌ ¡Aún no has desbloqueado ninguna expansión de dominio!\n*Completa logros de dominio para desbloquearlas.*\n\n**Pista:** ¡Esquiva 5 ataques seguidos para desbloquear **Infinity**!"
+},
+{
+"id": "7a1a031f26b7",
+"kind": "user",
+"en": "❌ {1} **Cannot parry in group QTEs!** Use *evade* instead",
+"es": "❌ {1} **¡No puedes hacer parry en QTE grupales!** Usa *evade* en su lugar"
+},
+{
+"id": "78481876751d",
+"kind": "user",
+"en": "❌ {1} **Using commands during QTE = automatic fail!**",
+"es": "❌ {1} **¡Usar comandos durante un QTE = fallo automático!**"
+},
+{
+"id": "555dfadf5ce6",
+"kind": "user",
+"en": "❌ {1} **adapt mistimed!** ({2}s)",
+"es": "❌ ¡{1} **adaptó a destiempo!** ({2}s)"
+},
+{
+"id": "7a330d4bfdc7",
+"kind": "user",
+"en": "❌ {1} **evade too slow!** ({2}s)",
+"es": "❌ ¡{1} **esquivó demasiado lento!** ({2}s)"
+},
+{
+"id": "0535e7bcbfd7",
+"kind": "user",
+"en": "❌ {1} **mistimed!** Chain ends. (No damage taken)\nParry cooldown: **{2}s**",
+"es": "❌ ¡{1} **a destiempo!** La cadena termina. (Sin daño recibido)\nRecarga de parry: **{2}s**"
+},
+{
+"id": "39a3eff6be79",
+"kind": "user",
+"en": "❌ {1} **parry mistimed!** ({2}s)",
+"es": "❌ ¡{1} **hizo parry a destiempo!** ({2}s)"
+},
+{
+"id": "b8ebe948eefe",
+"kind": "user",
+"en": "❌ {1} **save too slow!** ({2}s)",
+"es": "❌ {1} **¡guardado demasiado lento!** ({2}s)"
+},
+{
+"id": "ed8709d9d37c",
+"kind": "user",
+"en": "❌ {1} doesn't have **{2}**{3}.",
+"es": "❌ {1} no tiene **{2}**{3}."
+},
+{
+"id": "6373a43d4caa",
+"kind": "user",
+"en": "❌ {1} doesn't have achievement `{2}`!",
+"es": "❌ ¡{1} no tiene el logro `{2}`!"
+},
+{
+"id": "3d0445529778",
+"kind": "user",
+"en": "❌ {1} evade too slow! ({2}s)",
+"es": "❌ ¡{1} esquivó demasiado lento! ({2}s)"
+},
+{
+"id": "181a24b7f802",
+"kind": "user",
+"en": "❌ {1} has no HP data yet!",
+"es": "❌ ¡{1} aún no tiene datos de HP!"
+},
+{
+"id": "74cdf1fd0263",
+"kind": "user",
+"en": "❌ {1} has no adaptation objects equipped.",
+"es": "❌ {1} no tiene objetos de adaptación equipados."
+},
+{
+"id": "685cc9c0ec8f",
+"kind": "user",
+"en": "❌ {1} has no special objects!\n\nUse `/giveobject` to grant them one.",
+"es": "❌ ¡{1} no tiene objetos especiales!\n\nUsa `/giveobject` para otorgarle uno."
+},
+{
+"id": "fb5cded4ae04",
+"kind": "user",
+"en": "❌ {1} parry mistimed! ({2}s)",
+"es": "❌ ¡{1} hizo parry a destiempo! ({2}s)"
+},
+{
+"id": "251c1662f908",
+"kind": "user",
+"en": "❌ {1} too slow! ({2}s)",
+"es": "❌ ¡{1} demasiado lento! ({2}s)"
+},
+{
+"id": "53fb5eb20391",
+"kind": "user",
+"en": "⭐⚡💥 BLACK FLASH COUNTER! 💥⚡⭐",
+"es": "⭐⚡💥 ¡CONTRAATAQUE BLACK FLASH! 💥⚡⭐"
+},
+{
+"id": "cbaecdcc9943",
+"kind": "user",
+"en": "🌀 Enemy stunned for **3 seconds**!",
+"es": "🌀 ¡Enemigo aturdido durante **3 segundos**!"
+},
+{
+"id": "90e90ddad395",
+"kind": "user",
+"en": "🌌 **Boss Domain Collapse!** The domain fades...",
+"es": "🌌 **¡Colapso del dominio del jefe!** El dominio se desvanece..."
+},
+{
+"id": "154314c0c642",
+"kind": "user",
+"en": "🌌 Available Domains",
+"es": "🌌 Dominios disponibles"
+},
+{
+"id": "51793f6f0f49",
+"kind": "user",
+"en": "🌌 Boss Domain",
+"es": "🌌 Dominio del jefe"
+},
+{
+"id": "7f662f46dc3b",
+"kind": "user",
+"en": "🌌 Boss Domain **{1}** expanded!",
+"es": "🌌 ¡El dominio del jefe **{1}** se expandió!"
+},
+{
+"id": "8f1e8c88398f",
+"kind": "user",
+"en": "🌌 DOMAIN EXPANSION 🌌",
+"es": "🌌 EXPANSIÓN DE DOMINIO 🌌"
+},
+{
+"id": "2fc9fa79ce6a",
+"kind": "user",
+"en": "🌌 Select Your Domain Expansion",
+"es": "🌌 Elige tu expansión de dominio"
+},
+{
+"id": "d416797d9f65",
+"kind": "user",
+"en": "🌌 Set Boss Domain",
+"es": "🌌 Establecer dominio del jefe"
+},
+{
+"id": "7770ffd6f7b3",
+"kind": "user",
+"en": "🌌⚔️ DOMAIN CLASH! ⚔️🌌",
+"es": "🌌⚔️ ¡CHOQUE DE DOMINIOS! ⚔️🌌"
+},
+{
+"id": "9b6d1122454b",
+"kind": "user",
+"en": "🌌❌ **All Domain Expansions have collapsed!** The boss has been defeated!",
+"es": "🌌❌ **¡Todas las expansiones de dominio han colapsado!** ¡El jefe ha sido derrotado!"
+},
+{
+"id": "4348d5128896",
+"kind": "user",
+"en": "🌌❌ DOMAIN INTERRUPTED!",
+"es": "🌌❌ ¡DOMINIO INTERRUMPIDO!"
+},
+{
+"id": "3b3009856e49",
+"kind": "user",
+"en": "🌙 **REFLECTED!** {1} damage → **{2}** to **{3}**! ⚡+{4}% ult",
+"es": "🌙 **¡REFLEJADO!** ¡{1} de daño → **{2}** a **{3}**! ⚡+{4}% de definitiva"
+},
+{
+"id": "ca9130681c87",
+"kind": "user",
+"en": "🌙 **TIME CELL MOON PALACE** activated for **{1}s**!\n⚔️ **ALL damage** inside the domain is **REFLECTED** to the boss!\n💥 Reflected damage is **x{2}**!\n⚡ ALL damage taken grants **ULT CHARGE**!",
+"es": "🌙 ¡**TIME CELL MOON PALACE** activado durante **{1}s**!\n⚔️ ¡**TODO el daño** dentro del dominio es **REFLEJADO** al jefe!\n💥 ¡El daño reflejado es **x{2}**!\n⚡ ¡TODO el daño recibido otorga **CARGA DE DEFINITIVA**!"
+},
+{
+"id": "fe54160b5148",
+"kind": "user",
+"en": "🌙 **TIME CELL MOON PALACE** fades... <@{1}>",
+"es": "🌙 **TIME CELL MOON PALACE** se desvanece... <@{1}>"
+},
+{
+"id": "2d7d9194dd2e",
+"kind": "user",
+"en": "🌟 **JACKPOT ACTIVATED** for **{1}s**!\n⚡ **UNLIMITED Ult Charge** (10s cooldown)\n💚 **Infinite Healing**\n🎰 **Domain READY!** Use domain again INSTANTLY!\n✨ **Next domain:** +20% Jackpot bonus on first roll!",
+"es": "🌟 ¡**JACKPOT ACTIVADO** durante **{1}s**!\n⚡ **Carga de definitiva ILIMITADA** (10s de recarga)\n💚 **Curación infinita**\n🎰 ¡**Dominio LISTO!** ¡Usa el dominio otra vez AL INSTANTE!\n✨ **Próximo dominio:** ¡+20% de bono Jackpot en la primera tirada!"
+},
+{
+"id": "b1ceab326414",
+"kind": "user",
+"en": "🌟 {1} - MASTERY BONUS!",
+"es": "🌟 {1} - ¡BONIFICACIÓN DE MAESTRÍA!"
+},
+{
+"id": "1e01f1f6dcc7",
+"kind": "user",
+"en": "🌳 Skill Tree",
+"es": "🌳 Árbol de habilidades"
+},
+{
+"id": "65b8d009b1c6",
+"kind": "user",
+"en": "🍀 Luck: {1}% | {2}",
+"es": "🍀 Suerte: {1}% | {2}"
+},
+{
+"id": "6638c3f097b4",
+"kind": "user",
+"en": "🎉 Boss Defeat GIF Added!",
+"es": "🎉 ¡GIF de derrota del jefe añadido!"
+},
+{
+"id": "b7234efb937a",
+"kind": "user",
+"en": "🎒 {1}'s Inventory",
+"es": "🎒 Inventario de {1}"
+},
+{
+"id": "0b7eb976a5ef",
+"kind": "user",
+"en": "🎖️ Select Your Title",
+"es": "🎖️ Selecciona tu título"
+},
+{
+"id": "f6039e5f2068",
+"kind": "user",
+"en": "🎖️ Titles Earned",
+"es": "🎖️ Títulos obtenidos"
+},
+{
+"id": "055aa6cce771",
+"kind": "user",
+"en": "🎨 Your Counter Image Collection",
+"es": "🎨 Tu colección de imágenes de contraataque"
+},
+{
+"id": "79af64f531c9",
+"kind": "user",
+"en": "🎨 Your Counter Images",
+"es": "🎨 Tus imágenes de contraataque"
+},
+{
+"id": "9331833abc8d",
+"kind": "user",
+"en": "🎬 Add Counter GIF",
+"es": "🎬 Añadir GIF de contraataque"
+},
+{
+"id": "fbd40c550cdc",
+"kind": "user",
+"en": "🎬 Add Evade GIF",
+"es": "🎬 Añadir GIF de esquiva"
+},
+{
+"id": "61b3ae51ef26",
+"kind": "user",
+"en": "🎬 GIFs",
+"es": "🎬 GIFs"
+},
+{
+"id": "b16a6633c825",
+"kind": "user",
+"en": "🎭 Your Registered Characters",
+"es": "🎭 Tus personajes registrados"
+},
+{
+"id": "f37acf22bc3c",
+"kind": "user",
+"en": "🎮 QTE Channel",
+"es": "🎮 Canal de QTE"
+},
+{
+"id": "beb567f548e6",
+"kind": "user",
+"en": "🎮 {1}'s Dashboard",
+"es": "🎮 Panel de {1}"
+},
+{
+"id": "f81cf94898a9",
+"kind": "user",
+"en": "🎰 **IDLE DEATH GAMBLE** activated! Rolling every **{1}s** for up to **{2}** rolls!",
+"es": "🎰 ¡**IDLE DEATH GAMBLE** activado! ¡Tirando cada **{1}s** hasta **{2}** veces!"
+},
+{
+"id": "c5edb2186aa1",
+"kind": "user",
+"en": "🎰 **JACKPOT ENDED!** <@{1}> can throw another domain now!",
+"es": "🎰 **¡JACKPOT TERMINADO!** ¡<@{1}> ya puede lanzar otro dominio!"
+},
+{
+"id": "60634bfe9ada",
+"kind": "user",
+"en": "🎰 All rolls complete! Domain fades...",
+"es": "🎰 ¡Todas las tiradas completadas! El dominio se desvanece..."
+},
+{
+"id": "8b3e91a821d9",
+"kind": "user",
+"en": "🎰 Domain broken - fight ended!",
+"es": "🎰 ¡Dominio roto - el combate terminó!"
+},
+{
+"id": "81ed0a336660",
+"kind": "user",
+"en": "🎰 Roll #{1}: [ {2} ] *(Jackpot chance: {3}%)*",
+"es": "🎰 Tirada #{1}: [ {2} ] *(Probabilidad de Jackpot: {3}%)*"
+},
+{
+"id": "5cc163caf317",
+"kind": "user",
+"en": "🎰 Roll #{1}: [ {2} ] *(Jackpot chance: {3}%)* - **2 MATCH!** ⚡+30% Ult Charge!",
+"es": "🎰 Tirada #{1}: [ {2} ] *(Probabilidad de Jackpot: {3}%)* - ¡**2 COINCIDEN!** ⚡+30% de carga de definitiva!"
+},
+{
+"id": "19140fb9084a",
+"kind": "user",
+"en": "🎰 Roll #{1}: [ {2} ] *(Jackpot chance: {3}%)* - No match...",
+"es": "🎰 Tirada #{1}: [ {2} ] *(Probabilidad de jackpot: {3}%)* - Sin coincidencia..."
+},
+{
+"id": "1029add28009",
+"kind": "user",
+"en": "🎰 Roll #{1}: [ {2} ] *(Jackpot chance: {3}%)* - Wait...",
+"es": "🎰 Tirada #{1}: [ {2} ] *(Probabilidad de jackpot: {3}%)* - Espera..."
+},
+{
+"id": "a87a61cd3bd5",
+"kind": "user",
+"en": "🎰 Wait...",
+"es": "🎰 Espera..."
+},
+{
+"id": "b29000714157",
+"kind": "user",
+"en": "🎰❌ **Jackpot cancelled!** The boss fight has ended!",
+"es": "🎰❌ **¡Jackpot cancelado!** ¡El combate contra el jefe ha terminado!"
+},
+{
+"id": "191910adfd90",
+"kind": "user",
+"en": "🎰💚 **JACKPOT HEAL!** <@{1}> auto-healed to full HP!",
+"es": "🎰💚 **¡CURACIÓN JACKPOT!** ¡<@{1}> se autocuró hasta el HP completo!"
+},
+{
+"id": "ee561c28bbea",
+"kind": "user",
+"en": "🏅 Leaderboard: {1}",
+"es": "🏅 Clasificación: {1}"
+},
+{
+"id": "a40e3f214c7d",
+"kind": "user",
+"en": "🏆 **MAXIMUM BLACK FLASH CHAIN COMPLETE!** {1}\nTotal damage potential unleashed! Parry cooldown: **{2}s**",
+"es": "🏆 **¡CADENA MÁXIMA DE BLACK FLASH COMPLETADA!** {1}\n¡Todo el potencial de daño liberado! Recarga de parry: **{2}s**"
+},
+{
+"id": "1eace677c271",
+"kind": "user",
+"en": "🏆 Achievements",
+"es": "🏆 Logros"
+},
+{
+"id": "2ecccfa16afe",
+"kind": "user",
+"en": "🏆 All Achievements (GM View)",
+"es": "🏆 Todos los logros (vista GM)"
+},
+{
+"id": "c790a1ce3e6f",
+"kind": "user",
+"en": "🏆 Boss Defeat GIF Collection",
+"es": "🏆 Colección de GIFs de derrota del jefe"
+},
+{
+"id": "bc4e20ccb6fa",
+"kind": "user",
+"en": "🏆 Your Achievements",
+"es": "🏆 Tus logros"
+},
+{
+"id": "0a63edda4412",
+"kind": "user",
+"en": "🏥 CHECKPOINT: {1}",
+"es": "🏥 CHECKPOINT: {1}"
+},
+{
+"id": "971ea4511f84",
+"kind": "user",
+"en": "👁️ **SELF-EMBODIMENT OF PERFECTION** activated!\n⚡ **INSTANT COUNTER** on every evade!\n📈 **Transfiguration:** Each counter = **{1}x** stack\n🔥 Maximum multiplier: **{2}x**\n_\"I TRULY AM A CURSE!\"_",
+"es": "👁️ ¡**SELF-EMBODIMENT OF PERFECTION** activada!\n⚡ ¡**CONTRAATAQUE INSTANTÁNEO** en cada esquiva!\n📈 **Transfiguration:** Cada contraataque = acumulación de **{1}x**\n🔥 Multiplicador máximo: **{2}x**\n_\"¡REALMENTE SOY UNA MALDICIÓN!\"_"
+},
+{
+"id": "1dd957701bfd",
+"kind": "user",
+"en": "👁️ **SELF-EMBODIMENT OF PERFECTION** fades... <@{1}>\n_Achieved {2} Transfiguration stacks_",
+"es": "👁️ **SELF-EMBODIMENT OF PERFECTION** se desvanece... <@{1}>\n_Se lograron {2} acumulaciones de Transfiguration_"
+},
+{
+"id": "f9c1584d995a",
+"kind": "user",
+"en": "👁️ **TRANSFIGURATION!** Stack {1} | Damage: **{2}x**",
+"es": "👁️ **¡TRANSFIGURATION!** Acumulación {1} | Daño: **{2}x**"
+},
+{
+"id": "5070b2db34d5",
+"kind": "user",
+"en": "👁️✨ **{1}** auto-evades the **{2}** attack!\n_\"I TRULY AM A CURSE!\"_",
+"es": "👁️✨ ¡**{1}** esquiva automáticamente el ataque **{2}**!\n_\"¡REALMENTE SOY UNA MALDICIÓN!\"_"
+},
+{
+"id": "c17179ff0cab",
+"kind": "user",
+"en": "👤 Owner",
+"es": "👤 Propietario"
+},
+{
+"id": "db2f128a8554",
+"kind": "user",
+"en": "👤⚡ **{1}** typed `{2}` first! Player gains a point!",
+"es": "👤⚡ ¡**{1}** escribió `{2}` primero! ¡El jugador gana un punto!"
+},
+{
+"id": "0c71fe50cf16",
+"kind": "user",
+"en": "👥 Player Role",
+"es": "👥 Rol de jugador"
+},
+{
+"id": "b1e9d143575c",
+"kind": "user",
+"en": "👹 BOSS APPEARS!",
+"es": "👹 ¡APARECE EL JEFE!"
+},
+{
+"id": "104967de2d26",
+"kind": "user",
+"en": "👹 Boss Control Dashboard",
+"es": "👹 Panel de control del jefe"
+},
+{
+"id": "48bb320a657b",
+"kind": "user",
+"en": "👹 Boss Evades!",
+"es": "👹 ¡El jefe esquiva!"
+},
+{
+"id": "b9b99c1b7618",
+"kind": "user",
+"en": "👹💥 Boss Counter-Attack!",
+"es": "👹💥 ¡Contraataque del jefe!"
+},
+{
+"id": "c5dc1d649d78",
+"kind": "user",
+"en": "👹💥 Boss uses **{1}**!",
+"es": "👹💥 ¡El jefe usa **{1}**!"
+},
+{
+"id": "f307fc374d21",
+"kind": "user",
+"en": "👹💨 **BOSS** typed `{1}` first! Boss gains a point!",
+"es": "👹💨 ¡El **JEFE** escribió `{1}` primero! ¡El jefe gana un punto!"
+},
+{
+"id": "650887f460a4",
+"kind": "user",
+"en": "💀🎉 BOSS DEFEATED! 🎉💀",
+"es": "💀🎉 ¡JEFE DERROTADO! 🎉💀"
+},
+{
+"id": "69baadd0d09d",
+"kind": "user",
+"en": "💕 **AUTHENTIC MUTUAL LOVE** activated for **{1}s**!\n⚔️ **Spec Attacks Unlocked:**\n  • `*spec1*` - **{2} damage**\n  • `*spec2*` - **Stun boss** for {3}s\n  • `*spec3*` - **Bleed + DOUBLE counter window!**\n🔄 **Overspec:** Counter with any spec attack for EXTRA hit!\n⚡ **Jacob's Ladder** (`*jacobs*`): 5s cast, 80% total HP FINISHER!",
+"es": "💕 ¡**AUTHENTIC MUTUAL LOVE** activado durante **{1}s**!\n⚔️ **Ataques spec desbloqueados:**\n  • `*spec1*` - **{2} de daño**\n  • `*spec2*` - **Aturde al jefe** durante {3}s\n  • `*spec3*` - **¡Sangrado + ventana de contraataque DOBLE!**\n🔄 **Overspec:** ¡Contraataca con cualquier ataque spec para un golpe EXTRA!\n⚡ **Jacob's Ladder** (`*jacobs*`): ¡lanzamiento de 5s, FINALIZADOR del 80% del HP total!"
+},
+{
+"id": "f35d2460926b",
+"kind": "user",
+"en": "💕 **AUTHENTIC MUTUAL LOVE** fades... <@{1}>",
+"es": "💕 **AUTHENTIC MUTUAL LOVE** se desvanece... <@{1}>"
+},
+{
+"id": "13a4e1016923",
+"kind": "user",
+"en": "💕 **SPEC1!** {1} deals **{2} DAMAGE!**",
+"es": "💕 **¡SPEC1!** ¡{1} inflige **{2} DE DAÑO!**"
+},
+{
+"id": "37f53b31158d",
+"kind": "user",
+"en": "💕⚡ **OVERSPEC SPEC1!** {1} deals **{2} DAMAGE!**",
+"es": "💕⚡ **¡OVERSPEC SPEC1!** ¡{1} inflige **{2} DE DAÑO!**"
+},
+{
+"id": "ead35d1edbc1",
+"kind": "user",
+"en": "💕🌀 **SPEC2!** Boss STUNNED for **{1}s**!",
+"es": "💕🌀 ¡**SPEC2!** ¡Jefe ATURDIDO durante **{1}s**!"
+},
+{
+"id": "93655240effc",
+"kind": "user",
+"en": "💕🩸 **SPEC3!** Boss afflicted with **{1} BLEED!**\n⚡ Next evade has **DOUBLE counter window**!",
+"es": "💕🩸 **¡SPEC3!** ¡El jefe sufre **{1} de SANGRADO!**\n⚡ ¡La próxima esquiva tiene una **ventana de contraataque DOBLE**!"
+},
+{
+"id": "e59d01eb1b85",
+"kind": "user",
+"en": "💚 Heal (HP)",
+"es": "💚 Curación (HP)"
+},
+{
+"id": "2f12f438c297",
+"kind": "user",
+"en": "💚 Healed **{1} HP**!",
+"es": "💚 ¡Se curaron **{1} HP**!"
+},
+{
+"id": "ea0a44936af9",
+"kind": "user",
+"en": "💤 You are now **inactive** and won't be targeted in QTE events.",
+"es": "💤 Ahora estás **inactivo** y no serás objetivo de los eventos QTE."
+},
+{
+"id": "9565dad17598",
+"kind": "user",
+"en": "💥 **{1} damage** to enemy!",
+"es": "💥 ¡**{1} de daño** al enemigo!"
+},
+{
+"id": "8d6fc24732f9",
+"kind": "user",
+"en": "💥 **{1} damage** to enemy! (capped from {2})",
+"es": "💥 ¡**{1} de daño** al enemigo! (limitado desde {2})"
+},
+{
+"id": "3736fd096590",
+"kind": "user",
+"en": "💥 **{1}** takes **{2} DOMAIN DAMAGE!**",
+"es": "💥 ¡**{1}** recibe **{2} DE DAÑO DE DOMINIO!**"
+},
+{
+"id": "2ab7e9590846",
+"kind": "user",
+"en": "💥 Damage Ranges",
+"es": "💥 Rangos de daño"
+},
+{
+"id": "cbcdce5eef2f",
+"kind": "user",
+"en": "💥 {1} **failed to respond in time!**",
+"es": "💥 ¡{1} **no respondió a tiempo!**"
+},
+{
+"id": "95b3cfc2f838",
+"kind": "user",
+"en": "💫 **{1}** is trapped in the Infinite Void! **STUNNED for {2}s!**\n⚡ **ALL DAMAGE TRIPLED** while the domain is active!",
+"es": "💫 ¡**{1}** está atrapado en el Infinite Void! ¡**ATURDIDO durante {2}s!**\n⚡ ¡**TODO EL DAÑO SE TRIPLICA** mientras el dominio esté activo!"
+},
+{
+"id": "f52786e438c8",
+"kind": "user",
+"en": "💫 **{1}** rises again with **1 HP**! The faith endures.",
+"es": "💫 ¡**{1}** se levanta de nuevo con **1 HP**! La fe perdura."
+},
+{
+"id": "a12cb9bb1860",
+"kind": "user",
+"en": "💫 Support Skill Used!",
+"es": "💫 ¡Habilidad de apoyo usada!"
+},
+{
+"id": "a4f9fd9b07ab",
+"kind": "user",
+"en": "📁 (Image storage - ignore)",
+"es": "📁 (Almacenamiento de imágenes - ignorar)"
+},
+{
+"id": "c6b00bbf700f",
+"kind": "user",
+"en": "📊 **Group QTE Complete!** {1}/{2} succeeded",
+"es": "📊 ¡**QTE grupal completado!** {1}/{2} lo lograron"
+},
+{
+"id": "32501854d2d7",
+"kind": "user",
+"en": "📊 HP Bar Display Thread",
+"es": "📊 Hilo de barras de HP"
+},
+{
+"id": "4cc784a2d3b7",
+"kind": "user",
+"en": "📊 HP Bar Thread",
+"es": "📊 Hilo de la barra de HP"
+},
+{
+"id": "38af558f1900",
+"kind": "user",
+"en": "📊 Quick Stats",
+"es": "📊 Estadísticas rápidas"
+},
+{
+"id": "981edc43d599",
+"kind": "user",
+"en": "📊 Stats for {1}",
+"es": "📊 Estadísticas de {1}"
+},
+{
+"id": "f87271b91675",
+"kind": "user",
+"en": "📊 Your Stats",
+"es": "📊 Tus estadísticas"
+},
+{
+"id": "2bfff91688a2",
+"kind": "user",
+"en": "📋 No powers registered yet!",
+"es": "📋 ¡Aún no hay poderes registrados!"
+},
+{
+"id": "9a33e4ef00d7",
+"kind": "user",
+"en": "📜 Lore",
+"es": "📜 Lore"
+},
+{
+"id": "b18a5da997ae",
+"kind": "user",
+"en": "📤 Unloading `{1}`...",
+"es": "📤 Descargando `{1}`..."
+},
+{
+"id": "4e59f44ccaf3",
+"kind": "user",
+"en": "📥 Loading `{1}`...",
+"es": "📥 Cargando `{1}`..."
+},
+{
+"id": "b85533022192",
+"kind": "user",
+"en": "📦 No special objects loaded.",
+"es": "📦 No hay objetos especiales cargados."
+},
+{
+"id": "237cb4740fcf",
+"kind": "user",
+"en": "📦 Special Objects",
+"es": "📦 Objetos especiales"
+},
+{
+"id": "ff32b8bc50f7",
+"kind": "user",
+"en": "📭 No custom boss defeat GIFs set.\nUsing default: {1}",
+"es": "📭 No hay GIF personalizados de derrota del jefe.\nUsando el predeterminado: {1}"
+},
+{
+"id": "8f9f46024d67",
+"kind": "user",
+"en": "📭 No custom counter images set. Using default.",
+"es": "📭 No hay imágenes de contraataque personalizadas. Usando la predeterminada."
+},
+{
+"id": "c3e62024a7b3",
+"kind": "user",
+"en": "🔄 **Bot restarting in 3 seconds...** All data will be saved.",
+"es": "🔄 **El bot se reiniciará en 3 segundos...** Todos los datos se guardarán."
+},
+{
+"id": "57a6e49b7715",
+"kind": "user",
+"en": "🔄 Adaptation Progress: {1}",
+"es": "🔄 Progreso de adaptación: {1}"
+},
+{
+"id": "30940a8c1271",
+"kind": "user",
+"en": "🔄 Object Spins Reset",
+"es": "🔄 Giros de objeto reiniciados"
+},
+{
+"id": "91adf8d96df6",
+"kind": "user",
+"en": "🔄 Reloading `{1}`...",
+"es": "🔄 Recargando `{1}`..."
+},
+{
+"id": "1c3e7baa1a88",
+"kind": "user",
+"en": "🔄 Special Objects Reloaded",
+"es": "🔄 Objetos especiales recargados"
+},
+{
+"id": "85931e9a53b4",
+"kind": "user",
+"en": "🔒 Domain Effect",
+"es": "🔒 Efecto de dominio"
+},
+{
+"id": "86158d3f81d3",
+"kind": "user",
+"en": "🔒 {1} is **STUNNED** and cannot react! (Boss Domain)",
+"es": "🔒 ¡{1} está **ATURDIDO** y no puede reaccionar! (Dominio del jefe)"
+},
+{
+"id": "23fbc72c92a4",
+"kind": "user",
+"en": "🔥 Ultimate Powers",
+"es": "🔥 Poderes definitivos"
+},
+{
+"id": "bfb5af1cc26a",
+"kind": "user",
+"en": "🔥❌ **FURNACE INTERRUPTED!** {1}",
+"es": "🔥❌ **¡FURNACE INTERRUMPIDO!** {1}"
+},
+{
+"id": "8b6de6d16545",
+"kind": "user",
+"en": "🔧 Debug: Inventory for {1}",
+"es": "🔧 Depuración: inventario de {1}"
+},
+{
+"id": "b22b4ceb1efa",
+"kind": "user",
+"en": "🔧 Support Skill Builder",
+"es": "🔧 Constructor de habilidades de apoyo"
+},
+{
+"id": "dc9295a11ae3",
+"kind": "user",
+"en": "🔮 Object Charges",
+"es": "🔮 Cargas del objeto"
+},
+{
+"id": "7a724fdeb852",
+"kind": "user",
+"en": "🔮 Object Charges (Adaptation Spins)",
+"es": "🔮 Cargas de objetos (giros de adaptación)"
+},
+{
+"id": "80bc1012e869",
+"kind": "user",
+"en": "🔮 {1} **adapted during counter!**\n",
+"es": "🔮 ¡{1} **se adaptó durante el contraataque!**\n"
+},
+{
+"id": "8303c6f821a6",
+"kind": "user",
+"en": "🔮 {1} **adapted!** ({2}s)\n",
+"es": "🔮 ¡{1} **se adaptó!** ({2}s)\n"
+},
+{
+"id": "6139e8d0e256",
+"kind": "user",
+"en": "🔮 {1} - THRESHOLD {2}/{3}!",
+"es": "🔮 ¡{1} - UMBRAL {2}/{3}!"
+},
+{
+"id": "4a2d90386871",
+"kind": "user",
+"en": "🔮 {1}'s Objects (GM View)",
+"es": "🔮 Objetos de {1} (vista GM)"
+},
+{
+"id": "7b0c1c92a2d4",
+"kind": "user",
+"en": "🔴 NO",
+"es": "🔴 NO"
+},
+{
+"id": "5af70b7dbc49",
+"kind": "user",
+"en": "🗑️ {1} from {2}",
+"es": "🗑️ {1} de {2}"
+},
+{
+"id": "5e7552200484",
+"kind": "user",
+"en": "🗡️ **EXECUTIONER'S SWORD** fades... <@{1}>",
+"es": "🗡️ **EXECUTIONER'S SWORD** se desvanece... <@{1}>"
+},
+{
+"id": "d9b053347438",
+"kind": "user",
+"en": "🗡️ <@{1}> has acquired **{2}**!",
+"es": "🗡️ ¡<@{1}> ha adquirido **{2}**!"
+},
+{
+"id": "35d59131f6d1",
+"kind": "user",
+"en": "🗡️❌ **EXECUTIONER LUNGE INTERRUPTED!** {1}",
+"es": "🗡️❌ **¡EMBESTIDA DEL VERDUGO INTERRUMPIDA!** {1}"
+},
+{
+"id": "4d36ed770e51",
+"kind": "user",
+"en": "🗣️ Trigger Phrase",
+"es": "🗣️ Frase de activación"
+},
+{
+"id": "c99dc14f6179",
+"kind": "user",
+"en": "😈 Revenge Mode",
+"es": "😈 Modo venganza"
+},
+{
+"id": "f58bff60b842",
+"kind": "user",
+"en": "🚨 **GROUP {1} QTE** {2} | {3}",
+"es": "🚨 **QTE GRUPAL {1}** {2} | {3}"
+},
+{
+"id": "805e8096db34",
+"kind": "user",
+"en": "🚫 100% damage negated!",
+"es": "🚫 ¡100% del daño anulado!"
+},
+{
+"id": "4195f247cc77",
+"kind": "user",
+"en": "🛡️ **EL BOT NOTES:** {1}\n_Defense argument received ({2}/10 quality)_",
+"es": "🛡️ **EL BOT NOTES:** {1}\n_Argumento de defensa recibido (calidad {2}/10)_"
+},
+{
+"id": "78b0921fe16e",
+"kind": "user",
+"en": "🛡️ {1} **saved {2}!** ({3}s)",
+"es": "🛡️ ¡{1} **salvó a {2}!** ({3}s)"
+},
+{
+"id": "feb012f949d3",
+"kind": "user",
+"en": "🟢 YES",
+"es": "🟢 SÍ"
+},
+{
+"id": "97d91f45e5f0",
+"kind": "user",
+"en": "🤖 AI Configuration",
+"es": "🤖 Configuración de IA"
+},
+{
+"id": "c12e34a60621",
+"kind": "user",
+"en": "🤖 AI Settings Updated",
+"es": "🤖 Ajustes de IA actualizados"
+},
+{
+"id": "84f795740910",
+"kind": "user",
+"en": "🤖 AI Test Successful!",
+"es": "🤖 ¡Prueba de IA exitosa!"
+},
+{
+"id": "d310de24ddf8",
+"kind": "user",
+"en": "🤖 Available AI Models",
+"es": "🤖 Modelos de IA disponibles"
+},
+{
+"id": "c264d595d16f",
+"kind": "user",
+"en": "🧪 Test Results: {1}",
+"es": "🧪 Resultados de la prueba: {1}"
+},
+{
+"id": "a92a73dc14b9",
+"kind": "user",
+"en": "🧹 Timing data cleared!",
+"es": "🧹 ¡Datos de tiempos borrados!"
+},
+{
+"id": "344848b31c0d",
+"kind": "user",
+"en": "🪜 {1} Normal specs complete! Hit all 3 specs in **OVERSPEC** (during counter window) to unlock Jacob's Ladder!",
+"es": "🪜 ¡{1} especificaciones normales completadas! ¡Consigue las 3 especificaciones en **OVERSPEC** (durante la ventana de contraataque) para desbloquear Jacob's Ladder!"
+},
+{
+"id": "780f1c61cea2",
+"kind": "user",
+"en": "🪜✨ {1} **JACOB'S LADDER UNLOCKED!** Use `*jacobs*` or `*ladder*`!",
+"es": "🪜✨ {1} ¡**JACOB'S LADDER DESBLOQUEADA!** ¡Usa `*jacobs*` o `*ladder*`!"
+},
+{
+"id": "7837b1088901",
+"kind": "user",
+"en": "🪜❌ **JACOB'S LADDER INTERRUPTED!** {1}",
+"es": "🪜❌ ¡**JACOB'S LADDER INTERRUMPIDA!** {1}"
+},
+{
+"id": "a59d20947623",
+"kind": "user",
+"en": "🪞⚡ **Mirror Shard Invocation!**\n{1} reflects a **MEDIUM QTE** back at **{2}**!",
+"es": "🪞⚡ **¡Invocación de Mirror Shard!**\n¡{1} refleja un **QTE MEDIO** de vuelta hacia **{2}**!"
+},
+{
+"id": "2f9bc97d9648",
+"kind": "user",
+"en": "🪞⚡ MIRROR SHARD BLACK FLASH! ⚡🪞",
+"es": "🪞⚡ ¡MIRROR SHARD BLACK FLASH! ⚡🪞"
+},
+{
+"id": "038dc92c54d2",
+"kind": "user",
+"en": "🪞✨ **Mirror Shard** healed {1}! ({2} → {3} HP)",
+"es": "🪞✨ ¡**Mirror Shard** curó {1}! ({2} → {3} HP)"
+},
+{
+"id": "5ddb0328697e",
+"kind": "user",
+"en": "🪞✨ **{1}** auto-evades the **{2}** attack!",
+"es": "🪞✨ ¡**{1}** esquiva automáticamente el ataque **{2}**!"
+},
+{
+"id": "2b3cdc79f85e",
+"kind": "user",
+"en": "🪞✨ **{1}** auto-evades the **{2}** attack!\n_Mirror Shard reflects the technique back!_",
+"es": "🪞✨ ¡**{1}** esquiva automáticamente el ataque **{2}**!\n_¡Mirror Shard refleja la técnica de vuelta!_"
+},
+{
+"id": "8d2a0e23fecb",
+"kind": "user",
+"en": "🪞💥 Mirror Shard - QTE Reflected!",
+"es": "🪞💥 Mirror Shard - ¡QTE reflejado!"
+}
+]

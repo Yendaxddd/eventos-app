@@ -116,11 +116,14 @@ class ConsoleProxy:
     def __init__(self) -> None:
         self._sink: Sink | None = None
         self._real: Console | None = None
+        self.translate: Callable[[str], str] | None = None      # the log's own language (eventos_app.lang), when one is chosen
 
     def set_sink(self, sink: Sink | None) -> None:
         self._sink = sink
 
     def print(self, *objects, sep: str = " ", end: str = "\n", **kwargs) -> None:
+        if self.translate is not None:
+            objects = tuple(self._translated(o) for o in objects)
         sink = self._sink
         if sink is not None:
             try:
@@ -133,6 +136,20 @@ class ConsoleProxy:
         if self._real is None:
             self._real = Console()
         self._real.print(*objects, sep=sep, end=end, **kwargs)
+
+
+    def _translated(self, obj):
+        try:
+            if isinstance(obj, str):
+                return self.translate(obj)
+            renderable = getattr(obj, "renderable", None)              # a Panel around a message
+            if isinstance(renderable, str):
+                obj.renderable = self.translate(renderable)
+            if isinstance(getattr(obj, "title", None), str):
+                obj.title = self.translate(obj.title)
+        except Exception:  # noqa: BLE001 - the log must never break the bot
+            pass
+        return obj
 
 
 console = ConsoleProxy()
