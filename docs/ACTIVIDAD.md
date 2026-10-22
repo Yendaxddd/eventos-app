@@ -245,6 +245,74 @@ en cada uno.
   jefe* y *termina el combate* eliges de una vez la **cinemática**, la **música**, el **efecto** y el **sonido**. Se guarda al elegir; los
   detalles se afinan en las pestañas Cinemáticas, Audio y Efectos.
 
+## Novedades de la 2.0
+### Moverse por la Actividad
+- **Móvil:** barra abajo con *Evento*, *Mi panel*, *Entrenar*, *GM* (si tienes el rol) y *Más*. La lupa de arriba abre «Ir a…».
+- **PC:** accesos en la barra de arriba y **«Ir a…»** con `Ctrl+K` o `/`: escribe unas letras («inventario», «enemigos», «latencia»…)
+  y Enter. Encuentra cualquier página o pestaña del GM.
+- Al cambiar de página el foco va a su título (teclado y lector de pantalla); en pantallas táctiles todo control mide al menos 44 px.
+
+### QTE de la Actividad
+**Deslizar** (en la dirección que marca), **arrastrar** (la ficha hasta la diana) y **machacar** (tocar N veces), además del **falso**:
+parece real y quien lo responde cae. También desde el teclado (flechas, Espacio). Los lanza el GM o los mini enemigos.
+
+### Mini enemigos
+*Panel del GM → Enemigos*: un **bestiario** (nombre, vida, imagen, color, cada cuánto ataca, qué QTE lanza y su dificultad, daño, carga
+al derrotarlo) y el **campo** (dañar, curar, derrotar, retirar, pausar). Cada enemigo ataca por su cuenta a alguien que juegue desde la
+Actividad; responder bien le devuelve el golpe. Los jugadores lo **golpean tocándolo** (uno cada 2 s, con su arma y sus mejoras) y quien
+lo remata se lleva la carga. El mando lateral del GM también los envía. Sus momentos (*aparecen*, *ataca*, *recibe un golpe*, *cae*,
+*no queda ninguno*) admiten sonido, efecto y cinemática.
+
+### Cinemáticas para creadores
+- **Diálogo:** líneas a la izquierda y a la derecha; los retratos de los dos personajes se quedan en escena, quien habla se ilumina.
+  «Personaje» rellena nombre y retrato con los personajes guardados.
+- **Efectos de pantalla** que se solapan: pantallazo, temblor, zoom, desenfoque, fundido a negro o a blanco, teñido, latido, viñeta,
+  blanco y negro, sepia, negativo, aberración de color y glitch, con fuerza y duración. Los textos nunca se desenfocan.
+- **Cámara** (acercarse, alejarse, barridos, flotar) en fondos e imágenes; entradas y tamaños de imagen; transición de escena.
+- **Títulos** (cine, capítulo, impacto, lugar, sencillo) y **clima** (lluvia, tormenta, nieve, brasas, chispas, niebla, pétalos,
+  estrellas, ceniza).
+- **Sobre el juego:** fondo transparente; los efectos se aplican a la pantalla del juego.
+- **Plantillas** (diálogo, entrada del jefe, capítulo, recuerdo, victoria, tormenta, lugar), **copiar y pegar pasos** entre
+  cinemáticas y **«Desde aquí»** para ver solo una parte.
+
+### Poderes que valen lo que dicen
+El efecto de un poder son hasta **4 partes** (el creador en *Personajes* las arma con menús y números y dice qué pasará con tu arma y tus
+mejoras actuales). En texto, para quien lo prefiera:
+
+| Parte | Qué hace |
+|---|---|
+| `damage:N` | N de daño al jefe (× arma, mejora de daño, venganza; con el tope del juego) |
+| `damage_all:N` | lo mismo, y N a cada mini enemigo |
+| `heal:N` / `heal_team:N` | curarte / curar a todos los que siguen en pie |
+| `shield:P:S` / `shield_team:P:S` | P % menos de daño recibido durante S segundos |
+| `stun:S` | jefe aturdido S segundos (los mini enemigos también esperan) |
+| `buff:damage_boost:P:S`, `buff:bf_boost:P:S` | +P % de daño o de Black Flash (S = 0: solo el próximo) |
+| `charge_team:P` | P % de carga para los demás |
+| `afflict:burn:S` (también `bleed`, `poison`) | el jefe arde, sangra o se envenena |
+| `cleanse` / `cleanse_team` | quita sangrado, quemadura, veneno, debilidad, aturdimiento y maldición |
+
+Las formas antiguas (`damage:50`, `heal:30`, `stun`, `buff:damage_boost:0.2:30`) siguen valiendo. La **imagen o GIF** del poder llena la
+pantalla de la Actividad al usarlo: para **todos**, **solo para quien lo usa** o **nadie**. La debilidad ya reduce el daño y la
+maldición la carga.
+
+### Daño, efectos e inventario
+- Números de **daño y curación** sobre el jefe, cada jugador y tu barra, sea cual sea la causa.
+- **Efectos y mejoras** con su cuenta atrás en tu tarjeta (veneno, quemadura, escudo, más daño…) e iconos en la lista y en el jefe.
+- *Inventario:* el **Mirror Shard** se invoca desde ahí (60 s de recarga), efectos activos explicados y el **catálogo** de todos los
+  objetos del evento.
+
+### Para el GM
+- **Objetos por formulario** (*Contenido → Objetos*): crear y editar sin JSON, pasos de adaptación con efectos elegidos de una lista,
+  imagen, y dar o quitar a quien lo tiene.
+- **Poderes de todos** (*Contenido → Poderes*), editables con el mismo creador.
+- **Apoyo** en la ficha de cada jugador (lo que hacía `/support`): curar, escudo, más daño, más Black Flash, carga y reducir recargas.
+
+### Seguridad y fiabilidad
+- Una página web abierta en el PC del anfitrión ya no puede entrar como prueba local ni como GM.
+- Un cliente no puede elegir su propio tiempo de respuesta; el servidor lo limita por lo que vio.
+- Las imágenes descargadas no pueden redirigir a la red de casa; tokens inventados no se llevan a Discord sin límite.
+- Una pantalla lenta no frena a las demás; las peticiones largas terminan aunque tarden.
+
 ## Puesta en marcha (una sola vez)
 En <https://discord.com/developers/applications> → tu aplicación (la del bot principal):
 1. **Activities**: actívalas («Enable Activities»). Discord crea el comando de entrada «Launch».
@@ -336,7 +404,10 @@ exista y se llame como el bot lo declara (`test_activity_gm_contract.py`).
   versión de Discord), y la **temporización de las cinemáticas** con latencias reales.
 - **Exportaciones reales de Tupperbox** (las pruebas usan archivos con el mismo formato documentado, no los de tu servidor).
 - **Voz:** esta versión no reproduce en un canal de voz; el sonido va por la Actividad de cada persona.
-- El bot sigue escribiendo en inglés los mensajes de **canal** (la traducción de esos textos queda para otra versión).
+- **Mensajes del canal en español (2.0):** con *Idioma: Español* el bot traduce sus mensajes, comandos y registro; lo que escriben los
+  jugadores no se toca. Si ves alguna frase en inglés, dímela: es un texto que el catálogo aún no tiene.
+- **Mini enemigos, gestos y cinemáticas nuevas en móviles reales** (sensibilidad al deslizar y arrastrar, rendimiento del clima y los
+  efectos). *Ajustes → Efectos visuales → Suaves* y «menos movimiento» los alivian.
 - **Imagen del personaje en el canal (1.3.0):** que Discord descargue la imagen importada desde la dirección del túnel (con el túnel
   rápido de Cloudflare la dirección cambia cada vez, pero Discord la pide en cada mensaje, así que no hay problema mientras la
   Actividad esté abierta).
