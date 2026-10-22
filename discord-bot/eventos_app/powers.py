@@ -9,6 +9,7 @@ A power's `effect` is one or more parts joined by ";" (at most MAX_PARTS), each 
     stun / stun:S         the boss is stunned for S seconds (3 by default; the GM's hotkeys and the mini enemies wait)
     buff:TYPE:P:S         +P % of damage_boost or bf_boost for S seconds (0 seconds: the next hit only)
     charge_team:P         P % of power charge to every other player
+    afflict:STATUS:S      the boss bleeds, burns or is poisoned for S seconds (its own damage over time)
     cleanse / cleanse_team  bleeding, burning, poison, weakness, stun and curses are removed
 
 The old forms keep working: `damage:50`, `heal:30`, `stun`, `buff:damage_boost:0.2:30` (a value of 1 or less is a fraction, 0.2 = 20 %).
@@ -21,8 +22,9 @@ from typing import Any
 
 MAX_PARTS = 4
 MAX_AMOUNT = 100000
-KINDS = ("damage", "damage_all", "heal", "heal_team", "shield", "shield_team", "stun", "buff", "charge_team", "cleanse", "cleanse_team")
+KINDS = ("damage", "damage_all", "heal", "heal_team", "shield", "shield_team", "stun", "buff", "charge_team", "cleanse", "cleanse_team", "afflict")
 BUFFS = ("damage_boost", "bf_boost")
+AFFLICTIONS = ("bleed", "burn", "poison")
 _PART = re.compile(r"^([a-z_]{3,16})(?::([a-z_]{2,24}|\d{1,6}(?:\.\d{1,2})?))?(?::(\d{1,6}(?:\.\d{1,2})?))?(?::(\d{1,5}(?:\.\d{1,2})?))?$")
 
 
@@ -55,6 +57,11 @@ def parse(effect: Any) -> list[dict]:
             percent = value * 100 if value <= 1 else value
             out.append({"kind": kind, "buff": a, "amount": min(percent, 300.0), "seconds": min(_num(c, 30.0), 600.0)})
             continue
+        if kind == "afflict":
+            if a not in AFFLICTIONS:
+                raise PowerError("El estado para el jefe debe ser bleed (sangrado), burn (quemadura) o poison (veneno).")
+            out.append({"kind": kind, "status": a, "amount": 0, "seconds": max(1.0, min(_num(b, 8.0), 60.0))})
+            continue
         if a is not None and not re.fullmatch(r"\d+(\.\d+)?", a):
             raise PowerError(f"«{piece}»: el número del efecto no es válido.")
         if kind in ("cleanse", "cleanse_team"):
@@ -84,6 +91,8 @@ def compose(part: dict) -> str:
         return f"buff:{part['buff']}:{n(part['amount'])}:{n(part['seconds'])}"
     if kind in ("cleanse", "cleanse_team"):
         return kind
+    if kind == "afflict":
+        return f"afflict:{part['status']}:{n(part['seconds'])}"
     if kind == "stun":
         return f"stun:{n(part['seconds'])}"
     if kind in ("shield", "shield_team"):
@@ -124,6 +133,8 @@ def describe(parts: list[dict], multiplier: float = 1.0, cap: float = 500) -> li
             lines.append(f"✨ +{a:g}% {what} for {int(s)} seconds" if s else f"✨ +{a:g}% {what} on the next hit")
         elif k == "charge_team":
             lines.append(f"⚡ +{int(a)}% power charge to every other player")
+        elif k == "afflict":
+            lines.append({"bleed": "🩸 The boss bleeds", "burn": "🔥 The boss burns", "poison": "☠️ The boss is poisoned"}[p["status"]] + f" for {int(s)} seconds")
         elif k == "cleanse":
             lines.append("🧼 Removes your harmful effects")
         elif k == "cleanse_team":

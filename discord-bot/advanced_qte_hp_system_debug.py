@@ -521,6 +521,7 @@ class AdvancedQTEBot:
         # ========== STATUS EFFECTS SYSTEM ==========
         # Active status effects on players/boss
         self.player_status_effects = {}  # {user_id: {effect_type: {stacks, damage_per_tick, tick_interval, end_time, source}}}
+        self.mirror_cooldowns = {}       # user id -> when their Mirror Shard can be invoked again
         self.boss_status_effects = {}    # Same structure but for boss
         self.status_effect_types = {
             "bleed": {
@@ -6966,78 +6967,16 @@ Your response (1-2 sentences max):"""
         )
         async def mirrorinvoke_command(interaction: discord.Interaction):
             """Invoke a medium QTE against the boss using Mirror Shard at 20+ spins"""
-            user_id = interaction.user.id
-            
-            # Check if user has Mirror Shard
-            inventory = self.special_objects_manager.player_inventory.get(user_id, [])
-            has_mirror_shard = 'mirror_shard' in inventory
-            
-            # Also check unique ownership
-            if not has_mirror_shard:
-                owner_id = self.special_objects_manager.unique_object_owners.get('mirror_shard')
-                has_mirror_shard = owner_id == user_id
-            
-            if not has_mirror_shard:
-                await interaction.response.send_message("❌ You don't have the **Mirror Shard**!", ephemeral=True)
+            problem = self.mirror_invoke_problem(interaction.user.id)
+            if problem:
+                await interaction.response.send_message(problem, ephemeral=True)
                 return
-            
-            # Check spins
-            spins = self.special_objects_manager.get_tracking(user_id, 'mirror_shard', 'total')
-            if spins < 20:
-                await interaction.response.send_message(
-                    f"❌ Mirror Shard needs **20 total spins** to invoke QTE!\n"
-                    f"Your current spins: **{spins}/20**",
-                    ephemeral=True
-                )
-                return
-            
-            # Check if there's an active boss
-            if not self.active_boss:
-                await interaction.response.send_message(
-                    "❌ No active boss to invoke QTE against!\n"
-                    "Wait for a boss to appear in combat.",
-                    ephemeral=True
-                )
-                return
-            
-            # Invoke the medium QTE against the boss!
             await interaction.response.send_message(
                 f"🪞⚡ **Mirror Shard Invocation!**\n"
                 f"{interaction.user.mention} reflects a **MEDIUM QTE** back at **{self.active_boss['name']}**!",
             )
-            
-            # Create the boss QTE - the boss must evade
-            boss_name = self.active_boss['name']
-            
-            # For now, auto-resolve: boss takes damage since NPCs can't respond
-            # This simulates invoking a QTE that the boss "fails"
-            base_damage = 15  # Medium QTE damage
-            
-            # Apply boss damage
-            await self.damage_boss(boss_name, base_damage)
-            
-            embed = discord.Embed(
-                title="🪞💥 Mirror Shard - QTE Reflected!",
-                description=f"**{boss_name}** failed to evade the reflected attack!\n\n"
-                           f"💢 **{base_damage} damage** dealt!",
-                color=discord.Color.purple()
-            )
-            
-            # Check for black flash effect at 20 spins
-            mirror_effects = self.special_objects_manager.get_active_effects(user_id, 'medium')
-            if mirror_effects.get('on_boss_stunned', {}).get('black_flash', False):
-                embed.add_field(
-                    name="⚡ Black Flash Ready!",
-                    value="Boss stunned! Black Flash opportunity!",
-                    inline=False
-                )
-                # Stun the enemy
-                self.enemy_stunned = True
-                self.stun_end_time = time.time() + 2.0  # 2 second stun
-            
-            await self.webhook_send(embed=embed)
-            console.print(f"[magenta]🪞 MIRROR INVOKE - {interaction.user.name} reflected QTE at {boss_name} for {base_damage} damage[/magenta]")
-        
+            await self.mirror_invoke(interaction.user.id, interaction.user.name)
+
         # ========== END SPECIAL OBJECTS COMMANDS ==========
         
         @self.bot.tree.command(
@@ -8338,6 +8277,7 @@ Your response (1-2 sentences max):"""
         
         # 2% per 5 damage taken = 0.4% per damage
         charge_gain = (damage_amount / 5.0) * self.charge_per_damage_taken
+        charge_gain *= self.get_ult_charge_modifier(user_id)      # cursed: less charge
         
         # Add to both powers
         for power_key in ["power1", "power2"]:
@@ -8356,6 +8296,7 @@ Your response (1-2 sentences max):"""
         
         # 1% per 10 damage dealt = 0.1% per damage
         charge_gain = (damage_amount / 10.0) * self.charge_per_damage_dealt
+        charge_gain *= self.get_ult_charge_modifier(user_id)      # cursed: less charge
         
         # Add to both powers
         for power_key in ["power1", "power2"]:
@@ -8374,6 +8315,7 @@ Your response (1-2 sentences max):"""
         
         # Use configured charge value (default 3%)
         charge_gain = self.charge_per_counter
+        charge_gain *= self.get_ult_charge_modifier(user_id)      # cursed: less charge
         
         # Add to both powers (they charge independently but from same actions)
         for power_key in ["power1", "power2"]:
@@ -12492,6 +12434,7 @@ Responde SOLAMENTE con un numero del 1 al 10."""
             boost = self.get_active_buff(uid, "damage_boost")
             multiplier = power_effects.damage_multiplier(self.get_weapon_damage_multiplier(uid), float(boost["value"]) if boost else 0.0,
                                                          bool(hp.get("revenge_mode")))
+            multiplier *= self.get_damage_modifier(uid)                                 # weakened: less damage
             standing = [p for p, d in self.player_hp.items() if d.get("alive")]
             report = {"user": uid, "character": character, "name": power_name, "damage": 0, "healed": 0}
             for part in parts:
@@ -12526,6 +12469,8 @@ Responde SOLAMENTE con un numero del 1 al 10."""
                         charges = self.power_charges.setdefault(target, {"power1": 0, "power2": 0})
                         for slot in ("power1", "power2"):
                             charges[slot] = min(100, float(charges.get(slot, 0) or 0) + amount)
+                elif kind == "afflict" and self.active_boss:
+                    await self.apply_status_effect(self.active_boss['name'], part["status"], seconds, 1, source="power")
                 elif kind in ("cleanse", "cleanse_team"):
                     for target in ([uid] if kind == "cleanse" else list(self.player_status_effects.keys())):
                         self.player_status_effects.pop(target, None)
@@ -12564,6 +12509,52 @@ Responde SOLAMENTE con un numero del 1 al 10."""
 
         except Exception as e:
             log.error(f"Error applying power effect: {e}")
+
+    MIRROR_COOLDOWN = 60.0           # seconds between two Mirror Shard invocations of the same player
+
+    def mirror_invoke_problem(self, user_id):
+        """Why this player cannot invoke the Mirror Shard now (a message), or None when they can."""
+        inventory = self.special_objects_manager.player_inventory.get(user_id, [])
+        has_mirror_shard = 'mirror_shard' in inventory or self.special_objects_manager.unique_object_owners.get('mirror_shard') == user_id
+        if not has_mirror_shard:
+            return "❌ You don't have the **Mirror Shard**!"
+        spins = self.special_objects_manager.get_tracking(user_id, 'mirror_shard', 'total')
+        if spins < 20:
+            return (f"❌ Mirror Shard needs **20 total spins** to invoke QTE!\n"
+                    f"Your current spins: **{spins}/20**")
+        if not self.active_boss:
+            return ("❌ No active boss to invoke QTE against!\n"
+                    "Wait for a boss to appear in combat.")
+        left = self.mirror_cooldowns.get(user_id, 0) - time.time()
+        if left > 0:
+            return f"⏱️ The Mirror Shard is recharging: **{int(left) + 1}s** left."
+        return None
+
+    async def mirror_invoke(self, user_id, name="?"):
+        """The Mirror Shard reflects a medium QTE at the boss: 15 damage, and a 2 s stun when its effects allow it. Returns the damage."""
+        self.mirror_cooldowns[user_id] = time.time() + self.MIRROR_COOLDOWN
+        boss_name = self.active_boss['name']
+        base_damage = 15  # Medium QTE damage (the boss "fails" the reflected QTE)
+        await self.damage_boss(boss_name, base_damage)
+        embed = discord.Embed(
+            title="🪞💥 Mirror Shard - QTE Reflected!",
+            description=f"**{boss_name}** failed to evade the reflected attack!\n\n"
+                       f"💢 **{base_damage} damage** dealt!",
+            color=discord.Color.purple()
+        )
+        mirror_effects = self.special_objects_manager.get_active_effects(user_id, 'medium')
+        if mirror_effects.get('on_boss_stunned', {}).get('black_flash', False):
+            embed.add_field(
+                name="⚡ Black Flash Ready!",
+                value="Boss stunned! Black Flash opportunity!",
+                inline=False
+            )
+            self.enemy_stunned = True
+            self.stun_end_time = time.time() + 2.0  # 2 second stun
+        await self.webhook_send(embed=embed)
+        self.emit_event("mirror_invoke", user=user_id, damage=base_damage)
+        console.print(f"[magenta]🪞 MIRROR INVOKE - {name} reflected QTE at {boss_name} for {base_damage} damage[/magenta]")
+        return base_damage
 
     def get_power_color(self, power_type):
         """Get embed color based on power type"""
@@ -12703,6 +12694,7 @@ Responde SOLAMENTE con un numero del 1 al 10."""
             
             # ========== DAMAGE BOOST (powers, /support) ==========
             counter_damage = self.apply_damage_buff(user_id, counter_damage)
+            counter_damage = int(counter_damage * self.get_damage_modifier(user_id))      # weakened: less damage
             # =====================================================
 
             # ========== TRANSFIGURATION (Soul Manipulator) ==========

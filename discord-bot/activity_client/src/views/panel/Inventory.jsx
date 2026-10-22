@@ -1,7 +1,10 @@
-import { Backpack, Check, Circle, Gem, Lock, Package } from "lucide-preact";
+import { useState } from "preact/hooks";
+import { Backpack, BookOpen, Check, Circle, Gem, Lock, Package, Sparkles } from "lucide-preact";
+import { me } from "../../state.js";
+import { EffectChips, STATUS } from "../../ui/Effects.jsx";
 import { Bar } from "../../ui/Hud.jsx";
 import { Block, Empty, Pill } from "../../ui/Common.jsx";
-import { usePanel } from "../../panel/data.js";
+import { act, usePanel } from "../../panel/data.js";
 import { OBJECT_TYPE, TRACK_LABEL, plural, rarityOf, readable } from "../../panel/format.js";
 import { cdn } from "../../util.js";
 
@@ -35,7 +38,23 @@ function Track({ row }) {
   );
 }
 
-function ObjectCard({ o }) {
+function UseButton({ use, replace }) {
+  const [busy, setBusy] = useState(false);
+  const go = async () => {
+    setBusy(true);
+    const out = await act("panel.object_use", { use: use.id }, "¡Invocado!");
+    setBusy(false);
+    if (out) replace(out);
+  };
+  return (
+    <div class="obj-use">
+      <button class="btn btn-primary btn-sm" type="button" disabled={!!use.problem || busy} onClick={go} data-testid={`obj-use-${use.id}`}><Sparkles size={14} /> {use.label}</button>
+      {use.problem && <small class="faint">{use.problem}</small>}
+    </div>
+  );
+}
+
+function ObjectCard({ o, replace }) {
   const rarity = rarityOf(o.rarity);
   return (
     <article class="obj" style={{ "--rarity": readable(o.color, rarity.color), "--rarity-kind": rarity.color }} data-testid={`obj-${o.id}`} data-rarity={o.rarity}>
@@ -60,11 +79,50 @@ function ObjectCard({ o }) {
           {o.tracking.rows.map((r) => <Track key={r.key} row={r} />)}
         </div>
       )}
+      {o.use && <UseButton use={o.use} replace={replace} />}
     </article>
   );
 }
 
-function Inventory({ d }) {
+// What is on you right now (from the bot's status effects and boosts), with what each one does.
+function ActiveEffects() {
+  const m = me.value;
+  const all = m ? [...(m.effects || []), ...(m.buffs || [])] : [];
+  return (
+    <section class="card-2" data-testid="active-effects">
+      <strong class="display">Efectos activos</strong>
+      {all.length === 0 ? <p class="faint" style={{ marginTop: "6px" }}>Ninguno ahora mismo. Aquí verás venenos, quemaduras, escudos o mejoras, con el tiempo que les queda.</p> : (
+        <div class="col" style={{ gap: "8px", marginTop: "8px" }}>
+          <EffectChips effects={m.effects} buffs={m.buffs} />
+          <ul class="effect-help">{all.map((e) => (STATUS[e.kind] && STATUS[e.kind][2] ? <li key={e.kind}><b>{STATUS[e.kind][1]}:</b> {STATUS[e.kind][2]}</li> : null))}</ul>
+        </div>
+      )}
+    </section>
+  );
+}
+
+function Catalog({ items }) {
+  if (!items || !items.length) return null;
+  return (
+    <details class="card-2 catalog" data-testid="catalog">
+      <summary><BookOpen size={16} style={{ verticalAlign: "-3px" }} /> Todos los objetos del evento ({items.length})</summary>
+      <div class="catalog-grid">
+        {items.map((o) => (
+          <div key={o.id} class="catalog-item" data-rarity={o.rarity}>
+            <span class="obj-icon">{o.image ? <img src={cdn(o.image)} alt="" /> : o.emoji}</span>
+            <div class="grow" style={{ minWidth: 0 }}>
+              <b>{o.name}</b>{o.mine ? <Pill tone="ok">Tuyo</Pill> : o.unique && o.taken ? <Pill tone="warn">Ya tiene dueño</Pill> : null}
+              <small class="faint">{rarityOf(o.rarity).label} · {OBJECT_TYPE[o.type] || o.type}</small>
+              {o.description && <p>{o.description}</p>}
+            </div>
+          </div>
+        ))}
+      </div>
+    </details>
+  );
+}
+
+function Inventory({ d, replace }) {
   const [used, max] = d.slots;
   return (
     <div class="dash-col" data-testid="inventory">
@@ -81,12 +139,14 @@ function Inventory({ d }) {
       </section>
       {d.objects.length === 0
         ? <Empty icon={Backpack} title="No tienes objetos especiales">Cuando quien dirige el evento te dé uno, aparecerá aquí con su progreso.</Empty>
-        : <div class="cards wide">{d.objects.map((o) => <ObjectCard key={o.id} o={o} />)}</div>}
+        : <div class="cards wide">{d.objects.map((o) => <ObjectCard key={o.id} o={o} replace={replace} />)}</div>}
+      <ActiveEffects />
+      <Catalog items={d.catalog} />
     </div>
   );
 }
 
 export function InventoryTab() {
   const q = usePanel("panel.inventory");
-  return <Block q={q}>{(d) => <Inventory d={d} />}</Block>;
+  return <Block q={q}>{(d) => <Inventory d={d} replace={q.replace} />}</Block>;
 }

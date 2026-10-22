@@ -20,6 +20,7 @@ import { onCineFrame, startCine, stopCine } from "./cine.js";
 import { playBinding } from "./vfx.js";
 import { onMobHit, setMobs } from "./mobs.js";
 import { onPowerShow } from "./ui/PowerShow.jsx";
+import { addPops, hpChanges } from "./hits.js";
 
 function showNotice(kind, data) {
   const notice = describeNotice(kind, data);
@@ -160,6 +161,8 @@ function localMe(frame, arrival) {
     ...raw, powers,
     parryAt: at(raw.parryUntil), counterAt: at(raw.counterUntil),
     saves: raw.saves ? { ...raw.saves, at: at(raw.saves.until) } : null,
+    effects: (raw.effects || []).map((e) => ({ ...e, at: at(e.until) })),
+    buffs: (raw.buffs || []).map((b) => ({ ...b, at: at(b.until) })),
   };
 }
 
@@ -233,6 +236,7 @@ function onFrame(frame, arrival) {
     case "del": messages.value = messages.value.filter((m) => m.id !== frame.id); break;
     case "state": {
       const before = myHp.value;
+      addPops(hpChanges(game.value, frame.s));
       game.value = frame.s;
       const after = myHp.value;
       if (before && after && after.hp < before.hp) flash("hit");

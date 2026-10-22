@@ -7336,5 +7336,29 @@
 "kind": "user",
 "en": "🧼 Removes everyone's harmful effects",
 "es": "🧼 Quita los efectos dañinos a todos"
+},
+{
+"id": "e77290130ad8",
+"kind": "user",
+"en": "🩸 The boss bleeds for {1} seconds",
+"es": "🩸 El jefe sangra durante {1} segundos"
+},
+{
+"id": "d927071d7baa",
+"kind": "user",
+"en": "🔥 The boss burns for {1} seconds",
+"es": "🔥 El jefe arde durante {1} segundos"
+},
+{
+"id": "aaaa58a9b2fb",
+"kind": "user",
+"en": "☠️ The boss is poisoned for {1} seconds",
+"es": "☠️ El jefe queda envenenado durante {1} segundos"
+},
+{
+"id": "8c6fe225f338",
+"kind": "user",
+"en": "⏱️ The Mirror Shard is recharging: **{1}s** left.",
+"es": "⏱️ El Mirror Shard se está recargando: faltan **{1} s**."
 }
 ]

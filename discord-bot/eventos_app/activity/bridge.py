@@ -357,16 +357,41 @@ class ActivityBridge(PanelRpc, GmRpc, TupperRpc, AudioRpc, CinemaRpc, FxRpc, Qui
         boss_frame = None
         if boss:
             boss_frame = {"name": str(boss.get("name", "Jefe")), "hp": self._num(boss.get("hp_current"), 0),
-                          "max": self._num(boss.get("hp_max"), 0)}
+                          "max": self._num(boss.get("hp_max"), 0),
+                          "effects": self._statuses((getattr(app, "boss_status_effects", {}) or {}).get(boss.get("name")), time.time())}
         hp = getattr(app, "player_hp", {}) or {}
+        statuses, now = getattr(app, "player_status_effects", {}) or {}, time.time()
         players = []
         for member in list(getattr(app, "qte_players", []) or [])[:MAX_PLAYERS_SHOWN]:
             entry = hp.get(member.id)
             if entry:
                 players.append({"id": str(member.id), "name": getattr(member, "display_name", None) or member.name,
                                 "hp": self._num(entry.get("current"), 0), "max": self._num(entry.get("max"), 0),
-                                "revenge": bool(entry.get("revenge_mode"))})
+                                "revenge": bool(entry.get("revenge_mode")),
+                                "effects": [e["kind"] for e in self._statuses(statuses.get(member.id), now)]})
         return {"boss": boss_frame, "fight": bool(getattr(app, "fight_active", False)), "players": players}
+
+    @staticmethod
+    def _statuses(effects: dict | None, now: float) -> list[dict]:
+        """The bot's status effects on someone (bleeding, burning, poison, weakness, stun, curse) still running, with when they end."""
+        out = []
+        for kind, data in list((effects or {}).items())[:8]:
+            end = float((data or {}).get("end_time", 0) or 0)
+            if end > now:
+                out.append({"kind": str(kind), "stacks": int((data or {}).get("stacks", 1) or 1), "until": int(end * 1000)})
+        return out
+
+    def _buffs(self, user_id: int, now: float) -> list[dict]:
+        """The boosts on a player: more damage, more Black Flash, a shield (until a moment, or «the next hit»)."""
+        out = []
+        for kind, data in list(((getattr(self.app, "player_buffs", {}) or {}).get(str(user_id)) or {}).items())[:8]:
+            if kind not in ("damage_boost", "bf_boost", "shield") or not isinstance(data, dict):
+                continue
+            expires = float(data.get("expires", 0) or 0)
+            if expires and expires <= now:
+                continue
+            out.append({"kind": kind, "value": self._num(data.get("value"), 0), "until": int(expires * 1000) if expires else None})
+        return out
 
     def me_of(self, user_id: int) -> dict:
         """What only this player sees: charges, streak, and every countdown (as moments on the server's clock)."""
@@ -404,7 +429,8 @@ class ActivityBridge(PanelRpc, GmRpc, TupperRpc, AudioRpc, CinemaRpc, FxRpc, Qui
                           "until": ms(recent[0] + window) if len(recent) >= limit else None},
                 "parryUntil": ms(parry_until) if parry_until > now else None,
                 "counterUntil": ms(counter_until) if counter_until > now else None,
-                "powers": powers, "domain": bool(domains)}
+                "powers": powers, "domain": bool(domains),
+                "effects": self._statuses((getattr(app, "player_status_effects", {}) or {}).get(user_id), now), "buffs": self._buffs(user_id, now)}
 
     async def push_state(self) -> None:
         """Send what changed since the last look (nothing at all when nothing did)."""

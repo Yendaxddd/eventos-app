@@ -293,3 +293,20 @@
 @keyframes power-show { 0% { opacity: 0; } 10%, 82% { opacity: 1; } 100% { opacity: 0; } }
 @keyframes power-pop { from { opacity: 0; transform: scale(.7) rotate(-2deg); } }
 @keyframes power-name { from { opacity: 0; letter-spacing: .4em; } }
+
+/* ---- effects on a player, and HP numbers rising ---- */
+.effect-chips { display: flex; flex-wrap: wrap; gap: 4px; }
+.effect-chip { display: inline-flex; align-items: center; gap: 4px; height: 24px; padding: 0 8px; border-radius: var(--r-pill); font-size: .72rem; border: 1px solid var(--line-soft); background: var(--surface-2); animation: rise .25s var(--ease) both; }
+.effect-chip.bad { background: rgb(244 63 94 / .14); border-color: rgb(244 63 94 / .35); }
+.effect-chip.good { background: rgb(52 211 153 / .12); border-color: rgb(52 211 153 / .35); }
+.effect-chip b { font-weight: 600; }
+.effect-chip em { font-style: normal; color: var(--text-faint); }
+.effect-chips.compact .effect-chip { height: 20px; padding: 0 6px; }
+.effect-icons { display: inline-flex; gap: 1px; font-size: .75rem; margin-left: 4px; }
+.boss-main, .player .p-main, .stat-line, .mh-row { position: relative; }
+.hp-pops { position: absolute; right: 8px; top: -6px; pointer-events: none; display: flex; flex-direction: column; align-items: flex-end; z-index: 2; }
+.hp-pop { font: 800 1rem/1 var(--font-display); text-shadow: 0 1px 0 #000, 0 0 10px currentColor; animation: hp-pop 1.3s ease-out both; }
+.hp-pop.dmg { color: #fb7185; } .hp-pop.heal { color: #4ade80; }
+.boss-card .hp-pop { font-size: 1.35rem; }
+@keyframes hp-pop { 0% { opacity: 0; transform: translateY(6px) scale(.8); } 15% { opacity: 1; transform: translateY(0) scale(1.15); } 100% { opacity: 0; transform: translateY(-26px) scale(1); } }
+@media (prefers-reduced-motion: reduce) { .hp-pop { animation-duration: 1.3s; animation-name: fade; } }

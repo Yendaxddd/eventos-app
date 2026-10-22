@@ -13,6 +13,9 @@ export const KINDS = {
   buff_damage: ["Más daño (tú)", [["amount", "Más daño", "%", 1, 300, 5, 25], ["seconds", "Durante (0 = el próximo golpe)", "s", 0, 600, 5, 30]]],
   buff_bf: ["Más Black Flash (tú)", [["amount", "Probabilidad", "%", 1, 300, 5, 15], ["seconds", "Durante (0 = el próximo)", "s", 0, 600, 5, 30]]],
   charge_team: ["Carga para el equipo", [["amount", "Carga a cada uno", "%", 1, 100, 5, 20]]],
+  afflict_bleed: ["Hacer sangrar al jefe", [["seconds", "Durante", "s", 1, 60, 1, 8]]],
+  afflict_burn: ["Quemar al jefe", [["seconds", "Durante", "s", 1, 60, 1, 8]]],
+  afflict_poison: ["Envenenar al jefe", [["seconds", "Durante", "s", 1, 60, 1, 10]]],
   cleanse: ["Quitarte efectos malos", []],
   cleanse_team: ["Quitar efectos malos al equipo", []],
 };
@@ -24,7 +27,7 @@ export const PRESETS = {
   support: "heal_team:25;charge_team:15",
   defend: "shield_team:40:12",
   build: "buff:damage_boost:25:30;buff:bf_boost:10:30",
-  control: "stun:4;damage:40",
+  control: "stun:4;afflict:poison:10",
 };
 
 const n = (v) => String(Math.round(Number(v) * 100) / 100);
@@ -37,6 +40,9 @@ export function parse(effect) {
       const value = a === "damage_boost" || a === "bf_boost" ? Number(b ?? 10) : NaN;
       if (!Number.isFinite(value)) return null;
       out.push({ kind: a === "damage_boost" ? "buff_damage" : "buff_bf", amount: value <= 1 ? value * 100 : value, seconds: Number(c ?? 30) });
+    } else if (kind === "afflict") {
+      if (!["bleed", "burn", "poison"].includes(a)) return null;
+      out.push({ kind: `afflict_${a}`, seconds: Number(b ?? 8) });
     } else if (kind === "stun") out.push({ kind, seconds: Number(a ?? 3) });
     else if (kind === "cleanse" || kind === "cleanse_team") out.push({ kind });
     else if (kind === "shield" || kind === "shield_team") out.push({ kind, amount: Number(a ?? 30), seconds: Number(b ?? 15) });
@@ -52,6 +58,7 @@ export function compose(parts) {
       case "buff_damage": return `buff:damage_boost:${n(p.amount)}:${n(p.seconds)}`;
       case "buff_bf": return `buff:bf_boost:${n(p.amount)}:${n(p.seconds)}`;
       case "stun": return `stun:${n(p.seconds)}`;
+      case "afflict_bleed": case "afflict_burn": case "afflict_poison": return `afflict:${p.kind.slice(8)}:${n(p.seconds)}`;
       case "cleanse": case "cleanse_team": return p.kind;
       case "shield": case "shield_team": return `${p.kind}:${n(p.amount)}:${n(p.seconds)}`;
       default: return `${p.kind}:${n(p.amount)}`;
@@ -81,6 +88,9 @@ export function describe(parts, multiplier = 1, cap = 500) {
       case "stun": return `🌀 El jefe queda aturdido ${secs(p.seconds)} (los mini enemigos también esperan)`;
       case "buff_damage": return `✨ +${n(p.amount)} % de daño ${p.seconds ? `durante ${secs(p.seconds)}` : "en tu próximo golpe"}`;
       case "buff_bf": return `✨ +${n(p.amount)} % de probabilidad de Black Flash ${p.seconds ? `durante ${secs(p.seconds)}` : "en el próximo"}`;
+      case "afflict_bleed": return `🩸 El jefe sangra durante ${secs(p.seconds)}`;
+      case "afflict_burn": return `🔥 El jefe arde durante ${secs(p.seconds)}`;
+      case "afflict_poison": return `☠️ El jefe queda envenenado durante ${secs(p.seconds)}`;
       case "charge_team": return `⚡ Los demás ganan un ${Math.round(p.amount)} % de carga de poder`;
       case "cleanse": return "🧼 Te quitas sangrado, quemadura, veneno, debilidad, aturdimiento y maldiciones";
       case "cleanse_team": return "🧼 Le quitas los efectos malos a todo el equipo";

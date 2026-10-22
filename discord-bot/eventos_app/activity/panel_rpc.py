@@ -76,6 +76,9 @@ class PanelRpc:
     async def rpc_panel_inventory(self, conn: Conn, args: dict):
         return self.panel.inventory(conn.user_id)
 
+    async def rpc_panel_object_use(self, conn: Conn, args: dict):
+        return await self.panel.use_object(conn.user_id, conn.name, str(args.get("use") or ""))
+
     async def rpc_panel_images(self, conn: Conn, args: dict):
         return self.panel.counter_images(conn.user_id)
 

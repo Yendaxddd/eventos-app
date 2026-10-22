@@ -94,3 +94,19 @@ def test_the_real_bot_applies_damage_with_the_weapon_and_the_boost_and_heals_shi
     bot.player_status_effects[2] = {"poison": {"stacks": 1, "end_time": time.time() + 9}}
     use(bot, "cleanse")
     assert 1 not in bot.player_status_effects and 2 in bot.player_status_effects
+
+
+def test_a_power_can_make_the_boss_burn_and_weakness_and_curses_now_count(tmp_path, monkeypatch):
+    bot, _, _ = real_bot(tmp_path, monkeypatch)
+    fight(bot)
+    assert powers.validate("afflict:burn") == "afflict:burn:8"
+    use(bot, "afflict:burn:5")
+    assert "burn" in bot.boss_status_effects.get("Rey", {})
+    hp = bot.active_boss["hp_current"]
+    asyncio.run(bot.apply_status_effect(1, "weakened", 30, 1, source="test"))
+    use(bot, "damage:100")
+    assert hp - bot.active_boss["hp_current"] < 100                 # weakened: the blow is weaker
+    bot.power_charges[1] = {"power1": 0, "power2": 0}
+    asyncio.run(bot.apply_status_effect(1, "cursed", 30, 2, source="test"))
+    bot.add_charge_from_damage_taken(1, 50)
+    assert bot.power_charges[1]["power1"] < 50 / 5.0 * bot.charge_per_damage_taken          # cursed: less charge

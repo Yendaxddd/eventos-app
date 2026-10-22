@@ -33,6 +33,21 @@ POWER_SHOW = ("all", "self", "off")       # who sees the power's picture fill th
 DIFFICULTIES = ("easy", "medium", "hard", "impossible")
 
 
+_TR = []
+
+
+def spanish(text: str) -> str:
+    """A message of the bot, in Spanish and without Discord's bold marks (the panel shows it as plain text)."""
+    if not _TR:
+        try:
+            from ..lang.translator import load
+            _TR.append(load())
+        except Exception:  # noqa: BLE001 - no catalogue: the English text
+            _TR.append(None)
+    out = _TR[0].text(text) if _TR[0] is not None else text
+    return out.replace("**", "").replace("\n", " ").strip()
+
+
 def _text(value: Any, limit: int) -> str:
     return "" if value is None else str(value)[:limit]
 
@@ -488,8 +503,31 @@ class PlayerPanel:
                 "description": tr(_text(obj.get("description"), 500)), "lore": tr(_text(obj.get("lore"), 400)) or None,
                 "image": obj.get("image_url") if isinstance(obj.get("image_url"), str) else None,
                 "tracking": {"kind": kind, "rows": rows},
+                "use": self._use_of(uid, obj_id),
             })
-        return {"objects": out, "slots": [manager.get_used_slots(uid), manager.get_player_max_slots(uid)]}
+        owners = getattr(manager, "unique_object_owners", {}) or {}
+        catalog = [{"id": oid, "name": tr(_text(o.get("name", oid), 80)), "emoji": _text((o.get("display") or {}).get("emoji", "📦"), 8),
+                    "rarity": _text(o.get("rarity", "common"), 12), "type": _text(o.get("type", "unknown"), 20),
+                    "description": tr(_text(o.get("description"), 300)), "image": o.get("image_url") if isinstance(o.get("image_url"), str) else None,
+                    "unique": bool(o.get("unique", False)), "taken": oid in owners, "mine": owners.get(oid) == uid}
+                   for oid, o in list((manager.objects or {}).items())[:200]]
+        return {"objects": out, "slots": [manager.get_used_slots(uid), manager.get_player_max_slots(uid)], "catalog": catalog}
+
+    def _use_of(self, uid: int, obj_id: str) -> dict | None:
+        """The button an object has in the inventory (today the Mirror Shard's invocation), and why it cannot be pressed yet."""
+        if obj_id != "mirror_shard" or not hasattr(self.app, "mirror_invoke_problem"):
+            return None
+        problem = self.app.mirror_invoke_problem(uid)
+        return {"id": "mirror", "label": "Invocar: refleja un QTE contra el jefe", "problem": spanish(problem) if problem else None}
+
+    async def use_object(self, uid: int, name: str, use: str) -> dict:
+        if use != "mirror" or not hasattr(self.app, "mirror_invoke"):
+            raise RpcError("Ese objeto no se puede usar así.")
+        problem = self.app.mirror_invoke_problem(uid)
+        if problem:
+            raise RpcError(spanish(problem))
+        dealt = await self.app.mirror_invoke(uid, name)
+        return {"damage": dealt, **self.inventory(uid)}
 
     # ---- counter images ----------------------------------------------------------------------------------------------
     def _images(self, uid: int) -> list[str]:

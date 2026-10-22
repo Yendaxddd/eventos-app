@@ -408,7 +408,7 @@ def test_the_game_state_is_sent_when_it_changes_and_only_to_the_person_it_belong
             return welcome, state, me, quiet
 
     welcome, state, me, quiet = run(scenario())
-    assert welcome["state"]["boss"] == {"name": "Sukuna", "hp": 700, "max": 1000} and welcome["state"]["fight"]
+    assert welcome["state"]["boss"] == {"name": "Sukuna", "hp": 700, "max": 1000, "effects": []} and welcome["state"]["fight"]
     assert [p["name"] for p in welcome["state"]["players"]] == ["Ana", "Luis"] and welcome["state"]["players"][0]["revenge"]
     assert {k: welcome["me"][k] for k in ("charges", "cost", "streak")} == {"charges": {"power1": 45.0, "power2": 100.0}, "cost": 100, "streak": 3}
     assert state["s"]["boss"]["hp"] == 650 and me["me"]["streak"] == 4

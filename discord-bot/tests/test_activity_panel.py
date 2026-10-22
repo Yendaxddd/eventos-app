@@ -1,5 +1,6 @@
 """The player's dashboards: what the screen is told about stats, achievements, characters, skills, objects and pictures, and the
 few things a player may change. The data is the game's own sample data (achievements, skill tree, objects)."""
+import asyncio
 import json
 import shutil
 import sys
@@ -285,7 +286,28 @@ def test_the_inventory_shows_adaptation_progress_in_spanish(rig):
     assert shard["tracking"]["kind"] == "total" and total["key"] == "total" and total["spins"] == 7 and total["next"] == 10 and total["max"] == 20
     assert "Contraataque garantizado" in total["steps"][1]["effects"]
     assert any("Esquive automático" in e for e in total["steps"][0]["effects"])
-    assert panel.inventory(OTHER) == {"objects": [], "slots": [0, 5]}
+    other = panel.inventory(OTHER)
+    assert other["objects"] == [] and other["slots"] == [0, 5]
+    listed = {o["id"]: o for o in other["catalog"]}                                    # every object of the event, with who has it
+    assert listed["mirror_shard"]["taken"] and not listed["mirror_shard"]["mine"] and listed["reactive_core"]["name"] == "Núcleo reactivo"
+    assert shard["use"] is None                                                         # a bot without the invocation: no button
+
+
+def test_the_mirror_shard_is_invoked_from_the_inventory_and_says_why_not_in_spanish(rig):
+    app, panel = rig
+    calls = []
+    app.mirror_invoke_problem = lambda uid: None if calls == [] else "⏱️ The Mirror Shard is recharging: **{}s** left.".format(60)
+
+    async def invoke(uid, name):
+        calls.append((uid, name))
+        return 15
+    app.mirror_invoke = invoke
+    shard = next(o for o in panel.inventory(ME)["objects"] if o["id"] == "mirror_shard")
+    assert shard["use"] == {"id": "mirror", "label": "Invocar: refleja un QTE contra el jefe", "problem": None}
+    out = asyncio.run(panel.use_object(ME, "Ana", "mirror"))
+    assert out["damage"] == 15 and calls == [(ME, "Ana")]
+    with pytest.raises(RpcError, match="recargando: faltan 60 s"):
+        asyncio.run(panel.use_object(ME, "Ana", "mirror"))
 
 
 # ---- counter images -------------------------------------------------------------------------------------------------------

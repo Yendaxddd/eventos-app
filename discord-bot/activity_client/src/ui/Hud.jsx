@@ -5,6 +5,7 @@ import { activeAs, charAvatars, game, me, myHp, perms, users, you } from "../sta
 import { clamp, cx, store } from "../util.js";
 import { Avatar } from "./Avatar.jsx";
 import { Actions } from "./Actions.jsx";
+import { EffectChips, EffectIcons, Pops } from "./Effects.jsx";
 
 const levelOf = (hp, max) => {
   const pct = max ? hp / max : 0;
@@ -30,8 +31,10 @@ export function BossCard() {
     <div class="boss-card" data-testid="boss">
       <div class="boss-ico"><Skull size={22} /></div>
       <div class="boss-main">
+        <Pops target="boss" />
         <div class="boss-top">
           <strong class="ellipsis">{boss.name}</strong>
+          <EffectIcons kinds={(boss.effects || []).map((e) => e.kind)} />
           {g.fight && <span class="chip bad"><Swords size={12} /> En combate</span>}
           <span class="num">{boss.hp} / {boss.max}</span>
         </div>
@@ -72,14 +75,16 @@ export function MeCard() {
       </div>
       {hp && hp.revenge && <div class="stat-line"><span class="revenge">REVENGE · +daño, parry más estrecho</span></div>}
       {hp ? (
-        <div class="stat-line">
+        <div class="stat-line" style={{ position: "relative" }}>
           <span class="label">HP</span>
           <Bar value={hp.hp} max={hp.max} tall />
           <span class="val num">{hp.hp}/{hp.max}</span>
+          {who && <Pops target={String(who.id)} />}
         </div>
       ) : (
         <div class="stat-line faint">Sin HP todavía: aparecerá cuando participes en un QTE.</div>
       )}
+      {m && <EffectChips effects={m.effects} buffs={m.buffs} />}
       {m && m.charges && (
         <>
           <Charge label="Poder 1" pct={m.charges.power1} cost={m.cost || 100} />
@@ -104,7 +109,8 @@ export function PlayersPanel() {
             <li key={p.id} class={cx("player", p.id === mine && "is-me")}>
               <Avatar name={p.name} size="sm" />
               <div class="p-main">
-                <div class="p-top"><b>{p.name}</b><span class="num">{p.hp}/{p.max}</span></div>
+                <div class="p-top"><b>{p.name}</b><EffectIcons kinds={p.effects || []} /><span class="num">{p.hp}/{p.max}</span></div>
+                <Pops target={p.id} />
                 <Bar value={p.hp} max={p.max} />
               </div>
             </li>
@@ -160,7 +166,9 @@ export function MiniHud() {
         <div class="mh-row">
           {hp ? <><Bar value={hp.hp} max={hp.max} /><span class="tiny num">{hp.hp}/{hp.max}</span></> : <span class="faint" style={{ fontSize: ".75rem" }}>Sin HP todavía</span>}
           {hp && hp.revenge && <span class="revenge">REVENGE</span>}
+          {who && <Pops target={String(who.id)} />}
         </div>
+        {m && ((m.effects && m.effects.length) || (m.buffs && m.buffs.length)) ? <EffectChips effects={m.effects} buffs={m.buffs} compact /> : null}
         {m && m.charges && (
           <div class="mh-row">
             <Bar kind="charge" thin value={m.charges.power1} max={m.cost || 100} ready={m.charges.power1 >= (m.cost || 100)} />
