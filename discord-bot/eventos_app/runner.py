@@ -538,7 +538,7 @@ class BotRunner:
         if a is None:
             return {"running": False}
         return {"running": True, "port": a.server.port, "tunnel": a.tunnel.state, "detail": a.tunnel.detail,
-                "url": a.tunnel.url, "fixed": getattr(a.tunnel, "fixed", False), "users": a.hub.stats(),
+                "url": a.tunnel.url, "fixed": getattr(a.tunnel, "fixed", False), "public": getattr(a.tunnel, "public", None), "users": a.hub.stats(),
                 "secret_set": bool(a.auth.client_secret), "client_id": a.server.client_id}
 
     def reopen_tunnel(self) -> concurrent.futures.Future:

@@ -186,6 +186,9 @@ class ActivityPage(Page):
             self.state_pill.set("Lista", "ok" if info["secret_set"] else "warn")
             lines.append("Pégala en el Developer Portal → Activities → URL Mappings (raíz «/»). " +
                          ("Es fija: solo la primera vez." if info.get("fixed") else "Cambia en cada inicio."))
+            if info.get("public") is False:
+                lines.append("⚠ Internet todavía no conoce esta dirección (Tailscale aún no la ha publicado): Discord dará «Error 1016» "
+                             "hasta entonces. Suele tardar unos minutos y a veces horas; la app lo vuelve a mirar sola cada 30 s.")
         elif tunnel == "error":
             self._address = ""
             self.address.configure(text="No se pudo abrir el túnel", text_color=BAD_TEXT)
@@ -198,7 +201,8 @@ class ActivityPage(Page):
             lines.append(info["detail"] or "Preparando el túnel.")
         if not info["secret_set"]:
             lines.append("⚠ Falta el Client Secret: nadie podrá entrar desde Discord. Pégalo en los ajustes de abajo.")
-        self.detail.configure(text="\n".join(lines), text_color=BAD_TEXT if tunnel == "error" else (WARN_TEXT if not info["secret_set"] else MUTED))
+        warn = not info["secret_set"] or (tunnel == "up" and info.get("public") is False)
+        self.detail.configure(text="\n".join(lines), text_color=BAD_TEXT if tunnel == "error" else (WARN_TEXT if warn else MUTED))
         self._render_connections(info.get("users", []))
 
     def _render_connections(self, users: list[dict]) -> None:

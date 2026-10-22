@@ -227,15 +227,23 @@ class TailscaleTunnel(Tunnel):
     """Tailscale Funnel: a fixed public https address (`equipo.tailXXXX.ts.net`) with no warning page in front.
 
     Needs Tailscale installed and signed in, with MagicDNS + HTTPS certificates on and Funnel allowed once. Nothing is
-    downloaded: Tailscale is a Windows service with its own installer. The Funnel is switched off again on `stop`."""
+    downloaded: Tailscale is a Windows service with its own installer.
+
+    The Funnel is left on when the bot stops: switching it off makes Tailscale take the address out of the public DNS, and getting it
+    back can take from minutes to hours (Discord, through Cloudflare, sees «Error 1016» meanwhile). With the bot off nothing listens on
+    the port, so the address only answers «unavailable»."""
 
     program = "tailscale"
     fixed = True
 
-    def __init__(self, port: int, *, command: Callable[[Path, list[str]], Sequence[str]] | None = None, **options) -> None:
+    def __init__(self, port: int, *, command: Callable[[Path, list[str]], Sequence[str]] | None = None,
+                 dns_lookup: Callable[[str], "asyncio.Future"] | None = None, **options) -> None:
         super().__init__(port, **options)
         self._cli = command or (lambda binary, args: [str(binary), *args])
         self._exposed = False
+        self.public: bool | None = None          # does the public DNS (the one Discord goes through) know the address? None: not known yet
+        self._dns_lookup = dns_lookup or public_dns
+        self._watch: asyncio.Task | None = None
 
     def find_binary(self) -> Path | None:
         return find_tailscale()
@@ -303,22 +311,51 @@ class TailscaleTunnel(Tunnel):
         except OSError as exc:
             raise self._fail(f"No se pudo ejecutar Tailscale: {exc}") from exc
         self.url = f"https://{address}"
+        self.public = None
         self._set("up", self.url)
+        if self._watch is not None:
+            self._watch.cancel()
+        self._watch = asyncio.get_running_loop().create_task(self._watch_public(address))
         return self.url
+
+    async def _watch_public(self, address: str, every: float = 30.0, tries: int = 240) -> None:
+        """Ask the public DNS until it knows the address (Tailscale can take minutes or hours to publish it): the app says so meanwhile."""
+        try:
+            for _ in range(tries):
+                found = await self._dns_lookup(address)
+                if found is not None and found != self.public:
+                    self.public = found
+                    self._set(self.state, self.detail)
+                if found:
+                    return
+                await asyncio.sleep(every)
+        except asyncio.CancelledError:
+            pass
 
     async def stop(self) -> None:
         was_up = self.state != "idle"
         self.url = ""
-        if self._exposed:
-            self._exposed = False
-            binary = self.find_binary()
-            if binary is not None:
-                try:
-                    await self._run(binary, ["funnel", "--https=443", "off"])     # nothing stays public with the bot off
-                except OSError:
-                    pass
+        self._exposed = False                  # the Funnel itself stays on (see the class): only this run forgets it
+        if self._watch is not None:
+            self._watch.cancel()
+            self._watch = None
         if was_up:
             self._set("idle")
+
+
+async def public_dns(name: str) -> bool | None:
+    """True when Cloudflare's public DNS (what Discord's proxy uses) knows `name`, False when it says it does not exist, None when
+    it could not be asked."""
+    try:
+        async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=8)) as session:
+            async with session.get("https://cloudflare-dns.com/dns-query", params={"name": name, "type": "A"},
+                                   headers={"Accept": "application/dns-json"}) as response:
+                data = await response.json(content_type=None)
+    except (aiohttp.ClientError, asyncio.TimeoutError, ValueError, OSError):
+        return None
+    if data.get("Status") == 3:                  # NXDOMAIN
+        return False
+    return bool(data.get("Answer")) if data.get("Status") == 0 else None
 
 
 def check_tailscale() -> tuple[bool, str]:

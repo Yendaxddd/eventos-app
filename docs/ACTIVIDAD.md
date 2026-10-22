@@ -340,6 +340,12 @@ Al detener el bot la app apaga el Funnel (nada queda público). Con Funnel, el s
 internet en esa dirección: entrar exige iniciar sesión con Discord y ser miembro del servidor, el acceso de prueba local
 está bloqueado fuera de tu PC y `/media` solo sirve imágenes de Discord. Sin Tailscale, deja «Túnel rápido de Cloudflare».
 
+## «Error 1016» o pantalla en blanco con Tailscale (2.0.1)
+Si al abrir la dirección de la Actividad sale *Error 1016 · Origin DNS error*, internet no conoce tu dirección `…ts.net`: Tailscale la
+quita del DNS público cuando Funnel se apaga y tarda en volver a publicarla (minutos, a veces horas). Desde la 2.0.1 la app no apaga
+Funnel al parar el bot, y la página *Actividad* avisa mientras la dirección no sea pública. Compruébalo con
+`nslookup tu-equipo.tu-red.ts.net 1.1.1.1`: cuando devuelva una IP, Discord ya llega.
+
 ## Si la Actividad sale en blanco: el registro de la app
 La app escribe en su registro (gris, con 🌐) todo lo que pasa con la Actividad. Léelo mientras abres la Actividad en Discord:
 - `GET / → 200 (por el túnel, …)` o `GET /api/config → 200`: Discord **sí** llegó a tu PC. Si luego no hay nada más, el fallo está

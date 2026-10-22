@@ -544,7 +544,9 @@ def tailscale(tmp_path, *, status: dict | str, funnel: str = "Available on the i
             print({funnel!r}.replace("\\\\n", "\\n"))
             sys.exit({funnel_code})
     """, name)
-    tunnel = tunnel_module.TailscaleTunnel(8765, command=lambda binary, args: [sys.executable, str(script), *args])
+    async def known(name):
+        return True
+    tunnel = tunnel_module.TailscaleTunnel(8765, command=lambda binary, args: [sys.executable, str(script), *args], dns_lookup=known)
     tunnel.find_binary = lambda: Path(sys.executable)
     return tunnel, calls
 
@@ -552,7 +554,38 @@ def tailscale(tmp_path, *, status: dict | str, funnel: str = "Available on the i
 RUNNING = {"BackendState": "Running", "Self": {"DNSName": "pc.tail1234.ts.net."}}
 
 
-def test_the_tailscale_address_is_the_machines_public_name_and_the_funnel_is_turned_off_on_stop(tmp_path):
+async def _known(name):
+    return True
+
+
+def test_until_the_public_dns_knows_the_funnel_address_the_app_says_so(tmp_path):
+    tunnel, _ = tailscale(tmp_path, status=RUNNING)
+    answers = iter([False, False, True])
+    asked = []
+
+    async def lookup(name):
+        asked.append(name)
+        return next(answers)
+    tunnel._dns_lookup = lookup
+
+    async def scenario():
+        await tunnel.start()
+        seen = []
+        tunnel._watch.cancel()
+        tunnel._watch = asyncio.get_running_loop().create_task(tunnel._watch_public("pc.tail1234.ts.net", every=0.01))
+        for _ in range(100):
+            seen.append(tunnel.public)
+            if tunnel.public:
+                break
+            await asyncio.sleep(0.01)
+        await tunnel.stop()
+        return seen
+
+    seen = run(scenario())
+    assert False in seen and seen[-1] is True and asked[0] == "pc.tail1234.ts.net"
+
+
+def test_the_tailscale_address_is_the_machines_public_name_and_the_funnel_stays_on_when_the_bot_stops(tmp_path):
     tunnel, calls = tailscale(tmp_path, status=RUNNING)
 
     async def scenario():
@@ -565,7 +598,8 @@ def test_the_tailscale_address_is_the_machines_public_name_and_the_funnel_is_tur
     assert url == "https://pc.tail1234.ts.net" and state == ("up", True) and after == "idle"
     lines = calls.read_text().splitlines()
     assert lines[0] == "status --json" and lines[1] == "funnel --bg --https=443 http://127.0.0.1:8765"
-    assert lines[-1] == "funnel --https=443 off"                      # nothing stays public with the bot off
+    # switching it off would take the address out of the public DNS for minutes or hours (Discord: «Error 1016»)
+    assert not any("off" in line for line in lines)
 
 
 def test_tailscale_problems_say_what_to_do(tmp_path):
@@ -692,7 +726,7 @@ def test_a_funnel_command_that_hangs_is_explained_or_accepted_if_the_funnel_is_a
     async def scenario():
         for name, listed in (("off", "No serve config"), ("on", "https://pc.tail1234.ts.net (Funnel on)")):
             script = fake_cloudflared(tmp_path, hang % listed, f"ts_hang_{name}")
-            tunnel = tunnel_module.TailscaleTunnel(8765, command=lambda b, args, s=script: [sys.executable, str(s), *args])
+            tunnel = tunnel_module.TailscaleTunnel(8765, command=lambda b, args, s=script: [sys.executable, str(s), *args], dns_lookup=_known)
             tunnel.find_binary = lambda: Path(sys.executable)
             try:
                 out[name] = await tunnel.start()
