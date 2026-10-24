@@ -759,7 +759,7 @@ def test_the_app_log_hears_about_page_requests_the_pages_own_progress_and_refuse
             await ws.close()
             ws, _ = await rig.login(111)
             await ws.close()
-            for _ in range(60):                                                    # past the cap: told to stop, nothing logged
+            for _ in range(220):                                                   # past the cap: told to stop, nothing logged
                 async with rig.http.post(rig.url("/api/report"), json={"stage": "error", "detail": "spam"}) as r:
                     last = r.status
             return last
@@ -769,7 +769,7 @@ def test_the_app_log_hears_about_page_requests_the_pages_own_progress_and_refuse
     assert "GET /healthz → 200 (desde este PC" in text and "GET /api/config → 200 (por el túnel, Mozilla/5.0 [odd]" in text
     assert "la página dice: SDK de Discord listo" in text and "la página dice: error — x is not defined (app.js:3)" in text
     assert "entrada rechazada: No eres miembro" in text and "Ana entró a la Actividad" in text
-    assert last == 429 and text.count("spam") < 40
+    assert last == 429 and text.count("spam") <= 200
 
 
 def test_the_page_names_the_version_of_its_files_and_the_files_are_always_rechecked(tmp_path):

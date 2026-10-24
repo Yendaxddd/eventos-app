@@ -1,6 +1,6 @@
 /* ---- App shell ---- */
 .app {
-  display: grid; grid-template-rows: auto auto minmax(0, 1fr); grid-template-columns: minmax(0, 1fr); height: 100dvh; min-height: 0;
+  display: grid; grid-template-rows: auto auto minmax(0, 1fr); grid-template-columns: minmax(0, 1fr); height: var(--app-h, 100dvh); min-height: 0;
   padding: var(--safe-top) var(--safe-right) var(--safe-bottom) var(--safe-left);
   background:
     radial-gradient(1100px 520px at 12% -10%, rgb(139 92 246 / .13), transparent 60%),
@@ -95,7 +95,8 @@
 .banner.info { background: color-mix(in srgb, var(--info) 18%, var(--surface)); border-color: var(--info); }
 
 /* ---- Splash (while connecting) ---- */
-.splash { height: 100dvh; display: grid; place-items: center; background: radial-gradient(800px 400px at 50% 30%, rgb(139 92 246 / .18), transparent 70%), var(--bg); padding: var(--sp-5); text-align: center; }
+.splash { height: var(--app-h, 100dvh); display: grid; place-items: center; background: radial-gradient(800px 400px at 50% 30%, rgb(139 92 246 / .18), transparent 70%), var(--bg); padding: var(--sp-5); text-align: center; }
+.splash-slow { display: flex; flex-direction: column; align-items: center; gap: var(--sp-2); color: var(--text-faint); font-size: .8125rem; }
 .splash-card { display: flex; flex-direction: column; align-items: center; gap: var(--sp-4); max-width: 420px; }
 .splash-logo { width: 72px; height: 72px; border-radius: 22px; display: grid; place-items: center; background: linear-gradient(135deg, var(--primary), #ec4899); color: #fff; box-shadow: 0 16px 50px -12px var(--primary-glow); animation: pulse-soft 2.4s ease-in-out infinite; }
 .splash h1 { font: 700 1.5rem/1.1 var(--font-display); letter-spacing: .03em; }
@@ -179,3 +180,9 @@
 
 /* a phone: the top bar keeps the channel's name readable (the bottom bar has the rest) */
 @media (max-width: 640px) { .brand-mark { display: none; } .topbar { gap: 2px; padding: 0 var(--sp-2); } .conn-badge { padding: 0 8px; } }
+
+/* the on-screen keyboard is up (viewport.js): only what is needed to read and write stays; the keyboard covers the phone's bottom edge */
+:root[data-kb="open"] { --safe-bottom: 0px; }
+:root[data-kb="open"] .bottom-nav, :root[data-kb="open"] .action-bar { display: none; }
+:root[data-kb="open"] .stage[data-short="true"] .mini-hud, :root[data-kb="open"] .stage[data-short="true"] .mobs { display: none; }
+:root[data-kb="open"] .app.has-bottom-nav { grid-template-rows: auto auto minmax(0, 1fr); }

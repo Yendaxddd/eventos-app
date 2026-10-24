@@ -1,6 +1,7 @@
 // The QTEs on this player's screen: they come from the server (or from the tutorial's practice), they are answered
 // with a button, and the verdict comes back. All timing is the player's own stopwatch (see qte-model.js).
 import { batch } from "@preact/signals";
+import { closeKeyboard } from "./viewport.js";
 import { qtes, you, comp, link, canWrite, activeAs, me, prefs, flash, toast, sheet } from "./state.js";
 import { makeEntry, phaseAt, elapsedSeconds, canPress, verdictOf, byUrgency, TIMED_CMDS } from "./qte-model.js";
 import { judge } from "./practice.js";
@@ -35,7 +36,7 @@ export function startQte(frame, { practice = false, ago = 0 } = {}) {
     return;
   }
   qtes.value = [...qtes.value, entry];
-  if (entry.role === "target") { sheet.value = null; play("qte"); vibrate(40); }      // a QTE for you comes before anything else on screen
+  if (entry.role === "target") { sheet.value = null; closeKeyboard(); play("qte"); vibrate(40); }      // a QTE for you comes before anything else on screen (the phone's keyboard too)
   if (practice) {                                    // a practice QTE the player lets run out says so, as the real one would hurt
     setTimeout(() => {
       const open = find(id);

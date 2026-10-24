@@ -1,7 +1,7 @@
 // The connection to the app: sign in (through Discord when we are inside it), open the WebSocket, keep clocks and
 // settings in step, and turn every frame into changes of the client's state.
 import { batch } from "@preact/signals";
-import { initSdk, afterAuth, sdk } from "./discord.js";
+import { initSdk, afterAuth, sdk, SdkTimeout } from "./discord.js";
 import { inDiscord, devName, devGm, devHost, base, store } from "./util.js";
 import { SyncEstimator, qualityOf } from "./clock.js";
 import {
@@ -320,19 +320,62 @@ function connect(helloFrame) {
   };
 }
 
+// What the entry screen says while signing in (a reconnection keeps the game on screen instead).
+function step(detail) {
+  if (!everWelcomed) conn.value = { state: "starting", text: "Entrando al evento", detail };
+}
+
+// A sign-in that went wrong, said for the player: `retry` is what the «Reintentar» button does ("login" again, or "reload" the page).
+class LoginError extends Error {
+  constructor(title, message, retry = "login") { super(message); this.title = title; this.retry = retry; }
+}
+
+const RELOADED = "eventos-sdk-reload";
+function reloadOnce() {
+  try {
+    if (sessionStorage.getItem(RELOADED)) return false;
+    sessionStorage.setItem(RELOADED, "1");
+  } catch { return false; }
+  location.reload();
+  return true;
+}
+
 async function login() {
+  step("Buscando el servidor del evento…");
   const reply = await fetch(`${base}/api/config`);
   if (!reply.ok) throw new Error(`El servidor del evento respondió ${reply.status}.`);
   const config = await reply.json();
   channelName.value = config.channel || "Evento";
   if (inDiscord && accessToken) return { t: "hello", token: accessToken };        // a reconnection: the session we have still works
   if (inDiscord) {
-    const discord = await initSdk(config.clientId);
+    step("Conectando con Discord…");
+    let discord;
+    try {
+      discord = await initSdk(config.clientId);
+    } catch (error) {
+      if (!(error instanceof SdkTimeout)) throw error;
+      report("Discord no responde", "el SDK no estuvo listo a tiempo");
+      if (reloadOnce()) return new Promise(() => {});          // a fresh start of the page usually fixes it; it is tried once by itself
+      throw new LoginError("Discord no responde", "Pulsa Reintentar. Si sigue igual, cierra la Actividad y vuelve a abrirla.", "reload");
+    }
+    try { sessionStorage.removeItem(RELOADED); } catch { /* not available */ }
     report("SDK de Discord listo");
-    const { code } = await discord.commands.authorize({
-      client_id: config.clientId, response_type: "code", state: "", prompt: "none", scope: ["identify"],
-    });
+    step("Esperando tu permiso en Discord…");
+    let code;
+    try {
+      ({ code } = await discord.commands.authorize({
+        client_id: config.clientId, response_type: "code", state: "", prompt: "none", scope: ["identify"],
+      }));
+    } catch (error) {
+      const raw = (error && error.message) || String(error);
+      report("permiso de Discord", raw);
+      if (/cancel|denied|closed/i.test(raw)) {
+        throw new LoginError("Falta tu permiso", "Para jugar, Discord tiene que decirle al evento quién eres (solo tu nombre y tu avatar). Pulsa Reintentar y luego «Autorizar».");
+      }
+      throw new LoginError("Discord no dio el permiso", `Pulsa Reintentar. (${raw})`);
+    }
     report("autorizado por Discord");
+    step("Iniciando sesión…");
     const reply = await fetch(`${base}/api/token`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ code }) });
     const data = await reply.json();
     if (!reply.ok) throw new Error(data.error || "No se pudo iniciar sesión");
@@ -340,16 +383,28 @@ async function login() {
     await discord.commands.authenticate({ access_token: data.access_token });
     afterAuth();
     accessToken = data.access_token;
+    step("Entrando…");
     return { t: "hello", token: data.access_token, fresh: true };
   }
   if (devName && config.dev) return { t: "hello", dev: devName, gm: devGm, host: devHost };
-  throw new Error("Esta página está pensada para abrirse desde Discord. Para probarla en este PC añade ?dev=TuNombre a la dirección.");
+  throw new LoginError("Ábrela desde Discord", "Esta página está pensada para abrirse desde Discord. Para probarla en este PC añade ?dev=TuNombre a la dirección.", null);
 }
 
 function fail(error) {
   console.error(error);
   report("fallo", (error && error.message) || error);
-  conn.value = { state: "error", text: "No se pudo entrar", detail: (error && error.message) || String(error) };
+  conn.value = {
+    state: "error", text: (error && error.title) || "No se pudo entrar", detail: (error && error.message) || String(error),
+    retry: error && error.retry !== undefined ? error.retry : "login",
+  };
+}
+
+// The «Reintentar» button of the entry screen.
+export function retryLogin() {
+  const how = conn.value.retry;
+  if (how === "reload") { location.reload(); return; }
+  retry = 0;
+  login().then(connect).catch(fail);
 }
 
 export function boot() {

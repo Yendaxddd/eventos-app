@@ -634,6 +634,32 @@ def test_the_hud_shows_the_boss_the_players_hp_and_your_charges_and_flashes_when
     asyncio.run(with_page(scenario, actions=True))
 
 
+def test_on_a_phone_the_keyboard_never_covers_the_box_and_discords_buttons_never_cover_the_top():
+    """The page is as tall as what is visible; with the keyboard up the bottom bar and the action bar fold away; Discord's safe areas
+    (its buttons over the Activity on a phone) push the page in."""
+    init = ("document.addEventListener('DOMContentLoaded', () => { const s = document.documentElement.style;"
+            " s.setProperty('--discord-safe-area-inset-top', '40px'); s.setProperty('--discord-safe-area-inset-bottom', '30px'); })")
+
+    async def scenario(hub, browser, url):
+        page = await open_page(browser, url, width=390, height=844, mobile=True, init=init)
+        assert await page.evaluate("document.querySelector('.topbar').getBoundingClientRect().top") >= 40
+        nav = await page.evaluate("document.querySelector('.bottom-nav').getBoundingClientRect().bottom")
+        assert nav <= 844 and await page.evaluate("getComputedStyle(document.querySelector('.bottom-nav')).paddingBottom") == "34px"
+        await page.click("[data-testid=composer] textarea")
+        await page.set_viewport_size({"width": 390, "height": 480})           # the keyboard opens and the page gets smaller
+        await page.wait_for_function("document.documentElement.dataset.kb === 'open'")
+        assert await page.locator(".bottom-nav").is_hidden() and await page.locator("[data-testid=actions]").is_hidden()
+        box = await page.evaluate("document.querySelector('[data-testid=composer] textarea').getBoundingClientRect().bottom")
+        assert box <= 480
+        await page.evaluate("document.activeElement.blur()")                  # the keyboard closes
+        await page.set_viewport_size({"width": 390, "height": 844})
+        await page.wait_for_function("!document.documentElement.dataset.kb")
+        assert await page.locator(".bottom-nav").is_visible()
+        assert page.errors == []
+
+    asyncio.run(with_page(scenario, actions=True))
+
+
 # ======================================================================================================================
 def test_settings_apply_at_once_are_remembered_and_sent_to_the_server():
     async def scenario(hub, browser, url):

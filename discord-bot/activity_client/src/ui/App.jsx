@@ -1,6 +1,8 @@
-import { Loader2, Swords, TriangleAlert } from "lucide-preact";
+import { useEffect, useState } from "preact/hooks";
+import { Loader2, RefreshCw, Swords, TriangleAlert } from "lucide-preact";
 import { conn, pip, sheet, view, prefs } from "../state.js";
 import { useLayout } from "../hooks.js";
+import { retryLogin } from "../net.js";
 import { Topbar } from "./Topbar.jsx";
 import { Banner, FxLayer, Sheet, Toasts } from "./Overlays.jsx";
 import { Feed } from "./Feed.jsx";
@@ -25,13 +27,22 @@ import { PowerShow } from "./PowerShow.jsx";
 function Splash() {
   const c = conn.value;
   const bad = c.state === "error";
+  const [slow, setSlow] = useState(false);                // still on this screen after a while: offer to start again
+  useEffect(() => { if (bad) return undefined; const id = setTimeout(() => setSlow(true), 20000); return () => clearTimeout(id); }, [bad]);
   return (
     <div class={`splash ${bad ? "error" : ""}`} data-testid="splash">
       <div class="splash-card">
         <div class="splash-logo">{bad ? <TriangleAlert size={34} /> : <Swords size={34} />}</div>
         <h1>{bad ? c.text : "Entrando al evento"}</h1>
-        <p>{bad ? c.detail || "No se pudo conectar con el evento." : "Preparando tu pantalla…"}</p>
+        <p>{bad ? c.detail || "No se pudo conectar con el evento." : c.detail || "Preparando tu pantalla…"}</p>
         {!bad && <Loader2 class="spin-icon" size={22} />}
+        {bad && c.retry && <button class="btn btn-primary" type="button" onClick={retryLogin} data-testid="splash-retry"><RefreshCw size={16} /> Reintentar</button>}
+        {!bad && slow && (
+          <div class="splash-slow">
+            <span>¿Tarda demasiado?</span>
+            <button class="btn btn-sm" type="button" onClick={() => location.reload()} data-testid="splash-reload"><RefreshCw size={14} /> Volver a empezar</button>
+          </div>
+        )}
       </div>
     </div>
   );

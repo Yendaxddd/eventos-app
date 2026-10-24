@@ -97,6 +97,7 @@ export function Feed() {
   const toBottom = () => { const el = box.current; if (el) el.scrollTop = el.scrollHeight; };
   const onScroll = () => {
     const el = box.current;
+    if (!el) return;                                            // a scroll that arrives after the chat was closed (another tab)
     stick.current = el.scrollHeight - el.scrollTop - el.clientHeight < 140;
     if (stick.current && unread) setUnread(0);
   };

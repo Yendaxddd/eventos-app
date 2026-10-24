@@ -324,6 +324,8 @@ En <https://discord.com/developers/applications> → tu aplicación (la del bot 
 5. **App Testers**: mientras la app no esté verificada, solo la ven tú, tu equipo y los *testers* (hasta 100), y solo en
    servidores de **menos de 25 miembros**. Añade a cada jugador como tester (debe aceptar la invitación y activar el ajuste de
    pruebas de Actividades en su Discord).
+6. **Activities → Settings → Default Orientation Lock State** (opcional): **Portrait**. La Actividad ya se pone sola en vertical
+   en el móvil al cargar (2.0.2); con este ajuste también arranca en vertical, sin girar al principio.
 
 ## Dirección fija con Tailscale Funnel (opcional, recomendado)
 El túnel de Cloudflare cambia de dirección cada vez, y Discord no tiene API para cambiar los URL Mappings, así que habría que
@@ -345,6 +347,22 @@ Si al abrir la dirección de la Actividad sale *Error 1016 · Origin DNS error*,
 quita del DNS público cuando Funnel se apaga y tarda en volver a publicarla (minutos, a veces horas). Desde la 2.0.1 la app no apaga
 Funnel al parar el bot, y la página *Actividad* avisa mientras la dirección no sea pública. Compruébalo con
 `nslookup tu-equipo.tu-red.ts.net 1.1.1.1`: cuando devuelva una IP, Discord ya llega.
+
+## En el móvil (2.0.2)
+- La Actividad se juega **en vertical**: al cargar le pide a Discord que fije la orientación (también en la ventana flotante).
+- Deja libre lo que Discord pone encima de la Actividad (sus botones arriba, la barra del sistema abajo).
+- Con el **teclado abierto**, la página mide lo que queda visible: el cuadro de texto queda justo encima del teclado y se
+  esconden la barra de abajo y la de acciones (y en pantallas bajas, tu barra de vida y los mini enemigos) hasta que lo cierres.
+- Si te llega un QTE mientras escribes, el teclado se cierra solo para dejar sitio al botón; lo que escribiste sigue en el cuadro.
+
+## Si alguien no puede entrar (2.0.2)
+- La pantalla de entrada dice en qué paso va (servidor, Discord, permiso, sesión). Si Discord no responde, la página se reinicia
+  sola una vez; si sigue igual, aparece **Reintentar**.
+- Si el jugador pulsa *Cancelar* en la ventana de permiso de Discord, ve «Falta tu permiso» con **Reintentar** (antes tenía que
+  cerrar y volver a abrir la Actividad).
+- En el registro: `la página dice: Discord no responde` o `permiso de Discord — …` indican cuál de los dos fue.
+- Quien **no aparece en el registro** ni siquiera con `GET /`: Discord no le deja abrir la Actividad. Mientras la app no esté
+  verificada, cada jugador tiene que ser **App Tester** (invitación aceptada) y el servidor tener menos de 25 miembros.
 
 ## Si la Actividad sale en blanco: el registro de la app
 La app escribe en su registro (gris, con 🌐) todo lo que pasa con la Actividad. Léelo mientras abres la Actividad en Discord:

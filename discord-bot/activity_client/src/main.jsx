@@ -12,10 +12,12 @@ import { vfxLog } from "./vfx.js";
 import { music } from "./audio.js";
 import { installPaletteKeys } from "./ui/Navigation.jsx";
 import { mobs } from "./mobs.js";
+import { installViewport } from "./viewport.js";
 
 effect(() => applyPrefs(prefs.value));      // the player's settings are applied to the page whenever they change
 installKeys();
 installPaletteKeys();
+installViewport();
 
 // handy for tests and for looking around from the browser console
 window.__eventos = {

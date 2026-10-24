@@ -148,7 +148,7 @@ class ActivityServer:
         if now - self._reports_reset > 60:
             self._reports, self._reports_reset = 0, now
         self._reports += 1
-        if self._reports > 40:
+        if self._reports > 200:                               # a whole server opening the Activity at once still gets heard
             return web.json_response({"ok": False}, status=429)
         try:
             body = await request.json()
