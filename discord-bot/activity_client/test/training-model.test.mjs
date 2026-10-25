@@ -88,3 +88,23 @@ test("records are only beaten by a session long enough to mean something", () =>
   assert.deepEqual(beats(long, best), []);                              // equal is not a record
   assert.deepEqual(beats(long, null).sort(), ["accuracy", "speed", "streak"]);
 });
+
+test("kinds that a person cannot do together are never open together; the rest still can", async () => {
+  const { fitsWith, nextSpec: next } = await import("../src/training-model.js");
+  assert.equal(fitsWith(["drag"], "mash"), false);          // two gestures
+  assert.equal(fitsWith(["combo"], "drag"), false);         // a combo with a drag
+  assert.equal(fitsWith(["mash"], "combo"), false);
+  assert.equal(fitsWith(["drag"], "single"), true);         // a drag and a simple evade is fine
+  assert.equal(fitsWith(["single", "single"], "single"), true);
+  assert.equal(fitsWith([], "combo"), true);                 // alone, anything goes
+  const config = sanitizeConfig({ kinds: ["drag", "mash", "combo"], simultaneous: 3 });
+  assert.equal(next(config, () => 0.3, null, ["drag"]), null);      // nothing the player chose fits with the drag: wait
+  assert.ok(next(config, () => 0.3, null, []));
+  const chaos = PRESETS.find(([id]) => id === "chaos")[2];
+  for (let seed = 1; seed < 60; seed++) {                   // whatever the chaos preset throws next, it fits with what is open
+    let s = seed; const rng = () => { s = (s * 1664525 + 1013904223) % 4294967296; return s / 4294967296; };
+    const open = ["single"];
+    const spec = next(sanitizeConfig(chaos), rng, null, open);
+    assert.ok(!spec || fitsWith(open, spec.mode));
+  }
+});

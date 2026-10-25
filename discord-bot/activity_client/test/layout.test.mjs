@@ -99,3 +99,14 @@ test("a widget bigger than the whole area is shrunk until it fits instead of spi
   assert.ok(spot.k < 1 && spot.w <= small.width - 2 * EDGE && spot.h <= small.height - 2 * EDGE, JSON.stringify(spot));
   assert.ok(spot.x >= EDGE && spot.y >= EDGE && spot.x + spot.w <= small.width - EDGE + 1 && spot.y + spot.h <= small.height - EDGE + 1);
 });
+
+test("laying out again around widgets that must not move leaves them where they are and keeps the rest apart from them", () => {
+  const area = { left: 0, top: 0, width: 390, height: 700 };
+  const fixed = [{ x: 20, y: 20, w: 200, h: 200 }];
+  const boxAt = (k) => ({ w: Math.round(130 * k), h: Math.round(170 * k) });
+  const packed = packAll(area, [boxAt, boxAt, boxAt], undefined, fixed);
+  assert.ok(packed && packed.length === 3);
+  const boxes = [...fixed, ...packed.map((p) => ({ x: p.x, y: p.y, w: p.w, h: p.h }))];
+  assert.equal(anyOverlap(boxes), false);
+  for (const p of packed) assert.ok(p.x >= EDGE && p.y >= EDGE && p.x + p.w <= area.width - EDGE + 0.5 && p.y + p.h <= area.height - EDGE + 0.5);
+});

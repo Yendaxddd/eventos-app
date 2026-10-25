@@ -115,7 +115,7 @@ function RunStage() {
         <button class="btn grow" type="button" onClick={() => pauseTraining(!t.paused)} data-testid="training-pause">{t.paused ? <><Play size={16} /> Seguir</> : <><Pause size={16} /> Pausar</>}</button>
         <button class="btn btn-primary grow" type="button" onClick={() => stopTraining("stopped")} data-testid="training-stop"><Square size={16} /> Terminar</button>
       </div>
-      <p class="faint center-text" style={{ fontSize: ".8125rem" }}>Responde con los botones flotantes o con las teclas de siempre (E, P, flechas, Espacio).</p>
+      <p class="faint center-text" style={{ fontSize: ".8125rem" }}>Teclas: E, P, flechas, Espacio.</p>
     </div>
   );
 }

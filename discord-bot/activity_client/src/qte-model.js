@@ -141,7 +141,7 @@ export function canPress(entry, cmd, t, ctx = {}) {
   return false;
 }
 
-const WHY = { wrong_dir: "Dirección equivocada", missed: "Fuera del blanco", short: "Te faltaron toques", late: "Tarde", timeout: "Se acabó el tiempo" };
+const WHY = { wrong_dir: "Otra dirección", missed: "Fallaste", short: "Pocos toques", late: "Tarde", timeout: "Tarde" };
 const GESTURE_OK = { flick: "¡Deslizado!", drag: "¡En el blanco!", mash: "¡Hecho!" };
 
 // What to call the answer once the server says how it went.

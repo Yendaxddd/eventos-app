@@ -691,6 +691,28 @@ def test_a_fake_qte_has_a_tell_and_a_drag_does_not_move_when_others_arrive():
     asyncio.run(with_page(scenario, actions=True))
 
 
+def test_widgets_that_are_on_screen_stay_put_and_take_every_tap_on_their_box():
+    async def scenario(hub, browser, url):
+        page = await open_page(browser, url, width=390, height=844, mobile=True)
+        me = page.me
+        await hub.qte_start(qte(hub, 61, me, windows={"evade": [0.0, 20.0]}, timeout=20.0))
+        first = page.locator('[data-testid=qte-widget][data-qte="61"]')
+        await first.wait_for()
+        await asyncio.sleep(0.5)
+        box = await first.bounding_box()
+        # a tap on the margin of the widget (not on its button) lands on the widget, not on the page under it
+        hit = await page.evaluate("([x, y]) => { const el = document.elementFromPoint(x, y); return !!(el && el.closest('.qw')); }", [box["x"] + 6, box["y"] + box["height"] / 2])
+        assert hit
+        for n in range(62, 64):                                     # two more arrive, one after the other (the chat is small: three is a lot)
+            await hub.qte_start(qte(hub, n, me, windows={"evade": [0.0, 20.0]}, timeout=20.0))
+            await asyncio.sleep(0.12)
+            now = await first.bounding_box()
+            assert abs(now["x"] - box["x"]) < 1 and abs(now["y"] - box["y"]) < 1, f"the first QTE moved when {n} arrived"
+        assert page.errors == []
+
+    asyncio.run(with_page(scenario, actions=True))
+
+
 # ======================================================================================================================
 def test_settings_apply_at_once_are_remembered_and_sent_to_the_server():
     async def scenario(hub, browser, url):
@@ -905,7 +927,7 @@ def test_the_tutorial_teaches_with_a_practice_qte_that_never_reaches_the_server(
         assert "esquivar vale" in (await page.locator("[data-testid=tutorial-verdict]").inner_text()).lower()
         await page.click("[data-testid=tutorial-next]")                                      # práctica: parry
         await page.wait_for_selector('[data-testid=tutorial-verdict].bad', timeout=9000)    # let it run out: it says so, nobody is hurt
-        assert "se acabó" in (await page.locator("[data-testid=qte-widget] .qw-result").inner_text()).lower()
+        assert "tarde" in (await page.locator("[data-testid=qte-widget] .qw-result").inner_text()).lower()
         await page.locator("[data-testid=tutorial-verdict] button").click()                  # otra vez
         await page.wait_for_selector('[data-testid=qte-widget][data-kind=parry]', timeout=4000)
         await asyncio.sleep(0.2)

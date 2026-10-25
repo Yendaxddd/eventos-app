@@ -18,7 +18,9 @@
 .qw[data-lead="false"]:not([data-state="done"]) .qw-btn { filter: saturate(.7) brightness(.86); }       /* not the one a key answers */
 
 .qw-in { display: contents; }
+.qw { pointer-events: auto; }                                  /* the whole box takes the taps: nothing under a widget is pressed by mistake */
 .qw > * { pointer-events: auto; }
+.qw[data-state="late"], .qw[data-state="late"] > * { pointer-events: none; }      /* one that is over lets the page through again */
 .qw-timer { width: 100%; display: flex; align-items: center; gap: 8px; padding: 6px 8px; border-radius: var(--r-pill); background: rgb(8 8 16 / .82); border: 1px solid rgb(255 255 255 / .12); backdrop-filter: blur(6px); box-shadow: 0 6px 20px -6px rgb(0 0 0 / .7); animation: qw-in .26s var(--ease-spring) both; pointer-events: none; }
 .qw-track { position: relative; flex: 1; height: 12px; border-radius: var(--r-pill); background: rgb(255 255 255 / .1); overflow: hidden; }
 .qw-fill { position: absolute; inset: 0; border-radius: inherit; background: linear-gradient(90deg, var(--c-deep), var(--c)); transform-origin: left center; animation: qw-drain linear both; will-change: transform; }
@@ -41,7 +43,7 @@
   box-shadow: 0 0 0 4px rgb(255 255 255 / .16), 0 0 0 8px color-mix(in srgb, var(--c) 36%, transparent), 0 14px 40px -4px var(--glow), inset 0 -8px 18px rgb(0 0 0 / .28), inset 0 3px 10px rgb(255 255 255 / .35);
   text-shadow: 0 2px 6px rgb(0 0 0 / .55); animation: qw-pop .3s var(--ease-spring) both; transition: filter var(--t-fast), transform var(--t-fast);
 }
-.qw.is-fake .qw-btn { outline: 2px dashed rgb(255 255 255 / .6); outline-offset: -8px; }      /* the tell of a fake QTE: a dashed ring inside the button */
+.qw.is-fake { --c: #f43f5e; --c-deep: #9f1239; --glow: rgb(244 63 94 / .55); }      /* a fake QTE is red (with a «?» instead of the shield) */
 .qw-btn:active:not(:disabled) { transform: scale(.93); filter: brightness(1.2); }
 .qw-btn svg { width: calc(var(--size) * .34); height: calc(var(--size) * .34); filter: drop-shadow(0 2px 4px rgb(0 0 0 / .5)); }
 .qw-btn .kbd { position: absolute; bottom: calc(var(--size) * .1); font-size: .625rem; opacity: .85; }

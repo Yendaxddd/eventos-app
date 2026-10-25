@@ -41,14 +41,14 @@ export function startQte(frame, { practice = false, ago = 0 } = {}) {
     setTimeout(() => {
       const open = find(id);
       if (open && !open.pressed) {
-        settle(open, null, open.q.mode === "fake" ? { ok: true, label: "¡Era falso!", sub: "no caíste" } : { ok: false, label: "Se acabó el tiempo", sub: "no se pulsó nada" });
+        settle(open, null, open.q.mode === "fake" ? { ok: true, label: "¡Era falso!", sub: "no caíste" } : { ok: false, label: "Tarde", sub: "" });
       }
     }, (frame.timeout || 5) * 1000 + 60);
   }
 }
 
 // A practice QTE the player let slip (a combo step whose time ran out, for one): it ends as a miss, as the real one would.
-export function expirePractice(id, label = "Se acabó el tiempo", sub = "no se pulsó nada") {
+export function expirePractice(id, label = "Tarde", sub = "") {
   const open = find(id);
   if (open && open.practice && !open.pressed) settle(open, null, { ok: false, label, sub });
 }

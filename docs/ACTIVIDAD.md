@@ -358,7 +358,10 @@ Funnel al parar el bot, y la página *Actividad* avisa mientras la dirección no
 ## Colocación de los QTE y QTE falsos (2.0.4)
 - Los QTE de **gesto** (arrastrar, deslizar, machacar) no se mueven nunca: si la pantalla se llena, los demás se recolocan
   alrededor de ellos.
-- El QTE **falso** es un «Esquivar» con un escudo con «?» y un anillo discontinuo dentro del botón. Igual en entrenamiento y evento.
+- El QTE **falso** es un «Esquivar» **rojo** con un «?» en lugar del escudo. Igual en entrenamiento y evento (2.0.5).
+- Los QTE que ya están en pantalla no se mueven cuando llega otro (2.0.5); la caja entera de un QTE recibe los toques.
+- Machacar pide 4 / 6 / 8 / 10 toques (fácil / medio / difícil / imposible).
+- En el entrenamiento hay un tope de esfuerzo: no coinciden QTE imposibles de atender a la vez (p. ej. un arrastre con un combo).
 
 ## Tiempos de los QTE (2.0.3)
 El tiempo de cada respuesta lo mide la pantalla del jugador: lo que tarde la respuesta en volver al servidor no cuenta. Para que

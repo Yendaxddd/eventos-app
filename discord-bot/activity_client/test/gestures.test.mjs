@@ -29,7 +29,7 @@ test("a fake QTE looks like an evade to its target, and answering it is falling 
 
 test("the server's reasons for a failed gesture are said in Spanish", () => {
   const e = makeEntry(frameOf("flick"), { arrival: 0, youId: "u1" });
-  assert.equal(verdictOf({ ...e, pressedCmd: "gesture" }, { ok: false, why: "wrong_dir", ms: 900 }).label, "Dirección equivocada");
+  assert.equal(verdictOf({ ...e, pressedCmd: "gesture" }, { ok: false, why: "wrong_dir", ms: 900 }).label, "Otra dirección");
   assert.equal(verdictOf({ ...e, pressedCmd: "gesture" }, { ok: true, ms: 900 }).label, "¡Deslizado!");
 });
 
@@ -47,6 +47,6 @@ test("practice frames of the new kinds carry what they ask for, and it changes w
   const rng = seeded(4);
   const drag = practiceFrame("d", "impossible", null, "drag", { random: rng });
   assert.ok(drag.arena.from[0] >= 0 && drag.arena.to[0] <= 1 && drag.arena.tolerance === 0.07 && drag.timeout === 1.7);
-  assert.equal(practiceFrame("m", "easy", null, "mash").arena.count, 8);
+  assert.equal(practiceFrame("m", "easy", null, "mash").arena.count, 4);
   assert.ok(["up", "down", "left", "right"].includes(gestureParams("flick", "hard", rng).dir));
 });

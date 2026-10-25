@@ -26,7 +26,7 @@ DIFFICULTIES = ("easy", "medium", "hard", "impossible")
 TIMEOUT = {"flick": {"easy": 2.6, "medium": 1.9, "hard": 1.4, "impossible": 1.0},
            "drag": {"easy": 4.0, "medium": 3.0, "hard": 2.3, "impossible": 1.7},
            "mash": {"easy": 3.2, "medium": 3.2, "hard": 3.4, "impossible": 3.6}}
-MASH_COUNT = {"easy": 8, "medium": 12, "hard": 16, "impossible": 22}
+MASH_COUNT = {"easy": 4, "medium": 6, "hard": 8, "impossible": 10}      # what a thumb can do in about three seconds
 DRAG_TOLERANCE = {"easy": 0.16, "medium": 0.12, "hard": 0.09, "impossible": 0.07}     # of the pad's size
 FLICK_DIRS = ("up", "down", "left", "right")
 MAX_TAP_RATE = 16.0                 # taps per second a person can really do: more is a script

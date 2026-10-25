@@ -41,9 +41,19 @@ export const PRESETS = [
 const ARROWS = ["up", "down", "left", "right"];
 const pickOf = (list, rng) => list[Math.min(list.length - 1, Math.floor(rng() * list.length))];
 
-// The next QTE: { mode, difficulty, extra } for practiceFrame. `last` (the previous mode) is avoided when there is a choice.
-export function nextSpec(config, rng = Math.random, last = null) {
-  const kinds = config.kinds.length > 1 && last ? config.kinds.filter((k) => k !== last) : config.kinds;
+// How much of a person's attention each kind takes while it is open. Two QTEs may be open together only if their weights add up to
+// at most BUDGET: a single or a fake one leaves room for another, a combo, a drag or a tap-fest nearly none (a drag with a combo
+// at once cannot be done by a human). Counted per open QTE, so «simultaneous» is a ceiling, not a promise.
+export const WEIGHT = { single: 1, group: 1, fake: 1, direction: 2, bf_chain: 2, flick: 2, drag: 3, mash: 3, combo: 3 };
+export const BUDGET = 4;
+export const fitsWith = (openModes, mode) => openModes.reduce((sum, m) => sum + (WEIGHT[m] || 1), WEIGHT[mode] || 1) <= BUDGET;
+
+// The next QTE: { mode, difficulty, extra } for practiceFrame, or null when nothing the player chose fits with what is open.
+// `last` (the previous mode) is avoided when there is a choice.
+export function nextSpec(config, rng = Math.random, last = null, openModes = []) {
+  const fitting = config.kinds.filter((k) => fitsWith(openModes, k));
+  if (!fitting.length) return null;
+  const kinds = fitting.length > 1 && last ? fitting.filter((k) => k !== last) : fitting;
   const mode = pickOf(kinds, rng);
   const difficulty = pickOf(config.difficulties, rng);
   const extra = {};

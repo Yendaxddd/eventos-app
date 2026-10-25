@@ -49,7 +49,7 @@ export const GESTURE_TIMEOUT = {
   drag: { easy: 4.0, medium: 3.0, hard: 2.3, impossible: 1.7 },
   mash: { easy: 3.2, medium: 3.2, hard: 3.4, impossible: 3.6 },
 };
-const MASH_COUNT = { easy: 8, medium: 12, hard: 16, impossible: 22 };
+const MASH_COUNT = { easy: 4, medium: 6, hard: 8, impossible: 10 };
 const DRAG_TOLERANCE = { easy: 0.16, medium: 0.12, hard: 0.09, impossible: 0.07 };
 export function gestureParams(mode, difficulty, rng = Math.random) {
   if (mode === "flick") return { dir: ["up", "down", "left", "right"][Math.floor(rng() * 4) % 4] };

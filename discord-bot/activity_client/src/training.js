@@ -67,7 +67,7 @@ function tick() {
 
   // combo steps that ran out of time end the QTE (the practice timer only knows the whole QTE)
   for (const e of entries) {
-    if (e.q.mode === "combo" && !e.pressed && !e.busy && phaseAt(e, elapsedSeconds(e, now)).state === "late") expirePractice(e.id, "Combo roto", "demasiado lento");
+    if (e.q.mode === "combo" && !e.pressed && !e.busy && phaseAt(e, elapsedSeconds(e, now)).state === "late") expirePractice(e.id, "Combo roto", "");
   }
 
   // read what finished
@@ -100,7 +100,9 @@ function endLater() {
 }
 
 function spawn(config) {
-  const spec = nextSpec(config, rng, lastMode);
+  const openModes = qtes.value.filter((e) => mine(e) && !e.pressed && !e.ended).map((e) => e.q.mode);
+  const spec = nextSpec(config, rng, lastMode, openModes);
+  if (!spec) { nextAt = performance.now() + TICK_MS * 3; return; }           // nothing fits with what is open: try again in a moment
   lastMode = spec.mode;
   const frame = scaleFrame(practiceFrame(`train-${++serial}`, spec.difficulty, rules.value, spec.mode, spec.extra), config.speed);
   frame.tGo = 0;

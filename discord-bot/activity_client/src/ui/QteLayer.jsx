@@ -1,12 +1,12 @@
 import { useEffect, useRef, useState } from "preact/hooks";
 import {
-  ArrowDown, ArrowLeft, ArrowRight, ArrowUp, Check, Crosshair, Hand, Hourglass, Lock, Shield, ShieldPlus, ShieldQuestion, Swords, X, Zap,
+  ArrowDown, ArrowLeft, ArrowRight, ArrowUp, Check, CircleHelp, Crosshair, Hand, Hourglass, Lock, Shield, ShieldPlus, Swords, X, Zap,
 } from "lucide-preact";
 import { qtes, prefs, me, rules, canWrite } from "../state.js";
 import { GESTURE_MODES, byUrgency, canPress, elapsedSeconds, leadOf, phaseAt } from "../qte-model.js";
 import { DragPad, FlickPad, MashButton } from "./Gestures.jsx";
 import { press, context } from "../qte-store.js";
-import { pickSpotFit, clampSpot, packAll, anyOverlap } from "../layout.js";
+import { pickSpotFit, clampSpot, packAll, anyOverlap, overlapsAny } from "../layout.js";
 import { pressCommand } from "./Actions.jsx";
 import { Avatar } from "./Avatar.jsx";
 import { play, vibrate } from "../sound.js";
@@ -80,9 +80,8 @@ function Timer({ entry, from, to, variant = "drain", bf = null, paused = false, 
 // ---- one widget --------------------------------------------------------------------------------------------------------
 function visual(entry, phase, ctx) {
   const q = entry.q;
-  // a fake QTE is an evade with a tell, the same in training and in the event: a shield with a «?» in it, and a dashed ring inside
-  // the button. Nothing else (words, colours, timer) differs, so it takes a look to notice it.
-  if (phase.kind === "evade") return { kind: "evade", icon: q.mode === "fake" ? ShieldQuestion : Shield, label: CMD.evade, key: KEYS.evade };
+  // a fake QTE is an evade you can tell at a glance, the same in training and in the event: red, with a «?» instead of the shield
+  if (phase.kind === "evade") return { kind: "evade", icon: q.mode === "fake" ? CircleHelp : Shield, label: CMD.evade, key: KEYS.evade };
   if (phase.kind === "save") return { kind: "save", icon: ShieldPlus, label: CMD.save, key: KEYS.save };
   if (phase.kind === "parry") return { kind: "parry", icon: Swords, label: CMD.parry, key: KEYS.parry };
   if (phase.kind === "bf") return { kind: "bf", icon: Zap, label: "Parry", key: KEYS.parry };
@@ -158,7 +157,7 @@ function Widget({ entry, phase, rank, lead, spot, size, ctx }) {
             : <MashButton entry={entry} live={state === "live"} lead={lead} />
       ) : phase.kind === "arrows" ? (
         <>
-          <div class="qw-hint">Flecha: {GLYPH[arrowName(q.arrow)]} — pulsa la <b>OPUESTA</b></div>
+          <div class="qw-hint"><b>OPUESTA</b></div>
           <div class="qw-pad">
             {["up", "left", "right", "down"].map((dir) => {
               const A = ARROW_ICON[dir];
@@ -183,7 +182,7 @@ function Widget({ entry, phase, rank, lead, spot, size, ctx }) {
         <button type="button" class="qw-alt" data-cmd="evade" onPointerDown={fire("evade")} onKeyDown={onKey("evade")}><Shield size={14} /> Esquivar</button>
       )}
       {result ? (
-        <div class="qw-result" data-testid="qte-result">{result.label}{result.sub ? <small class="num">{result.sub}</small> : null}</div>
+        <div class="qw-result" data-testid="qte-result">{result.label}{/^[\d.]+ s$/.test(result.sub || "") ? <small class="num">{result.sub}</small> : null}</div>
       ) : (
         <div class="qw-meta"><span class="qw-rank">{rank}</span>{metaText(entry, rank)}</div>
       )}
@@ -240,6 +239,14 @@ function RescueChip({ entry, ctx }) {
 const kindOf = (it) => (it.phase.kind === "arrows" ? "arrows" : it.entry.q.mode === "flick" ? "flick" : it.entry.q.mode === "drag" ? "drag" : "button");
 const asBox = (s) => ({ x: s.x, y: s.y, w: s.w, h: s.h });
 
+// Nothing that is already on screen moves unless it has to:
+//  - a gesture (drag, swipe, tap-fest) never moves: a finger is on it;
+//  - a widget that is over (answered, late) never moves either: it is only leaving;
+//  - a new one that does not fit without touching another is first tried in any free place around everything else, and only when
+//    there is none are the rest laid out again (in the order the QTEs came, so two of them never swap places).
+const over = (it) => !!(it.entry.result || it.entry.pressed || it.entry.ended || it.phase.state === "late");
+const fixedOf = (it) => GESTURE_MODES.includes(it.entry.q.mode) || over(it);
+
 function allocate({ items, counterShown, area, avoid, spots, lastSpot, size, placement }) {
   const liveKeys = new Set(items.map((it) => it.key).filter(Boolean));
   for (const k of [...spots.keys()]) if (!liveKeys.has(k) && k !== "counter") spots.delete(k);
@@ -252,19 +259,28 @@ function allocate({ items, counterShown, area, avoid, spots, lastSpot, size, pla
   else if (!spots.has("counter")) spots.set("counter", pickSpotFit(area, placed, (k) => boxFor("button", size * k, true), placement));
   const counter = counterShown ? spots.get("counter") : null;
   if (counter) placed.push(asBox(counter));
+  const fresh = [];
   for (const it of items) {
     if (it.spot) continue;
     const old = lastSpot.get(it.entry.id);               // the new widget of the same QTE (evade -> parry) lands away from the old one
     it.spot = pickSpotFit(area, old ? [...placed, asBox(old)] : placed, (k) => boxFor(kindOf(it), size * k, it.lead), placement);
     if (it.key) spots.set(it.key, it.spot);
     placed.push(asBox(it.spot));
+    fresh.push(it);
   }
+  const touching = (it) => [...(counter ? [counter] : []), ...items.filter((o) => o !== it).map((o) => o.spot)].some((o) => overlapsAny(asBox(it.spot), [asBox(o)]));
+  // 1) only the new ones that landed on something look for another place (smaller if need be), around everything else
+  for (const it of fresh) {
+    if (!touching(it)) continue;
+    const others = [...avoid, ...(counter ? [asBox(counter)] : []), ...items.filter((o) => o !== it).map((o) => asBox(o.spot))];
+    const moved = packAll(area, [(k) => boxFor(kindOf(it), size * k, it.lead)], undefined, others);
+    if (moved) { it.spot = moved[0]; if (it.key) spots.set(it.key, it.spot); }
+  }
+  // 2) still crowded: everybody who may move is laid out again around the ones that may not
   const boxes = [...(counter ? [counter] : []), ...items.map((it) => it.spot)].map(asBox);
   if (anyOverlap(boxes)) {
-    // gestures (drag, swipe, tap-fest) never move: a finger is on them, and one that jumps away makes the QTE impossible.
-    // Everybody else is laid out again around them.
-    const still = items.filter((it) => GESTURE_MODES.includes(it.entry.q.mode));
-    const moving = items.filter((it) => !still.includes(it));
+    const still = items.filter(fixedOf);
+    const moving = items.filter((it) => !fixedOf(it)).sort((a, b) => a.entry.start - b.entry.start);
     const packed = packAll(area, [...(counter ? [(k) => boxFor("button", size * k, true)] : []), ...moving.map((it) => (k) => boxFor(kindOf(it), size * k, it.lead))],
       undefined, [...avoid, ...still.map((it) => asBox(it.spot))]);
     if (packed) {
