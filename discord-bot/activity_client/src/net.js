@@ -407,8 +407,21 @@ export function retryLogin() {
   login().then(connect).catch(fail);
 }
 
+// What this screen is like, for the app's log: a page that looks cut off on one phone can only be understood from its numbers.
+function screenReport() {
+  try {
+    const vv = window.visualViewport, cs = getComputedStyle(document.documentElement);
+    const safe = ["top", "bottom"].map((k) => cs.getPropertyValue(`--safe-${k}`).trim() || "0").join("/");
+    const dis = ["top", "bottom"].map((k) => cs.getPropertyValue(`--discord-safe-area-inset-${k}`).trim() || "-").join("/");
+    const ua = (navigator.userAgent.match(/\(([^)]*)\)/) || ["", ""])[1].slice(0, 70);
+    return `ventana ${innerWidth}x${innerHeight}, visual ${vv ? `${Math.round(vv.width)}x${Math.round(vv.height)}` : "?"}, pantalla ${screen.width}x${screen.height}, `
+      + `dpr ${devicePixelRatio}, márgenes ${safe} (Discord ${dis}), ${ua}`;
+  } catch { return "sin datos"; }
+}
+
 export function boot() {
   report("página cargada", inDiscord ? "dentro de Discord" : "fuera de Discord");
+  setTimeout(() => report("pantalla", screenReport()), 1500);
   login().then(connect).catch(fail);
 }
 

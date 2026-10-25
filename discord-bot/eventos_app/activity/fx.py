@@ -24,6 +24,10 @@ DEFAULT_BINDING = {"preset": "impacto", "color": "", "intensity": 100, "speed": 
 RANGES = {"intensity": (25, 200), "speed": (50, 200), "delay": (0, 5000)}
 BINDABLE = tuple(e for e in EVENTS if not e.startswith("qte_"))        # a QTE has its own look; the rest of what happens can be given one
 MAX_BINDINGS = 400
+MAX_PEOPLE = 300                                  # players with looks of their own
+# What a player can give a look of their own to: what happens to them (answers, blows, powers). The rest belongs to the game masters.
+PERSONAL = ("power_used", "power_1", "power_2", "evade_ok", "parry_ok", "counter", "rescue_ok", "combo_step", "qte_fail",
+            "black_flash", "combo_done", "player_hit", "low_hp", "heal")
 _COLOR = re.compile(r"^#[0-9a-fA-F]{6}$")
 _SOUND = re.compile(r"^[0-9a-f]{1,32}$")
 
@@ -65,6 +69,7 @@ class FxBook:
         self.path = path
         self.events: dict[str, dict] = {}
         self.powers: dict[str, dict] = {}
+        self.people: dict[str, dict[str, dict]] = {}      # player id -> event -> the look that player chose for what happens to them
         self.defaults = True
         if path is not None and path.exists():
             try:
@@ -76,6 +81,9 @@ class FxBook:
                     for key, binding in list((raw.get("powers") or {}).items())[:MAX_BINDINGS]:
                         if isinstance(key, str) and re.fullmatch(r".{1,80}\|[12]", key):
                             self.powers[key] = sanitize(binding)
+                    for who, looks in list((raw.get("people") or {}).items())[:MAX_PEOPLE]:
+                        if isinstance(who, str) and who.isdigit() and isinstance(looks, dict):
+                            self.people[who] = {e: self._personal(b) for e, b in looks.items() if e in PERSONAL}
                     self.defaults = raw.get("defaults") is not False
             except (OSError, ValueError, AttributeError):
                 log.warning("could not read %s", path)
@@ -85,7 +93,7 @@ class FxBook:
             return
         try:
             tmp = self.path.with_suffix(".tmp")
-            tmp.write_text(json.dumps({"events": self.events, "powers": self.powers, "defaults": self.defaults}, ensure_ascii=False, indent=1), encoding="utf-8")
+            tmp.write_text(json.dumps({"events": self.events, "powers": self.powers, "people": self.people, "defaults": self.defaults}, ensure_ascii=False, indent=1), encoding="utf-8")
             tmp.replace(self.path)
         except OSError:
             log.warning("could not save %s", self.path)
@@ -116,6 +124,47 @@ class FxBook:
     def clear_power(self, character: Any, slot: Any) -> None:
         if self.powers.pop(power_key(character, slot), None) is not None:
             self.save()
+
+    # ---- the looks players choose for themselves ------------------------------------------------------------------------
+    @staticmethod
+    def _personal(raw: Any) -> dict:
+        """A player's own binding: no sound (the library is the game masters'), and seen only by them unless they say `all`."""
+        binding = sanitize(raw)
+        binding["sound"] = ""
+        if not (isinstance(raw, dict) and raw.get("scope") == "all"):
+            binding["scope"] = "target"
+        return binding
+
+    def set_person(self, user_id: int, event: Any, raw: Any) -> dict:
+        if str(event) not in PERSONAL:
+            raise RpcError("Ese suceso no se puede personalizar.")
+        binding = self._personal(raw)
+        if is_empty(binding):
+            raise RpcError("Ese efecto no hace nada: elige un efecto visual o un rótulo.")
+        who = str(int(user_id))
+        if who not in self.people and len(self.people) >= MAX_PEOPLE:
+            raise RpcError("Ya hay demasiados jugadores con efectos propios.")
+        self.people.setdefault(who, {})[str(event)] = binding
+        self.save()
+        return binding
+
+    def clear_person(self, user_id: int, event: Any) -> None:
+        looks = self.people.get(str(int(user_id)))
+        if looks is not None and looks.pop(str(event), None) is not None:
+            if not looks:
+                del self.people[str(int(user_id))]
+            self.save()
+
+    def personal_for(self, user_id: Any, event: str, data: dict) -> dict | None:
+        """The look this player chose for what just happened to them, if any (a power: its slot's, then «any power»)."""
+        if not isinstance(user_id, int) or isinstance(user_id, bool):
+            return None
+        looks = self.people.get(str(user_id))
+        if not looks:
+            return None
+        if event == "power_used":
+            return looks.get(f"power_{data.get('slot')}") or looks.get("power_used")
+        return looks.get(event)
 
     def set_defaults(self, on: bool) -> None:
         self.defaults = bool(on)
@@ -167,19 +216,32 @@ class FxDirector:
     async def dispatch(self, event: str, data: dict | None = None) -> bool:
         data = data or {}
         binding = self.book.binding_for(event, data)
-        if binding is None:
+        actor = data.get("user")
+        mine = self.book.personal_for(actor, event, data)
+        if binding is None and mine is None:
             return False
         ctx = {"name": str(data.get("name") or EVENTS.get(event, ("",))[0])[:60], "event": event}
+        if mine is not None:
+            # the player's own look replaces the game masters' one: on their screen only, or on everybody's if they chose so
+            if mine["scope"] == "all":
+                await self.show(mine, ctx, None)
+            else:
+                await self.show(mine, ctx, {int(actor)})
+                if binding is not None and binding["scope"] != "target":
+                    await self.show(binding, ctx, None, skip={int(actor)})
+            return True
         who = None
         if binding["scope"] == "target" and data.get("user") is not None:
             who = {int(data["user"])}
         await self.show(binding, ctx, who)
         return True
 
-    async def show(self, binding: dict, ctx: dict, user_ids: set[int] | None = None) -> None:
-        """The effect on the screens of `user_ids` (everybody when None). The sound waits for the binding's delay, as the picture does."""
+    async def show(self, binding: dict, ctx: dict, user_ids: set[int] | None = None, skip: set[int] | None = None) -> None:
+        """The effect on the screens of `user_ids` (everybody when None), but not on those of `skip`. The sound waits for the binding's
+        delay, as the picture does."""
         frame = self.frame(binding, ctx)
-        targets = [c for c in list(self.hub.conns.values()) if not c.hidden and (user_ids is None or c.user_id in user_ids)]
+        targets = [c for c in list(self.hub.conns.values())
+                   if not c.hidden and (user_ids is None or c.user_id in user_ids) and not (skip and c.user_id in skip)]
         await asyncio.gather(*(self.hub.send(c, frame) for c in targets))
         if binding["sound"]:
             asyncio.get_running_loop().create_task(self._sound(binding, user_ids))

@@ -21,7 +21,7 @@ const GROUPS = [
 ];
 
 // What a binding does, in a few words.
-export function summary(binding, sounds) {
+export function summary(binding, sounds = []) {
   if (!binding) return null;
   const parts = [PRESETS[binding.preset].label];
   if (binding.banner) parts.push(`rótulo «${binding.banner}»`); else if (binding.name) parts.push("muestra el nombre");
@@ -38,7 +38,7 @@ function SaveState({ status, reason }) {
 }
 
 // One binding being edited: everything saves by itself.
-function Editor({ initial, sounds, name, scopeChoice, save, id }) {
+export function Editor({ initial, sounds, name, scopeChoice, scopeLabels, save, id }) {
   const [b, setB] = useState(() => sanitizeBinding(initial || { ...DEFAULT_BINDING, preset: "impacto" }));
   const set = (patch) => setB((old) => sanitizeBinding({ ...old, ...patch }));
   const state = useAutosave(b, { key: id, save: (v) => save(v), check: (v) => (isEmpty(v) ? "Elige un efecto visual, un rótulo o un sonido." : "") });
@@ -72,16 +72,16 @@ function Editor({ initial, sounds, name, scopeChoice, save, id }) {
           <input class="input" maxLength={40} placeholder="Texto que aparece en grande (opcional)" value={b.banner} onInput={(e) => set({ banner: e.currentTarget.value })} data-testid={`fx-banner-${id}`} />
         </label>
         <label class="field gm-check"><input type="checkbox" checked={b.name} onChange={(e) => set({ name: e.currentTarget.checked })} /> Mostrar el nombre como rótulo</label>
-        <label class="field"><span class="field-label">Sonido</span>
+        {sounds && <label class="field"><span class="field-label">Sonido</span>
           <select class="select" value={b.sound} onChange={(e) => set({ sound: e.currentTarget.value })} aria-label="Sonido del efecto" data-testid={`fx-sound-${id}`}>
             <option value="">— sin sonido —</option>
             {sounds.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
           </select>
-        </label>
+        </label>}
         {scopeChoice && (
           <label class="field"><span class="field-label">Quién lo ve</span>
             <select class="select" value={b.scope} onChange={(e) => set({ scope: e.currentTarget.value })} aria-label="Quién ve el efecto">
-              <option value="all">Todos</option><option value="target">Solo quien lo vive</option>
+              <option value="all">{(scopeLabels || {}).all || "Todos"}</option><option value="target">{(scopeLabels || {}).target || "Solo quien lo vive"}</option>
             </select>
           </label>
         )}
@@ -94,7 +94,7 @@ function Editor({ initial, sounds, name, scopeChoice, save, id }) {
   );
 }
 
-function Row({ id, title, sub, binding, sounds, name, scopeChoice, save, clear, fallback }) {
+export function Row({ id, title, sub, binding, sounds, name, scopeChoice, scopeLabels, save, clear, fallback, start }) {
   const [open, setOpen] = useState(false);
   const shown = binding || fallback;
   return (
@@ -109,7 +109,7 @@ function Row({ id, title, sub, binding, sounds, name, scopeChoice, save, clear, 
         <button class="btn btn-sm" type="button" onClick={() => setOpen(!open)} data-testid={`fx-edit-${id}`} aria-expanded={open ? "true" : "false"}>{open ? <><X size={14} /> Cerrar</> : <><Pencil size={14} /> {binding ? "Editar" : "Poner efecto"}</>}</button>
         {binding && <button class="btn btn-sm btn-ghost" type="button" onClick={clear} aria-label={`Quitar el efecto de ${title}`} data-testid={`fx-clear-${id}`}><Trash2 size={14} /></button>}
       </div>
-      {open && <Editor id={id} initial={binding || fallback} sounds={sounds} name={name} scopeChoice={scopeChoice} save={save} />}
+      {open && <Editor id={id} initial={binding || fallback || start} sounds={sounds} name={name} scopeChoice={scopeChoice} scopeLabels={scopeLabels} save={save} />}
     </div>
   );
 }

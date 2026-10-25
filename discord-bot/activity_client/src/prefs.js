@@ -24,6 +24,7 @@ export const DEFAULT_PREFS = {
   showPlayers: true, compactHud: false,
   messageLimit: 150,        // messages kept on screen, 50 – 400
   tutorialDone: false,
+  screenTop: 0, screenBottom: 0, screenSide: 0,      // extra margins (px) for a screen the page does not fit exactly
 };
 
 const CHOICES = {
@@ -31,7 +32,7 @@ const CHOICES = {
   accent: ["violet", "blue", "cyan", "green", "amber", "pink", "red"], corners: ["round", "sharp", "soft"], bg: ["plain", "grid", "aurora"], palette: ["default", "cb"], density: ["compact", "comfortable", "spacious"],
   motion: ["full", "reduced"], vfx: ["full", "soft", "off"], buttonPlacement: ["random", "bottom", "left", "right"],
 };
-const RANGES = { textScale: [85, 140], buttonScale: [70, 160], volume: [0, 100], musicVolume: [0, 100], sfxVolume: [0, 100], messageLimit: [50, 400] };
+const RANGES = { textScale: [85, 140], buttonScale: [70, 160], volume: [0, 100], musicVolume: [0, 100], sfxVolume: [0, 100], messageLimit: [50, 400], screenTop: [0, 80], screenBottom: [0, 80], screenSide: [0, 60] };
 
 // Same rules as the server (eventos_app/activity/prefs.py): anything that does not fit falls back to the default.
 export function sanitizePrefs(raw) {
@@ -61,6 +62,9 @@ export function applyPrefs(p) {
   root.style.setProperty("--text-scale", String(p.textScale / 100));
   root.style.setProperty("--density", String(DENSITY[p.density] || 1));
   root.style.setProperty("--btn-scale", String(p.buttonScale / 100));
+  root.style.setProperty("--adj-top", `${p.screenTop}px`);
+  root.style.setProperty("--adj-bottom", `${p.screenBottom}px`);
+  root.style.setProperty("--adj-side", `${p.screenSide}px`);
   const meta = document.querySelector('meta[name="theme-color"]');
   if (meta) meta.setAttribute("content", THEME_COLOR[p.theme] || "#090912");
 }

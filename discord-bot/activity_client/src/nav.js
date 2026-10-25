@@ -10,6 +10,7 @@ export const DESTINATIONS = [
   ["skills", "Habilidades", "árbol puntos ramas", "panel", "skills", false],
   ["inventory", "Inventario", "objetos equipo adaptación espejo efectos", "panel", "inventory", false],
   ["images", "Imágenes", "contraataque gif", "panel", "images", false],
+  ["effects", "Mis efectos", "vfx efectos visuales personalizar mis colores rótulo", "panel", "effects", false],
   ["ranking", "Ranking", "clasificación tabla líderes", "panel", "ranking", false],
   ["training", "Entrenamiento", "practicar práctica qte al azar", "training", null, false],
   ["latency", "Prueba de latencia", "ping retraso conexión dispositivo calibrar", "latency", null, false],

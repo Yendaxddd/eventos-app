@@ -355,6 +355,14 @@ Funnel al parar el bot, y la página *Actividad* avisa mientras la dirección no
   esconden la barra de abajo y la de acciones (y en pantallas bajas, tu barra de vida y los mini enemigos) hasta que lo cierres.
 - Si te llega un QTE mientras escribes, el teclado se cierra solo para dejar sitio al botón; lo que escribiste sigue en el cuadro.
 
+## Mis efectos y ajustes de pantalla (2.0.6)
+- **Mi panel → Efectos**: cada jugador elige el efecto visual de lo que le pasa (poderes, esquives, parrys, contraataque, Black Flash,
+  golpes, curarse…): el que pongan sustituye al de los GM en su pantalla, o en la de todos si eligen «Todos lo ven». Sin sonido (la
+  biblioteca de sonidos es de los GM). Se guarda en el archivo de efectos de la app (`fx.json`, clave `people`).
+- **Ajustes → Mi pantalla**: márgenes extra (arriba, abajo, laterales) para una pantalla en la que la interfaz sale recortada.
+- **Ajustes → Sonido → Probar**: un pitido por el camino del audio del evento, y si el móvil lo bloquea lo dice.
+- En el registro de la app: `la página dice: pantalla — …` (medidas de cada pantalla) y `audio …` (por qué no sonó algo).
+
 ## Colocación de los QTE y QTE falsos (2.0.4)
 - Los QTE de **gesto** (arrastrar, deslizar, machacar) no se mueven nunca: si la pantalla se llena, los demás se recolocan
   alrededor de ellos.

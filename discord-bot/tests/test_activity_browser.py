@@ -713,6 +713,25 @@ def test_widgets_that_are_on_screen_stay_put_and_take_every_tap_on_their_box():
     asyncio.run(with_page(scenario, actions=True))
 
 
+def test_a_screen_that_does_not_fit_can_be_given_margins_and_the_audio_test_says_what_the_phone_does():
+    async def scenario(hub, browser, url):
+        page = await open_page(browser, url, width=390, height=844, mobile=True)
+        before = await page.evaluate("document.querySelector('.bottom-nav').getBoundingClientRect().height")
+        await page.evaluate("window.__eventos.setPrefs({ screenBottom: 30, screenTop: 20 })")
+        await page.wait_for_function("getComputedStyle(document.documentElement).getPropertyValue('--adj-bottom').trim() === '30px'")
+        after = await page.evaluate("document.querySelector('.bottom-nav').getBoundingClientRect().height")
+        assert after - before >= 29                                                  # the bar grew by the margin the player asked for
+        assert await page.evaluate("document.querySelector('.topbar').getBoundingClientRect().top") >= 20
+        await page.evaluate("window.__eventos.go('settings')")
+        await page.wait_for_selector("[data-testid=audio-test]")
+        await page.click("[data-testid=audio-test]")
+        await page.wait_for_selector("[data-testid=audio-says]", timeout=3000)
+        assert (await page.locator("[data-testid=audio-says]").inner_text()).strip()
+        assert page.errors == []
+
+    asyncio.run(with_page(scenario))
+
+
 # ======================================================================================================================
 def test_settings_apply_at_once_are_remembered_and_sent_to_the_server():
     async def scenario(hub, browser, url):

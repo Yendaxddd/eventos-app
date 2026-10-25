@@ -2,6 +2,8 @@ import { Eye, Gauge, MessagesSquare, Palette, RotateCcw, Shield, Swords, Volume2
 import { prefs, tutorial, go } from "../state.js";
 import { setPrefs, resetPrefs } from "../settings-actions.js";
 import { play, vibrate } from "../sound.js";
+import { testAudio } from "../audio.js";
+import { useState } from "preact/hooks";
 import { Page, Range, Section, Segmented, Setting, Switch } from "../ui/Controls.jsx";
 
 // How big the floating buttons will be, drawn the way they appear in a QTE.
@@ -18,6 +20,21 @@ function Preview() {
       ))}
       <span class="faint" style={{ alignSelf: "center", fontSize: ".75rem" }}>{Math.round(scale * 100)} %</span>
     </div>
+  );
+}
+
+// A beep through the event's sound road, and what the phone says about it (the sound may be blocked until the screen is touched).
+function AudioTest() {
+  const [says, setSays] = useState("");
+  const run = async () => {
+    const out = await testAudio();
+    setSays(out.ok ? "Debiste oír un pitido. Si no, sube el volumen del móvil (multimedia)." : out.state === "none" ? "Este dispositivo no permite sonido en la Actividad." : "El sonido está bloqueado: toca la pantalla y vuelve a probar.");
+  };
+  return (
+    <span class="row" style={{ gap: "8px", flexWrap: "wrap" }}>
+      <button class="btn btn-sm btn-ghost" type="button" onClick={run} data-testid="audio-test"><Volume2 size={14} /> Probar</button>
+      {says && <span class="faint" role="status" data-testid="audio-says" style={{ fontSize: ".75rem" }}>{says}</span>}
+    </span>
   );
 }
 
@@ -55,6 +72,19 @@ export function SettingsPage() {
         </Setting>
       </Section>
 
+      <Section title="Mi pantalla">
+        <p class="faint" style={{ fontSize: ".8125rem" }}>Si ves la interfaz recortada (los botones de abajo tapados, el borde de arriba cortado), da margen aquí. Se guarda en tu cuenta.</p>
+        <Setting title="Margen de arriba" stack>
+          <Range label="Margen de arriba" min={0} max={80} step={2} value={p.screenTop} onChange={(v) => setPrefs({ screenTop: v })} format={(v) => `${v} px`} />
+        </Setting>
+        <Setting title="Margen de abajo" stack>
+          <Range label="Margen de abajo" min={0} max={80} step={2} value={p.screenBottom} onChange={(v) => setPrefs({ screenBottom: v })} format={(v) => `${v} px`} />
+        </Setting>
+        <Setting title="Márgenes laterales" stack>
+          <Range label="Márgenes laterales" min={0} max={60} step={2} value={p.screenSide} onChange={(v) => setPrefs({ screenSide: v })} format={(v) => `${v} px`} />
+        </Setting>
+      </Section>
+
       <Section title="Botones de los QTE">
         <Preview />
         <Setting title="Tamaño de los botones" stack>
@@ -74,6 +104,7 @@ export function SettingsPage() {
 
       <Section title="Sonido y vibración">
         <Setting title="Música y sonidos del evento" hint="Lo que pone el equipo de GM: música, avisos de Black Flash, dominios, el jefe que cae…">
+          <AudioTest />
           <Switch label="Música y sonidos del evento" checked={p.audio} onChange={(v) => setPrefs({ audio: v })} />
         </Setting>
         <Setting title="Mostrar las cinemáticas" hint="Las escenas con texto, imágenes y sonido que pone el equipo de GM. Apagadas, solo oyes su sonido.">

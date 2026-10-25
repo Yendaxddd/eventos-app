@@ -418,3 +418,24 @@ def test_every_theme_accent_and_corner_style_really_changes_how_the_page_looks()
         assert await page.evaluate("getComputedStyle(document.body, '::before').position") == "fixed"
         assert page.errors == []
     run(scenario)
+
+
+def test_a_player_gives_what_happens_to_them_a_look_of_their_own_and_sees_it_when_it_happens():
+    async def scenario(rig, browser, url, me):
+        page = await open_page(browser, url)
+        await panel_at(page, "effects")
+        await page.wait_for_selector("[data-testid=my-fx]")
+        assert await page.locator("[data-testid=fx-sound-mine-parry_ok]").count() == 0                 # the library is the game masters'
+        await page.click("[data-testid=fx-edit-mine-parry_ok]")
+        await page.click("[data-testid=fx-preset-mine-parry_ok-slash]")
+        await page.fill("[data-testid=fx-banner-mine-parry_ok]", "¡Mi tajo!")
+        await page.wait_for_function("document.querySelector('[data-testid=fx-sum-mine-parry_ok]').innerText.includes('Corte')", timeout=5000)
+        await asyncio.sleep(0.9)                                                                      # it saves by itself
+        saved = rig.bridge.fx.book.people.get(str(me), {}).get("parry_ok")
+        assert saved and saved["preset"] == "slash" and saved["banner"] == "¡Mi tajo!" and saved["scope"] == "target"
+        await rig.bridge.fx.dispatch("parry_ok", {"user": me})
+        await page.wait_for_selector(".vfx-banner", timeout=4000)
+        assert "mi tajo" in (await page.locator(".vfx-banner").first.inner_text()).lower()
+        assert page.errors == []
+
+    run(scenario)

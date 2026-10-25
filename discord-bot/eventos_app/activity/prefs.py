@@ -19,13 +19,15 @@ DEFAULTS: dict = {
     "cinema": True,
     "showAvatars": True, "showMedia": True, "showTimestamps": True, "showPlayers": True, "compactHud": False,
     "messageLimit": 150, "tutorialDone": False,
+    "screenTop": 0, "screenBottom": 0, "screenSide": 0,        # extra margins (px) for a screen the page does not fit exactly
 }
 CHOICES = {
     "theme": ("dark", "oled", "contrast", "midnight", "ember", "forest", "rose", "sepia"),
     "accent": ("violet", "blue", "cyan", "green", "amber", "pink", "red"), "corners": ("round", "sharp", "soft"), "bg": ("plain", "grid", "aurora"), "palette": ("default", "cb"), "density": ("compact", "comfortable", "spacious"),
     "motion": ("full", "reduced"), "vfx": ("full", "soft", "off"), "buttonPlacement": ("random", "bottom", "left", "right"),
 }
-RANGES = {"textScale": (85, 140), "buttonScale": (70, 160), "volume": (0, 100), "musicVolume": (0, 100), "sfxVolume": (0, 100), "messageLimit": (50, 400)}
+RANGES = {"textScale": (85, 140), "buttonScale": (70, 160), "volume": (0, 100), "musicVolume": (0, 100), "sfxVolume": (0, 100), "messageLimit": (50, 400),
+          "screenTop": (0, 80), "screenBottom": (0, 80), "screenSide": (0, 60)}
 MAX_PEOPLE = 2000
 
 

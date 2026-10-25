@@ -7,7 +7,7 @@ from __future__ import annotations
 import logging
 
 from .audio import EVENTS
-from .fx import BINDABLE, DEFAULT_BY_TYPE, PRESET_IDS, FxBook, power_key
+from .fx import BINDABLE, DEFAULT_BY_TYPE, PERSONAL, PRESET_IDS, FxBook, power_key
 from .hub import Conn, RpcError
 
 log = logging.getLogger("eventos_app.activity")
@@ -74,3 +74,20 @@ class FxRpc:
         binding = FxBook._checked(args.get("binding"), self.audio.library.get)
         await self.fx.show(binding, {"name": str(args.get("name") or "Poder de prueba")[:60], "event": "preview"}, {conn.user_id})
         return {"ok": True}
+
+    # ---- the looks every player chooses for themselves («Mi panel → Efectos»): no game-master rights needed ----------------------
+    def _fx_mine(self, conn: Conn) -> dict:
+        mine = self.fx.book.people.get(str(conn.user_id)) or {}
+        return {"events": [{"id": e, "label": EVENTS[e][0], "binding": mine.get(e), "shared": self.fx.book.events.get(e)} for e in PERSONAL if e in EVENTS],
+                "presets": list(PRESET_IDS)}
+
+    async def rpc_fx_mine(self, conn: Conn, args: dict):
+        return self._fx_mine(conn)
+
+    async def rpc_fx_mine_set(self, conn: Conn, args: dict):
+        self.fx.book.set_person(conn.user_id, args.get("event"), args.get("binding"))
+        return self._fx_mine(conn)
+
+    async def rpc_fx_mine_clear(self, conn: Conn, args: dict):
+        self.fx.book.clear_person(conn.user_id, args.get("event"))
+        return self._fx_mine(conn)

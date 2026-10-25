@@ -1,4 +1,4 @@
-import { Backpack, Drama, GitBranch, Image as ImageIcon, LayoutDashboard, Medal, Trophy } from "lucide-preact";
+import { Backpack, Drama, GitBranch, Image as ImageIcon, LayoutDashboard, Medal, Sparkles, Trophy } from "lucide-preact";
 import { TabbedPage } from "../ui/Tabbed.jsx";
 import { SummaryTab } from "./panel/Summary.jsx";
 import { AchievementsTab } from "./panel/Achievements.jsx";
@@ -7,6 +7,7 @@ import { SkillsTab } from "./panel/Skills.jsx";
 import { InventoryTab } from "./panel/Inventory.jsx";
 import { ImagesTab } from "./panel/Images.jsx";
 import { RankingTab } from "./panel/Ranking.jsx";
+import { EffectsTab } from "./panel/Effects.jsx";
 
 export const TABS = [
   ["summary", "Resumen", LayoutDashboard, SummaryTab],
@@ -15,6 +16,7 @@ export const TABS = [
   ["skills", "Habilidades", GitBranch, SkillsTab],
   ["inventory", "Inventario", Backpack, InventoryTab],
   ["images", "Imágenes", ImageIcon, ImagesTab],
+  ["effects", "Efectos", Sparkles, EffectsTab],
   ["ranking", "Ranking", Medal, RankingTab],
 ];
 

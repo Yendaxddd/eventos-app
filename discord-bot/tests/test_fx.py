@@ -126,3 +126,55 @@ def test_the_effects_tab_works_for_game_masters_only_and_every_change_is_signed(
     assert seen["fx"]["preset"] == "rayo" and seen["ctx"]["name"] == "Prueba" and quiet is True
     assert off["data"]["defaults"] is False and cleared["data"]["powers"][0]["binding"] is None
     assert any("Puso un efecto" in e["action"] for e in history) and any("Quitó el efecto" in e["action"] for e in history)
+
+
+def test_a_player_gives_their_own_events_a_look_that_replaces_the_game_masters_on_their_screen(tmp_path):
+    async def scenario():
+        hub = Hub()
+        library = AudioLibrary(media.MediaStore(tmp_path / "media"), tmp_path / "audio.json")
+        book = FxBook(tmp_path / "fx.json")
+        director = FxDirector(hub, book, AudioDirector(hub, library))
+        (_, ana), (_, mina), (_, leo) = conn_of(hub, 1), conn_of(hub, 2), conn_of(hub, 3)
+        book.set_event("counter", {"preset": "explosion", "scope": "all"})                # the game masters' look: everybody sees it
+        book.set_person(1, "counter", {"preset": "rayo", "color": "#ff00ff", "sound": "abc"})        # Ana's own (a sound is not hers to choose)
+        book.set_person(2, "evade_ok", {"preset": "pulso", "scope": "all"})                # Mina wants everybody to see hers
+        await director.dispatch("counter", {"user": 1})
+        await director.dispatch("evade_ok", {"user": 2})
+        await director.dispatch("counter", {"user": 3})                                    # Leo has none: the game masters' look
+        await asyncio.sleep(0.1)
+        return ana.frames, mina.frames, leo.frames
+
+    ana, mina, leo = run(scenario())
+    assert [f["fx"]["preset"] for f in ana] == ["rayo", "pulso", "explosion"] and ana[0]["fx"]["color"] == "#ff00ff" and ana[0]["fx"]["sound"] == ""
+    assert [f["fx"]["preset"] for f in mina] == ["explosion", "pulso", "explosion"]          # Ana's «rayo» never reached Mina: she saw the usual one
+    assert [f["fx"]["preset"] for f in leo] == ["explosion", "pulso", "explosion"]
+
+
+def test_everybody_can_set_their_own_looks_through_the_panel_but_only_for_what_happens_to_them(tmp_path):
+    async def scenario():
+        async with GmRig() as rig:
+            rig.bridge.fx.book = FxBook(tmp_path / "fx.json")
+            player, _ = await rig.login(OTHER)                                             # not a game master
+            first = await rig.ask(player, "fx.mine")
+            saved = await rig.ask(player, "fx.mine_set", event="parry_ok", binding={"preset": "slash", "banner": "¡Tajo!"})
+            refused = (await rig.ask(player, "fx.mine_set", event="boss_defeated", binding={"preset": "slash"}))["reason"]       # the game masters' to give
+            nothing = (await rig.ask(player, "fx.mine_set", event="heal", binding={"preset": "ninguno"}))["reason"]
+            cleared = await rig.ask(player, "fx.mine_clear", event="parry_ok")
+            return first, saved, refused, nothing, cleared, rig.bridge.fx.book.people
+
+    first, saved, refused, nothing, cleared, people = run(scenario())
+    ids = [e["id"] for e in first["data"]["events"]]
+    assert "parry_ok" in ids and "boss_defeated" not in ids and all(e["binding"] is None for e in first["data"]["events"])
+    mine = next(e for e in saved["data"]["events"] if e["id"] == "parry_ok")["binding"]
+    assert mine["preset"] == "slash" and mine["banner"] == "¡Tajo!" and mine["scope"] == "target"       # only they see it unless they choose otherwise
+    assert refused and "personalizar" in refused and nothing and "no hace nada" in nothing
+    assert next(e for e in cleared["data"]["events"] if e["id"] == "parry_ok")["binding"] is None and people == {}
+
+
+def test_a_players_looks_are_kept_between_runs(tmp_path):
+    book = FxBook(tmp_path / "fx.json")
+    book.set_person(7, "heal", {"preset": "curacion", "color": "#00ff00"})
+    again = FxBook(tmp_path / "fx.json")
+    assert again.people["7"]["heal"]["color"] == "#00ff00" and again.people["7"]["heal"]["scope"] == "target"
+    (tmp_path / "fx.json").write_text(json.dumps({"people": {"x": {"heal": {}}, "8": {"nonsense": {"preset": "rayo"}}}}), encoding="utf-8")
+    assert FxBook(tmp_path / "fx.json").people == {"8": {}}                                  # junk is dropped, the book still opens

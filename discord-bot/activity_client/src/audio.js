@@ -6,6 +6,7 @@ import { signal, effect } from "@preact/signals";
 import { comp, link, prefs } from "./state.js";
 import { base } from "./util.js";
 import { getContext } from "./sound.js";
+import { report } from "./net.js";
 import { STALE_MS, effectGain, isStale, musicGain, musicOffset, shouldPreload } from "./audio-model.js";
 
 export const sounds = signal([]);                // the library, as the server announces it
@@ -52,11 +53,12 @@ export async function playSound(frame) {
   if (ctx.state !== "running") {
     pending = [...pending.filter((x) => performance.now() - x.at < STALE_MS), { frame, at: performance.now() }].slice(-6);
     audioBlocked.value = true;
+    report("audio bloqueado", `el navegador no deja sonar (${ctx.state}): hace falta tocar la pantalla`);
     return false;
   }
   if (frame.sound.size > STREAM_BYTES) return stream(frame.sound, gain);
   const buffer = await decode(ctx, frame.sound);
-  if (!buffer) return stream(frame.sound, gain);
+  if (!buffer) { report("audio sin decodificar", `${frame.sound.file} (se prueba como flujo)`); return stream(frame.sound, gain); }
   const source = ctx.createBufferSource();
   const amp = ctx.createGain();
   source.buffer = buffer;
@@ -75,7 +77,28 @@ function stream(sound, gain) {
   const voice = { stop: () => { el.pause(); } };
   voices.add(voice);
   el.onended = el.onerror = () => voices.delete(voice);
-  return el.play().then(() => true, () => { voices.delete(voice); return false; });
+  return el.play().then(() => true, (error) => { voices.delete(voice); report("audio no suena", `${sound.file}: ${(error && error.name) || "?"}`); return false; });
+}
+
+// The «Probar» of the settings: a beep through the page's audio (the same road every sound of the event takes) and what the page says
+// about it, so a phone that stays silent can say why. Resolves { state, ok }.
+export async function testAudio() {
+  const ctx = getContext();
+  if (!ctx) { report("audio prueba", "este navegador no tiene audio"); return { state: "none", ok: false }; }
+  try { await ctx.resume(); } catch { /* the state says it */ }
+  const state = ctx.state;
+  if (state === "running") {
+    const t0 = ctx.currentTime, osc = ctx.createOscillator(), amp = ctx.createGain();
+    osc.frequency.value = 660; osc.type = "triangle";
+    amp.gain.setValueAtTime(0.0001, t0);
+    amp.gain.exponentialRampToValueAtTime(Math.max(0.001, 0.4 * (prefs.value.sfxVolume / 100)), t0 + 0.02);
+    amp.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.5);
+    osc.connect(amp).connect(ctx.destination);
+    osc.start(t0); osc.stop(t0 + 0.55);
+    audioBlocked.value = false;
+  }
+  report("audio prueba", `estado ${state}, volumen efectos ${prefs.value.sfxVolume} %, sonido ${prefs.value.audio ? "sí" : "no"}`);
+  return { state, ok: state === "running" };
 }
 
 export function stopSounds() {
