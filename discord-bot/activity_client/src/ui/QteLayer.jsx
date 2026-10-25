@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "preact/hooks";
 import {
-  ArrowDown, ArrowLeft, ArrowRight, ArrowUp, Check, Crosshair, Hand, Hourglass, Lock, Shield, ShieldPlus, Swords, X, Zap,
+  ArrowDown, ArrowLeft, ArrowRight, ArrowUp, Check, Crosshair, Hand, Hourglass, Lock, Shield, ShieldPlus, ShieldQuestion, Swords, X, Zap,
 } from "lucide-preact";
 import { qtes, prefs, me, rules, canWrite } from "../state.js";
 import { GESTURE_MODES, byUrgency, canPress, elapsedSeconds, leadOf, phaseAt } from "../qte-model.js";
@@ -80,7 +80,9 @@ function Timer({ entry, from, to, variant = "drain", bf = null, paused = false, 
 // ---- one widget --------------------------------------------------------------------------------------------------------
 function visual(entry, phase, ctx) {
   const q = entry.q;
-  if (phase.kind === "evade") return { kind: "evade", icon: Shield, label: CMD.evade, key: KEYS.evade };
+  // a fake QTE is an evade with a tell, the same in training and in the event: a shield with a «?» in it, and a dashed ring inside
+  // the button. Nothing else (words, colours, timer) differs, so it takes a look to notice it.
+  if (phase.kind === "evade") return { kind: "evade", icon: q.mode === "fake" ? ShieldQuestion : Shield, label: CMD.evade, key: KEYS.evade };
   if (phase.kind === "save") return { kind: "save", icon: ShieldPlus, label: CMD.save, key: KEYS.save };
   if (phase.kind === "parry") return { kind: "parry", icon: Swords, label: CMD.parry, key: KEYS.parry };
   if (phase.kind === "bf") return { kind: "bf", icon: Zap, label: "Parry", key: KEYS.parry };
@@ -99,7 +101,7 @@ function metaText(entry, rank) {
   const diff = DIFFICULTY[q.difficulty] || q.difficulty;
   if (q.mode === "combo") return `Combo · ${diff}`;
   if (q.mode === "bf_chain") return `Black Flash ×${q.chain || 1}`;
-  if (q.mode === "fake") return diff;                                // a fake one must look like any other
+  if (q.mode === "fake") return diff;                                // the words of a fake one are those of any other
   return `${MODE[q.mode] === "Individual" ? "" : MODE[q.mode] + " · "}${diff}`;
 }
 
@@ -139,7 +141,7 @@ function Widget({ entry, phase, rank, lead, spot, size, ctx }) {
   const lowMotion = p.motion === "reduced";
 
   return (
-    <div class={cx("qw", lowMotion && "calm")} data-kind={v.kind} data-state={state} data-lead={lead ? "true" : "false"} data-result={resultKind}
+    <div class={cx("qw", lowMotion && "calm", q.mode === "fake" && "is-fake")} data-kind={v.kind} data-state={state} data-lead={lead ? "true" : "false"} data-result={resultKind}
       data-qte={entry.id} data-phase={phase.kind} data-testid="qte-widget"
       style={{ "--x": `${spot.x}px`, "--y": `${spot.y}px`, "--btn-base": `${size}px`, "--fit": spot.k }}>
       {showTimer && (
@@ -259,11 +261,16 @@ function allocate({ items, counterShown, area, avoid, spots, lastSpot, size, pla
   }
   const boxes = [...(counter ? [counter] : []), ...items.map((it) => it.spot)].map(asBox);
   if (anyOverlap(boxes)) {
-    const packed = packAll(area, [...(counter ? [(k) => boxFor("button", size * k, true)] : []), ...items.map((it) => (k) => boxFor(kindOf(it), size * k, it.lead))]);
+    // gestures (drag, swipe, tap-fest) never move: a finger is on them, and one that jumps away makes the QTE impossible.
+    // Everybody else is laid out again around them.
+    const still = items.filter((it) => GESTURE_MODES.includes(it.entry.q.mode));
+    const moving = items.filter((it) => !still.includes(it));
+    const packed = packAll(area, [...(counter ? [(k) => boxFor("button", size * k, true)] : []), ...moving.map((it) => (k) => boxFor(kindOf(it), size * k, it.lead))],
+      undefined, [...avoid, ...still.map((it) => asBox(it.spot))]);
     if (packed) {
       let i = 0;
       if (counter) spots.set("counter", packed[i++]);
-      for (const it of items) { it.spot = packed[i++]; if (it.key) spots.set(it.key, it.spot); }
+      for (const it of moving) { it.spot = packed[i++]; if (it.key) spots.set(it.key, it.spot); }
     }
   }
   for (const it of items) lastSpot.set(it.entry.id, it.spot);

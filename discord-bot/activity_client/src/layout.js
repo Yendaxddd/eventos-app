@@ -122,10 +122,30 @@ function shelf(area, boxes) {
   return out;
 }
 
-export function packAll(area, boxAts, scales = [1, 0.86, 0.74, 0.62, 0.52, 0.44]) {
+// With `fixed` boxes (QTEs that must not move: a drag or a tap-fest the player already has a finger on), the others are laid out
+// around them: each goes to the first free place, scanning rows from the top.
+function around(area, boxes, fixed) {
+  const minX = area.left + EDGE, maxX = area.left + area.width - EDGE, minY = area.top + EDGE, maxY = area.top + area.height - EDGE;
+  const placed = [...fixed], out = [];
+  for (const b of boxes) {
+    let found = null;
+    for (let y = minY; !found && y + b.h <= maxY + 0.5; y += 8) {
+      for (let x = minX; x + b.w <= maxX + 0.5; x += 8) {
+        const box = { x, y, w: b.w, h: b.h };
+        if (!overlapsAny(box, placed)) { found = box; break; }
+      }
+    }
+    if (!found) return null;
+    placed.push(found);
+    out.push({ x: Math.round(found.x), y: Math.round(found.y) });
+  }
+  return out;
+}
+
+export function packAll(area, boxAts, scales = [1, 0.86, 0.74, 0.62, 0.52, 0.44], fixed = []) {
   for (const k of scales) {
     const boxes = boxAts.map((at) => at(k));
-    const spots = shelf(area, boxes);
+    const spots = fixed.length ? around(area, boxes, fixed) : shelf(area, boxes);
     if (spots) return spots.map((s, i) => ({ ...s, ...boxes[i], k }));
   }
   return null;

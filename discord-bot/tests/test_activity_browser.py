@@ -660,6 +660,37 @@ def test_on_a_phone_the_keyboard_never_covers_the_box_and_discords_buttons_never
     asyncio.run(with_page(scenario, actions=True))
 
 
+def test_a_fake_qte_has_a_tell_and_a_drag_does_not_move_when_others_arrive():
+    async def scenario(hub, browser, url):
+        page = await open_page(browser, url, width=390, height=844, mobile=True)
+        me = page.me
+        # the fake one is an evade with a «?» shield and a dashed ring; its words are the same as a real evade's
+        fake = qte(hub, 31, me)
+        fake["mode"] = "fake"
+        await hub.qte_start(fake)
+        widget = page.locator('[data-testid=qte-widget][data-qte="31"]')
+        await widget.wait_for()
+        assert "is-fake" in (await widget.get_attribute("class")) and await widget.get_attribute("data-kind") == "evade"
+        assert (await widget.locator(".qw-btn span").first.inner_text()).lower() == "esquivar"
+        await hub.qte_end("31")
+        # a drag stays exactly where it is while a crowd of other QTEs arrives around it
+        drag = qte(hub, 32, me, windows={"evade": [0.0, 20.0]}, timeout=20.0, commands=["gesture"])
+        drag.update({"mode": "drag", "arena": {"from": [0.2, 0.5], "to": [0.8, 0.5], "tolerance": 0.12}})
+        await hub.qte_start(drag)
+        pad = page.locator('[data-testid=qte-widget][data-qte="32"]')
+        await pad.wait_for()
+        await asyncio.sleep(0.5)
+        before = await pad.bounding_box()
+        for n in range(33, 53):
+            await hub.qte_start(qte(hub, n, me, windows={"evade": [0.0, 20.0]}, timeout=20.0))
+            await asyncio.sleep(0.15)
+            now = await pad.bounding_box()
+            assert abs(now["x"] - before["x"]) < 1 and abs(now["y"] - before["y"]) < 1, f"the drag moved when QTE {n} arrived"
+        assert page.errors == []
+
+    asyncio.run(with_page(scenario, actions=True))
+
+
 # ======================================================================================================================
 def test_settings_apply_at_once_are_remembered_and_sent_to_the_server():
     async def scenario(hub, browser, url):
