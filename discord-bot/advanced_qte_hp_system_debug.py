@@ -714,6 +714,15 @@ class AdvancedQTEBot:
         self.setup_slash_commands()
         self.setup_hotkeys()
 
+    def answer_grace(self):
+        """Extra seconds a QTE stays open for answers already on their way from the Activity: the players' screens time them,
+        and a lag spike on the way back must not turn a press made in time into a timeout. 0 without the Activity."""
+        notify = getattr(self, "activity_notify", None)
+        try:
+            return float(notify.answer_grace()) if notify is not None else 0.0
+        except Exception:
+            return 0.0
+
     def save_all_data(self, force=False):
         """Save all persistent data to files with throttling to prevent disk spam"""
         current_time = time.time()
@@ -1434,7 +1443,7 @@ Your response (1-2 sentences max):"""
     
     async def combo_qte_timeout(self, qte_id: int, difficulty: str, target_member):
         """Handle combo QTE timeout"""
-        await asyncio.sleep(15)  # 15 seconds for full combo
+        await asyncio.sleep(15 + self.answer_grace())  # 15 seconds for full combo
         
         if qte_id not in self.active_qtes:
             return
@@ -1511,7 +1520,7 @@ Your response (1-2 sentences max):"""
     async def direction_qte_timeout(self, qte_id: int, difficulty: str, target_member):
         """Handle direction QTE timeout"""
         timing = self.qte_times.get(difficulty, {'timeout': 3.0})
-        await asyncio.sleep(timing.get('timeout', 3.0) + 1.0)  # +1s for direction
+        await asyncio.sleep(timing.get('timeout', 3.0) + 1.0 + self.answer_grace())  # +1s for direction
         
         if qte_id not in self.active_qtes:
             return
@@ -1568,7 +1577,7 @@ Your response (1-2 sentences max):"""
     async def fake_qte_timeout(self, qte_id: int, difficulty: str, target_member):
         """Handle fake QTE timeout - success if no one responded!"""
         timing = self.qte_times.get(difficulty, {'timeout': 3.0})
-        await asyncio.sleep(timing.get('timeout', 3.0))
+        await asyncio.sleep(timing.get('timeout', 3.0) + self.answer_grace())
         
         if qte_id not in self.active_qtes:
             return  # Someone failed it already
@@ -2417,7 +2426,7 @@ Your response (1-2 sentences max):"""
     
     async def bf_chain_timeout(self, qte_id, user_id, channel, timeout):
         """Handle timeout for BF chain QTE"""
-        await asyncio.sleep(timeout)
+        await asyncio.sleep(timeout + self.answer_grace())
         
         if qte_id in self.active_qtes:
             qte_data = self.active_qtes.pop(qte_id, None)
@@ -8418,7 +8427,7 @@ Your response (1-2 sentences max):"""
             channel = self.bot.get_channel(self.qte_channel_id)
             
             # Total timeout based on difficulty (no intermediate emoji sends)
-            await asyncio.sleep(self.qte_timeout_durations.get(difficulty, 5.0))
+            await asyncio.sleep(self.qte_timeout_durations.get(difficulty, 5.0) + self.answer_grace())
             
             if qte_id in self.active_qtes:
                 await self.finish_qte_failure(qte_id, channel, mode, target)
@@ -8788,7 +8797,7 @@ Your response (1-2 sentences max):"""
                 'impossible': 4.0
             }
             
-            await asyncio.sleep(timeout_durations.get(difficulty, 5.0))
+            await asyncio.sleep(timeout_durations.get(difficulty, 5.0) + self.answer_grace())
             
             if qte_id in self.active_qtes:
                 # Timeout occurred

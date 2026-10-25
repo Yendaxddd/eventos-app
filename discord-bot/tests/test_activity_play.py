@@ -52,16 +52,15 @@ def test_the_qte_book_is_a_plain_dict_that_says_when_a_qte_starts_and_ends():
     assert 9 in book
 
 
-def test_the_client_clock_is_trusted_only_within_what_a_human_and_the_real_time_allow():
+def test_the_players_own_clock_decides_within_what_a_human_and_the_real_time_allow():
     assert response_seconds(1000, 50, 1150) == 1.05                 # dt + the time the QTE took to reach the player
     assert response_seconds(50, 0, 5000) is None                    # nobody is that fast
     assert response_seconds(float("nan"), 0, 5000) is None and response_seconds(999999, 0, 5000) is None
     assert abs(response_seconds(4000, 0, 2000) - 2.15) < 1e-9       # cannot have taken longer than it has been
     assert response_seconds(500, 10_000_000, 1300) == (500 + 300) / 1000      # the adjustment never moves an answer more than the cap
-    # a client cannot pick its own (earlier) time: the server got the answer 5 s in, so "1 s" is not credible; it counts as late as
-    # two trips (2 x 50 ms) and some slack allow
-    assert response_seconds(1000, 50, 5000) == (5000 - 100 - 600) / 1000
-    assert response_seconds(1000, 50, 1700) == 1.05                           # within the slack, the player's own clock still counts
+    # the timing is the player's: an answer that took long to come back (a lag spike) still counts as when it was pressed
+    assert response_seconds(1000, 50, 5000) == 1.05
+    assert response_seconds(1000, 50, 1700) == 1.05
 
 
 def test_a_slow_screen_is_compensated_and_the_adjustment_is_bounded():

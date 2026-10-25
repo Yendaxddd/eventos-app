@@ -130,6 +130,7 @@
 .gx-goal[data-near="true"] { background: color-mix(in srgb, var(--c) 30%, transparent); border-style: solid; }
 .gx-goal svg { width: 50%; height: 50%; }
 .gx-token { position: absolute; width: calc(var(--size) * .52); height: calc(var(--size) * .52); transform: translate(-50%, -50%); border-radius: 50%; border: 0; background: radial-gradient(circle at 32% 26%, #fff, var(--c) 45%, var(--c-deep)); box-shadow: 0 0 0 3px rgb(255 255 255 / .2), 0 8px 24px -4px var(--glow); color: #0b0b12; display: grid; place-items: center; cursor: grab; touch-action: none; }
+.gx-token::before { content: ""; position: absolute; inset: -14px; border-radius: 50%; }   /* a bigger target for a finger */
 .gx-token svg { width: 45%; height: 45%; }
 .gx-mash { --pct: 0; }
 .gx-mash .gx-ring { position: absolute; inset: -8px; border-radius: 50%; background: conic-gradient(var(--c) calc(var(--pct) * 360deg), rgb(255 255 255 / .1) 0); -webkit-mask: radial-gradient(circle, transparent calc(50% - 6px), #000 calc(50% - 5px)); mask: radial-gradient(circle, transparent calc(50% - 6px), #000 calc(50% - 5px)); pointer-events: none; }

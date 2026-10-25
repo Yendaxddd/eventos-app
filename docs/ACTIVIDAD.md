@@ -355,6 +355,11 @@ Funnel al parar el bot, y la página *Actividad* avisa mientras la dirección no
   esconden la barra de abajo y la de acciones (y en pantallas bajas, tu barra de vida y los mini enemigos) hasta que lo cierres.
 - Si te llega un QTE mientras escribes, el teclado se cierra solo para dejar sitio al botón; lo que escribiste sigue en el cuadro.
 
+## Tiempos de los QTE (2.0.3)
+El tiempo de cada respuesta lo mide la pantalla del jugador: lo que tarde la respuesta en volver al servidor no cuenta. Para que
+las pulsaciones en camino lleguen, el bot deja cada QTE abierto un poco más (0,5 s + dos viajes del jugador más lento, como mucho
+1,5 s) cuando hay alguien en la Actividad.
+
 ## Si alguien no puede entrar (2.0.2)
 - La pantalla de entrada dice en qué paso va (servidor, Discord, permiso, sesión). Si Discord no responde, la página se reinicia
   sola una vez; si sigue igual, aparece **Reintentar**.

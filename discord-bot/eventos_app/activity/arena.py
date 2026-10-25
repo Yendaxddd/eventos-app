@@ -112,12 +112,7 @@ class ArenaQtes:
 
     async def _expire(self, qid: str, timeout: float) -> None:
         try:
-            entry = self.live.get(qid)
-            extra = 0.0
-            if entry is not None:
-                nets = [c.net_ms for c in self.b.hub.conns.values() if c.user_id == entry["user"]]
-                extra = min(max(nets, default=0.0), 400.0) / 1000.0
-            await asyncio.sleep(timeout + GRACE_S + extra)
+            await asyncio.sleep(timeout + GRACE_S + self.b.answer_grace())      # a gesture made in time may still be on its way
             entry = self.live.get(qid)
             if entry is not None and not entry["done"]:
                 await self._settle(entry, False, None, "timeout")

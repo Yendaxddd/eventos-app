@@ -37,6 +37,8 @@ from .prefs import PrefsStore
 from .qte import COMMANDS, TIMED, ActivityInput, describe, response_seconds
 
 log = logging.getLogger("eventos_app.activity")
+ANSWER_GRACE_BASE_S = 0.5     # a QTE stays open this long past its time for answers on their way back from the Activity...
+ANSWER_GRACE_MAX_S = 1.5      # ...plus two trips of the slowest player, up to this
 
 MAX_TEXT = 4000
 MAX_SAY = 2000
@@ -710,6 +712,14 @@ class ActivityBridge(PanelRpc, GmRpc, TupperRpc, AudioRpc, CinemaRpc, FxRpc, Qui
             if index < len(sequence):
                 await self.hub.send(conn, {"t": "qte_step", "id": qte_id, "index": index, "step": sequence[index]})
         return None
+
+    def answer_grace(self) -> float:
+        """How long the bot keeps a QTE open after its time is up, for presses already on their way (asked by the bot's timeouts).
+        The players' screens time the answers; this only covers the trip back: two trips of the slowest player, at most 1.5 s."""
+        nets = [c.net_ms for c in list(self.hub.conns.values()) if not c.hidden]
+        if not nets:
+            return 0.0
+        return min(ANSWER_GRACE_MAX_S, ANSWER_GRACE_BASE_S + 2 * max(nets) / 1000.0)
 
     async def _verdict(self, conn: Conn, qte_id: str, message: ActivityInput, seconds: float | None) -> None:
         # the bot puts its ✅/❌ on the answer from a task of its own (add_reaction_to_response), a moment after handling it

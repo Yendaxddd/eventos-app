@@ -6,19 +6,24 @@ export let sdk = null;
 import { pip } from "./state.js";
 
 let subscribed = false;
-const READY_WAIT_MS = 12000;
+const READY_WAIT_MS = 15000;
+const HANDSHAKE_AGAIN_MS = 2500;
 const PORTRAIT = 2;                                    // Discord's OrientationLockState: 1 unlocked, 2 portrait, 3 landscape
 
 export class SdkTimeout extends Error {}
 
 export async function initSdk(clientId) {
   if (!sdk) sdk = new DiscordSDK(clientId);            // one SDK for the whole visit: making another on each reconnection breaks it
-  let timer;
+  let timer, again;
   const late = new Promise((_, reject) => { timer = setTimeout(() => reject(new SdkTimeout("Discord no respondió al abrir la Actividad.")), READY_WAIT_MS); });
+  // Discord on a computer sometimes loads the Activity twice in a row and misses the first greeting of the page that stays: it is
+  // said again every few seconds until Discord answers (an answered greeting is not repeated)
+  again = setInterval(() => { try { sdk.handshake(); } catch { /* an SDK without it: the reload below still helps */ } }, HANDSHAKE_AGAIN_MS);
   try {
     await Promise.race([sdk.ready(), late]);
   } finally {
     clearTimeout(timer);
+    clearInterval(again);
   }
   lockPortrait();
   return sdk;
