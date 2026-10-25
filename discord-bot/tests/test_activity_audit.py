@@ -36,11 +36,12 @@ def test_a_web_page_open_on_the_host_cannot_use_the_local_test_login_or_the_gm_p
     assert local["t"] == "welcome" and plain["t"] == "welcome"
 
 
-def test_a_client_cannot_claim_an_earlier_answer_than_the_server_could_have_got():
+def test_the_players_stopwatch_counts_but_never_beyond_what_a_human_or_the_real_time_allow():
     honest = response_seconds(900, 40, 900 + 80 + 30)
     assert abs(honest - 0.94) < 1e-9                                       # the player's own stopwatch, plus the trip to them
-    cheat = response_seconds(2000, 40, 4500)                               # "2 s" for an answer that came 4.5 s in
-    assert cheat >= (4500 - 80 - 600) / 1000
+    assert response_seconds(2000, 40, 4500) == 2.04                        # a slow trip back (lag) is not held against the player
+    assert response_seconds(40, 40, 4500) is None                          # faster than a human: refused
+    assert response_seconds(9000, 40, 4500) <= (4500 + 150) / 1000         # never longer than the QTE has existed
 
 
 def test_a_redirect_to_a_private_address_is_never_followed(monkeypatch):
