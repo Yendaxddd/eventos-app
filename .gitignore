@@ -81,3 +81,7 @@ discord-bot/data/sender_owners.json
 # Activity client: build output (made by `npm run build` in discord-bot/activity_client) and dependencies
 discord-bot/eventos_app/activity/web/
 discord-bot/activity_client/node_modules/
+
+# counter pictures the bot keeps at run time: never in the repository
+discord-bot/assets/counter_gifs/*
+!discord-bot/assets/counter_gifs/.gitkeep
