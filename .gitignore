@@ -69,3 +69,7 @@ discord-bot/config.json
 *.tmp
 *.bak
 *.cache
+
+# counter pictures the bot keeps at run time: never in the repository
+discord-bot/assets/counter_gifs/*
+!discord-bot/assets/counter_gifs/.gitkeep
