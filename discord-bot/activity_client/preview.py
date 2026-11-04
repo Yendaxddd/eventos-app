@@ -18,10 +18,10 @@ from eventos_app.activity import ActivityServer, DiscordAuth, Hub  # noqa: E402
 
 WEB = ROOT / "eventos_app" / "activity" / "web"
 RULES = {"times": {
-    "easy": {"evade": 6.0, "parry": [4.0, 7.0], "perfect": 5.5, "timeout": 6.75},
-    "medium": {"evade": 4.5, "parry": [3.0, 5.0], "perfect": 4.0, "timeout": 5.0},
-    "hard": {"evade": 4.0, "parry": [2.5, 4.5], "perfect": 3.5, "timeout": 5.75},
-    "impossible": {"evade": 1.5, "parry": [0.8, 1.7], "perfect": 1.25, "timeout": 3.5}},
+    "easy": {"evade": 6.0, "parry": [4.0, 7.0], "perfect": 5.5, "timeout": 7.75},
+    "medium": {"evade": 4.5, "parry": [3.0, 5.0], "perfect": 4.0, "timeout": 5.75},
+    "hard": {"evade": 4.0, "parry": [2.5, 4.5], "perfect": 3.5, "timeout": 5.25},
+    "impossible": {"evade": 1.5, "parry": [0.8, 1.7], "perfect": 1.25, "timeout": 2.45}},
     "bfWindow": 0.2, "chainWindow": 0.15, "counterWindow": 5.0, "saveLimit": 2, "saveWindow": 60, "ultimateCost": 100}
 WIN = {"evade": [0.0, 4.5], "parry": [3.0, 5.0], "bf": [3.8, 4.2]}
 
@@ -163,7 +163,7 @@ async def run(out: Path, only: list[str]):
             await shot(page, "03-desktop-parry")
             await hub.qte_end("1")
             await hub.qte_start(qte(hub, 2, target, ago=1.0, difficulty="hard"))
-            await hub.qte_start(qte(hub, 3, target, ago=0.5, difficulty="easy", timeout=6.75, windows={"evade": [0, 6.0], "parry": [4.0, 7.0], "bf": [5.3, 5.7]}))
+            await hub.qte_start(qte(hub, 3, target, ago=0.5, difficulty="easy", timeout=7.75, windows={"evade": [0, 6.0], "parry": [4.0, 7.0], "bf": [5.3, 5.7]}))
             await hub.qte_start(qte(hub, 4, {"id": "2", "name": "Luis"}, ago=0.2))
             await asyncio.sleep(0.6)
             await shot(page, "04-desktop-three")

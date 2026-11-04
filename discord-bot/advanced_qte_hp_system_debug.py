@@ -95,7 +95,26 @@ DEFAULT_QTE_TIMES = {
     'hard': {'evade_window': 4.0, 'parry_window': (2.5, 4.5), 'perfect_parry': 3.5},
     'impossible': {'evade_window': 1.5, 'parry_window': (0.8, 1.7), 'perfect_parry': 1.25},
 }
-DEFAULT_QTE_TIMEOUTS = {'easy': 6.75, 'medium': 5.0, 'hard': 5.75, 'impossible': 3.5}
+# Each QTE ends 0.75 s after its parry window closes: a harder one is always shorter.
+DEFAULT_QTE_TIMEOUTS = {'easy': 7.75, 'medium': 5.75, 'hard': 5.25, 'impossible': 2.45}
+# Damage of a failed QTE (players have 100 HP; boss abilities hit for 30-55).
+DEFAULT_DAMAGE_RANGES = {'easy': (3, 6), 'medium': (5, 10), 'hard': (8, 15), 'impossible': (20, 20)}
+
+# Saved settings carry the version of the defaults they were written with. A value saved by an older version that still equals
+# that version's default was never chosen by anybody, so the current default applies instead (a value a GM picked is kept).
+DEFAULTS_VERSION = 2
+OLD_DAMAGE_RANGES = {'easy': (1, 3), 'medium': (1, 5), 'hard': (1, 10), 'impossible': (15, 15)}
+
+
+def chosen_damage_ranges(saved: dict, version) -> dict:
+    """The damage ranges of a settings file, as tuples, without the old defaults nobody chose."""
+    out = {}
+    for diff, dmg in (saved or {}).items():
+        dmg = tuple(dmg) if isinstance(dmg, list) else dmg
+        if (version or 1) < 2 and dmg == OLD_DAMAGE_RANGES.get(diff):
+            continue
+        out[diff] = dmg
+    return out
 
 
 class TimingProfiler:
@@ -341,12 +360,7 @@ class AdvancedQTEBot:
         # QTE timing: self.qte_times / self.qte_timeout_durations (below) are what the handlers, /config qte and the Activity use
 
         # Variable damage per difficulty
-        self.damage_ranges = {
-            'easy': (1, 3),        # Random 1-3 damage
-            'medium': (1, 5),      # Random 1-5 damage
-            'hard': (1, 10),       # Random 1-10 damage
-            'impossible': (15, 15) # Fixed 15 damage
-        }
+        self.damage_ranges = dict(DEFAULT_DAMAGE_RANGES)
         
         # Load saved live config if exists
         self._load_live_config()
@@ -862,6 +876,7 @@ class AdvancedQTEBot:
     def save_live_config(self):
         """Save the live configuration (what /config save writes and _load_live_config restores). Also used by the Activity's GM panel."""
         save_data("live_config", {
+            "defaults": DEFAULTS_VERSION,
             "damage_ranges": {k: list(v) for k, v in self.damage_ranges.items()},
             "revenge_threshold": self.revenge_threshold,
             "revenge_damage_multiplier": self.revenge_damage_multiplier,
@@ -882,9 +897,9 @@ class AdvancedQTEBot:
                 
                 # Damage Ranges
                 if "damage_ranges" in config:
-                    for diff, dmg in config["damage_ranges"].items():
-                        if isinstance(dmg, list) and len(dmg) == 2:
-                            self.damage_ranges[diff] = tuple(dmg)
+                    for diff, dmg in chosen_damage_ranges(config["damage_ranges"], config.get("defaults")).items():
+                        if isinstance(dmg, tuple) and len(dmg) == 2:
+                            self.damage_ranges[diff] = dmg
                     console.print("[cyan]✓ Loaded saved damage ranges[/cyan]")
                 
                 # Revenge Mode
@@ -1100,7 +1115,8 @@ Your response (1-2 sentences max):"""
         """Save QTE timing and damage settings to JSON"""
         settings = {
             'qte_times': self.qte_times,
-            'damage_ranges': self.damage_ranges
+            'damage_ranges': self.damage_ranges,
+            'defaults': DEFAULTS_VERSION
         }
         save_data("qte_settings", settings)
         console.print("[green]💾 QTE settings saved[/green]")
@@ -1118,10 +1134,9 @@ Your response (1-2 sentences max):"""
                         if isinstance(self.qte_times[diff]['parry_window'], list):
                             self.qte_times[diff]['parry_window'] = tuple(self.qte_times[diff]['parry_window'])
             if 'damage_ranges' in settings:
-                for diff, dmg in settings['damage_ranges'].items():
+                for diff, dmg in chosen_damage_ranges(settings['damage_ranges'], settings.get('defaults')).items():
                     if diff in self.damage_ranges:
-                        # Convert list to tuple if needed
-                        self.damage_ranges[diff] = tuple(dmg) if isinstance(dmg, list) else dmg
+                        self.damage_ranges[diff] = dmg
             console.print("[cyan]✓ Loaded custom QTE settings[/cyan]")
     
     # ========== STATUS EFFECTS METHODS ==========
@@ -2292,16 +2307,15 @@ Your response (1-2 sentences max):"""
             stats['black_flashes'] += 1
             self.session_stats['black_flashes_today'] += 1
             
-            # Increase luck for next time (capped)
-            if stats.get('black_flash_chance', 0) < self.black_flash_cap:
-                stats['black_flash_chance'] = min(
-                    stats.get('black_flash_chance', self.black_flash_base_chance) + self.black_flash_increment,
-                    self.black_flash_cap
-                )
-            
+            # Luck back to the base: it only builds up while the timing is right and the flash does not come
+            stats['black_flash_chance'] = self.black_flash_base_chance
+
             console.print(f"[bold magenta]⚡ BLACK FLASH! Timing: {timing_deviation:.3f}s, Chance: {bf_chance:.1%}[/bold magenta]")
             return True
 
+        # Bad luck with good timing: a bit more luck next time (capped), so nobody goes without one forever
+        stats['black_flash_chance'] = min(stats.get('black_flash_chance', self.black_flash_base_chance) + self.black_flash_increment,
+                                          self.black_flash_cap)
         console.print(f"[dim]BF roll failed - Timing: {timing_deviation:.3f}s (good!), Chance: {bf_chance:.1%} (bad luck)[/dim]")
         return False
 
@@ -3315,12 +3329,7 @@ Your response (1-2 sentences max):"""
                     self.qte_times = {d: dict(t) for d, t in DEFAULT_QTE_TIMES.items()}
                     self.qte_timeout_durations = dict(DEFAULT_QTE_TIMEOUTS)
                     self.save_qte_settings()
-                    self.damage_ranges = {
-                        'easy': (1, 3),
-                        'medium': (1, 5),
-                        'hard': (1, 10),
-                        'impossible': (15, 15)
-                    }
+                    self.damage_ranges = dict(DEFAULT_DAMAGE_RANGES)
                     self.revenge_threshold = 0.20
                     self.revenge_damage_multiplier = 1.5
                     self.revenge_bf_bonus = 0.10
@@ -7682,8 +7691,21 @@ Your response (1-2 sentences max):"""
                 return True
         return False
 
+    def end_revenge_if_healed(self, user_id) -> bool:
+        """REVENGE lasts while the player is at or below the threshold: healed above it, it ends (and comes back if they drop again)."""
+        hp = self.player_hp.get(user_id)
+        if not hp or not hp.get("revenge_mode") or not hp.get("max"):
+            return False
+        if hp["current"] / hp["max"] <= self.revenge_threshold:
+            return False
+        hp["revenge_mode"] = False
+        console.print(f"[yellow]⚡ REVENGE over for {user_id}: healed to {hp['current']}/{hp['max']}[/yellow]")
+        return True
+
     async def update_hp_bar_display(self, user_id_or_boss_name, is_boss=False):
         """Update HP bar in dedicated thread - OPTIMIZED with message caching"""
+        if not is_boss:
+            self.end_revenge_if_healed(user_id_or_boss_name)     # every change of a player's HP comes through here
         try:
             if self.hp_bar_thread_id == 0:
                 return
@@ -12717,13 +12739,7 @@ Responde SOLAMENTE con un numero del 1 al 10."""
             if random.random() < crit_chance:
                 is_critical = True
                 counter_damage = int(counter_damage * 2.0)  # Double damage on crit!
-                # Increase luck for next time (capped)
-                stats = self.player_stats.get(user_id, {})
-                if stats.get('black_flash_chance', 0) < self.black_flash_cap:
-                    stats['black_flash_chance'] = min(
-                        stats.get('black_flash_chance', self.black_flash_base_chance) + self.black_flash_increment,
-                        self.black_flash_cap
-                    )
+                stats = self.player_stats.get(user_id, {})   # (the luck is the Black Flash's: a critical counter reads it, never changes it)
                 
                 # ========== ACHIEVEMENT: CRITICAL COUNTER IN FIGHT ==========
                 # Track critical counters during active boss fights for "Restless Gambler"

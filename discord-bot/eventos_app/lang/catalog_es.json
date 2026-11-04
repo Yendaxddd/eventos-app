@@ -7366,5 +7366,11 @@
 "kind": "user",
 "en": "Counter window in seconds (0.5-5, default 5)",
 "es": "Ventana de contraataque en segundos (0.5-5, por defecto 5)"
+},
+{
+"id": "9857469323c9",
+"kind": "console",
+"en": "[yellow]⚡ REVENGE over for {1}: healed to {2}/{3}[/yellow]",
+"es": "[yellow]⚡ Fin de la VENGANZA de {1}: curado a {2}/{3}[/yellow]"
 }
 ]

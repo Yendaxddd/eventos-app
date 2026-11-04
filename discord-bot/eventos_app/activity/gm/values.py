@@ -55,6 +55,12 @@ SPECS: list[Spec] = [
     Spec("latency_offset", "combat", "Tolerancia de latencia del bot", "Segundos de gracia por los retrasos de Discord e internet.", "float", 0, 1, 0.05, "file", "s"),
 ]
 BY_KEY = {spec.key: spec for spec in SPECS}
+# Saved values carry the version of the bot's defaults they were written with (DEFAULTS_VERSION in the bot). One saved by an older
+# version that still equals that version's default was never picked by a game master, so the bot's current default stays.
+DEFAULTS_VERSION = 2
+OLD_DEFAULTS = {"counter_window": 1.5}                                       # it did nothing before version 2 (the window was 5 s)
+OLD_TIMEOUTS = {"easy": 6.75, "medium": 5.0, "hard": 5.75, "impossible": 3.5}
+
 LIVE_KEYS = ("revenge_threshold", "revenge_damage_multiplier", "revenge_bf_bonus", "bf_timing_window", "ultimate_base_cooldown", "charge_per_damage_dealt", "ultimate_max_damage")
 
 
@@ -170,6 +176,7 @@ class ValueOps:
             snapshot["qte_timeout_durations"] = {d: finite(v) for d, v in timeouts.items()}
         snapshot["qte_variations"] = {k: int(v.get("weight", 0)) for k, v in (getattr(self.app, "qte_variations", {}) or {}).items()}
         snapshot["current_qte_mode"] = getattr(self.app, "current_qte_mode", "standard")
+        snapshot["defaults"] = DEFAULTS_VERSION
         return snapshot
 
     def _persist_file(self) -> None:
@@ -199,14 +206,19 @@ class ValueOps:
         if not isinstance(saved, dict):
             return 0
         applied = 0
+        old = (saved.get("defaults") or 1) < DEFAULTS_VERSION
         for key, value in saved.items():
             spec = BY_KEY.get(key)
             try:
+                if old and key in OLD_DEFAULTS and value == OLD_DEFAULTS[key]:
+                    continue
                 if spec is not None and spec.persist == "file":
                     setattr(self.app, key, _parse(spec, value))
                     applied += 1
                 elif key == "qte_timeout_durations" and isinstance(value, dict):
                     for diff, seconds in value.items():
+                        if old and seconds == OLD_TIMEOUTS.get(diff):
+                            continue
                         if diff in DIFFICULTIES:
                             self.app.qte_timeout_durations[diff] = float(number(seconds, "Tiempo límite", 0.5, 60))
                             applied += 1
