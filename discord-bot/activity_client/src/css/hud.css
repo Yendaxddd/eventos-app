@@ -1,7 +1,7 @@
 /* ---- Boss, me and players ---- */
 .boss-card {
   position: relative; display: flex; align-items: center; gap: var(--sp-3); padding: var(--sp-3) var(--sp-4); border-radius: var(--r-lg);
-  background: linear-gradient(135deg, rgb(190 18 60 / .22), rgb(19 19 31 / .9) 60%); border: 1px solid rgb(251 113 133 / .28); overflow: hidden;
+  background: linear-gradient(135deg, color-mix(in srgb, var(--boss-deep) 22%, transparent), color-mix(in srgb, var(--surface) 90%, transparent) 60%); border: 1px solid color-mix(in srgb, var(--boss) 28%, transparent); backdrop-filter: var(--panel-blur); overflow: hidden;
 }
 .boss-card::after { content: ""; position: absolute; inset: 0; background: radial-gradient(260px 90px at 0% 0%, rgb(251 113 133 / .22), transparent 70%); pointer-events: none; }
 .boss-ico { position: relative; width: 40px; height: 40px; flex: none; border-radius: 12px; display: grid; place-items: center; background: rgb(251 113 133 / .18); color: var(--boss); }
@@ -254,7 +254,7 @@
 .mob {
   --mob: #fb7185; position: relative; flex: none; width: 172px; min-height: 56px; display: flex; align-items: center; gap: 8px; padding: 6px 10px 6px 6px;
   border-radius: var(--r-md); border: 1px solid color-mix(in srgb, var(--mob) 40%, transparent); scroll-snap-align: start; text-align: left; color: var(--text);
-  background: linear-gradient(135deg, color-mix(in srgb, var(--mob) 20%, transparent), rgb(19 19 31 / .9) 70%); cursor: crosshair;
+  background: linear-gradient(135deg, color-mix(in srgb, var(--mob) 20%, transparent), color-mix(in srgb, var(--surface) 90%, transparent) 70%); cursor: crosshair;
   transition: transform .12s var(--ease), box-shadow .2s ease; animation: mob-in .45s var(--ease-spring) both; touch-action: manipulation;
 }
 .mob:hover { box-shadow: 0 0 0 1px color-mix(in srgb, var(--mob) 70%, transparent), 0 8px 22px -10px var(--mob); }

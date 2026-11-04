@@ -49,7 +49,7 @@
 /* ---- summary ---- */
 .hero {
   display: flex; align-items: center; flex-wrap: wrap; gap: var(--sp-4); padding: var(--sp-4); border-radius: var(--r-xl); border: 1px solid var(--line);
-  background: radial-gradient(520px 180px at 0% 0%, rgb(139 92 246 / .28), transparent 70%), radial-gradient(420px 160px at 100% 100%, rgb(251 113 133 / .12), transparent 70%), linear-gradient(160deg, var(--surface-3), var(--surface-2));
+  background: radial-gradient(520px 180px at 0% 0%, color-mix(in srgb, var(--primary) 28%, transparent), transparent 70%), radial-gradient(420px 160px at 100% 100%, color-mix(in srgb, var(--secondary) 14%, transparent), transparent 70%), linear-gradient(160deg, var(--surface-3), var(--surface-2));
 }
 .hero-main { flex: 1; min-width: 200px; display: flex; flex-direction: column; gap: 8px; }
 .hero-main h2 { font: 700 1.5rem/1.1 var(--font-display); letter-spacing: .02em; overflow-wrap: anywhere; }

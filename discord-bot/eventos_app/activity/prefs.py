@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 from collections import OrderedDict
 from pathlib import Path
 
@@ -20,10 +21,20 @@ DEFAULTS: dict = {
     "showAvatars": True, "showMedia": True, "showTimestamps": True, "showPlayers": True, "compactHud": False,
     "messageLimit": 150, "tutorialDone": False,
     "screenTop": 0, "screenBottom": 0, "screenSide": 0,        # extra margins (px) for a screen the page does not fit exactly
+    # 2.1: the look as a whole
+    "accentColor": "#8b5cf6", "baseColor": "#0b0b16",          # the colours of the «custom» accent and theme
+    "font": "tech", "surface": "solid", "arrange": "classic",  # titles' typeface, how panels are drawn, how the event screen is arranged
+    "followEvent": True,                                       # take the look the game masters chose for the event (until the player picks their own)
 }
+THEMES = ("dark", "oled", "contrast", "midnight", "ember", "forest", "rose", "sepia", "slate", "ocean", "light", "paper", "custom")
+ACCENTS = ("violet", "blue", "cyan", "teal", "green", "gold", "amber", "pink", "red", "custom")
+BACKDROPS = ("plain", "grid", "dots", "aurora", "glow")
+COLORS = ("accentColor", "baseColor")
+_HEX = re.compile(r"^#[0-9a-fA-F]{6}$")
 CHOICES = {
-    "theme": ("dark", "oled", "contrast", "midnight", "ember", "forest", "rose", "sepia"),
-    "accent": ("violet", "blue", "cyan", "green", "amber", "pink", "red"), "corners": ("round", "sharp", "soft"), "bg": ("plain", "grid", "aurora"), "palette": ("default", "cb"), "density": ("compact", "comfortable", "spacious"),
+    "theme": THEMES,
+    "accent": ACCENTS, "corners": ("round", "sharp", "soft"), "bg": BACKDROPS, "palette": ("default", "cb"), "density": ("compact", "comfortable", "spacious"),
+    "font": ("tech", "clean", "serif", "mono"), "surface": ("solid", "glass", "outline"), "arrange": ("classic", "mirror", "focus", "compact"),
     "motion": ("full", "reduced"), "vfx": ("full", "soft", "off"), "buttonPlacement": ("random", "bottom", "left", "right"),
 }
 RANGES = {"textScale": (85, 140), "buttonScale": (70, 160), "volume": (0, 100), "musicVolume": (0, 100), "sfxVolume": (0, 100), "messageLimit": (50, 400),
@@ -43,6 +54,9 @@ def sanitize(raw) -> dict:
         if key in CHOICES:
             if value in CHOICES[key]:
                 out[key] = value
+        elif key in COLORS:
+            if isinstance(value, str) and _HEX.match(value):
+                out[key] = value.lower()
         elif key in RANGES:
             if isinstance(value, (int, float)) and not isinstance(value, bool) and value == value:
                 low, high = RANGES[key]

@@ -1,5 +1,5 @@
 /* ---- static preview of the floating buttons (settings) ---- */
-.qte-preview { display: flex; flex-wrap: wrap; gap: var(--sp-5); justify-content: center; padding: var(--sp-5) var(--sp-3); border-radius: var(--r-lg); background: radial-gradient(400px 160px at 50% 0%, rgb(139 92 246 / .12), transparent 70%), var(--bg-2); border: 1px solid var(--line-soft); }
+.qte-preview { display: flex; flex-wrap: wrap; gap: var(--sp-5); justify-content: center; padding: var(--sp-5) var(--sp-3); border-radius: var(--r-lg); background: radial-gradient(400px 160px at 50% 0%, var(--glow-1), transparent 70%), var(--bg-2); border: 1px solid var(--line-soft); }
 .qw.static { position: relative; transform: none; --size: calc(var(--btn-base) * var(--btn-scale)); }
 .qw.static .qw-btn { animation: none; }
 .qw.static .qw-timer, .qw.static > * { pointer-events: none; }
@@ -32,7 +32,7 @@
 .tut[data-step="chat"] .tut-card, .tut[data-step="write"] .tut-card { bottom: auto; top: calc(var(--topbar-h) + 14px); }
 .tut-head { display: flex; align-items: center; gap: var(--sp-2); }
 .tut-progress { height: 4px; border-radius: 4px; background: var(--surface-4); overflow: hidden; }
-.tut-progress i { display: block; height: 100%; background: linear-gradient(90deg, var(--primary), #ec4899); transition: width var(--t-slow) var(--ease); }
+.tut-progress i { display: block; height: 100%; background: linear-gradient(90deg, var(--primary), var(--secondary)); transition: width var(--t-slow) var(--ease); }
 .tut-card h2 { font: 700 1.25rem/1.2 var(--font-display); letter-spacing: .02em; }
 .tut-card p { color: var(--text-dim); font-size: .9375rem; line-height: 1.5; }
 .tut-verdict { display: flex; align-items: center; justify-content: space-between; gap: var(--sp-3); padding: var(--sp-3); border-radius: var(--r-md); background: var(--surface); border: 1px dashed var(--line); color: var(--text-dim); font-size: .875rem; }

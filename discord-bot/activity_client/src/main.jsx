@@ -4,7 +4,7 @@ import "./css/main.css";
 import { App } from "./ui/App.jsx";
 import { boot } from "./net.js";
 import { installKeys } from "./keys.js";
-import { prefs, qtes, you, messages, link, comp, me, game, conn, view, tutorial, characters, perms, go } from "./state.js";
+import { eventLook, prefs, qtes, you, messages, link, comp, me, game, conn, view, tutorial, characters, perms, go } from "./state.js";
 import { applyPrefs } from "./prefs.js";
 import { setPrefs } from "./settings-actions.js";
 import { cine } from "./cine.js";
@@ -14,7 +14,7 @@ import { installPaletteKeys } from "./ui/Navigation.jsx";
 import { mobs } from "./mobs.js";
 import { installViewport } from "./viewport.js";
 
-effect(() => applyPrefs(prefs.value));      // the player's settings are applied to the page whenever they change
+effect(() => applyPrefs(prefs.value, eventLook.value));      // the player's settings are applied to the page whenever they change
 installKeys();
 installPaletteKeys();
 installViewport();

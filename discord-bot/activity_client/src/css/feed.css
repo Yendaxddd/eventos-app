@@ -32,7 +32,7 @@
 .msg-text .spoiler { background: var(--surface-4); color: transparent; border-radius: 5px; cursor: pointer; padding: 0 2px; }
 .msg-text .spoiler.open { background: rgb(255 255 255 / .1); color: inherit; }
 .msg-text img.emoji { height: 1.35em; width: auto; vertical-align: -.3em; }
-.msg-text .mention { background: rgb(139 92 246 / .22); color: var(--primary-2); border-radius: 5px; padding: 0 3px; font-weight: 600; }
+.msg-text .mention { background: color-mix(in srgb, var(--primary) 22%, transparent); color: var(--primary-2); border-radius: 5px; padding: 0 3px; font-weight: 600; }
 .msg-text .when { background: rgb(255 255 255 / .08); border-radius: 5px; padding: 0 4px; }
 
 .attach img, .attach video { max-width: min(100%, 360px); max-height: 280px; border-radius: var(--r-md); margin-top: 6px; display: block; background: var(--bg-2); }

@@ -471,7 +471,7 @@ class BotRunner:
                                          char_images_file=paths.data_dir() / "character_images.json",
                                          audio_file=paths.data_dir() / "audio_library.json", cinema_file=paths.data_dir() / "cinematics.json",
                                          fx_file=paths.data_dir() / "activity_fx.json", mobs_file=paths.data_dir() / "activity_mobs.json",
-                                         staff_file=paths.data_dir() / "gm_staff.json")
+                                         staff_file=paths.data_dir() / "gm_staff.json", look_file=paths.data_dir() / "activity_look.json")
         server = activity.ActivityServer(hub, auth=auth, authorize=bridge.authorize, client_id=client_id,
                                          web_dir=paths.resource_path("eventos_app", "activity", "web"),
                                          actions=bridge, media_dir=paths.app_home() / "cache" / "media", files=files,

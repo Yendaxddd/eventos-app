@@ -50,9 +50,11 @@ function Splash() {
 
 function EventView({ layout }) {
   const p = prefs.value;
-  const wide = layout.mode === "wide", narrow = layout.mode === "narrow";
+  const focus = p.arrange === "focus" && layout.mode !== "narrow";      // «Enfoque»: the phone's single column, centred, on a big screen too
+  const mode = focus ? "focus" : layout.mode;
+  const wide = mode === "wide", narrow = mode === "narrow" || focus;
   return (
-    <div class="stage" data-layout={layout.mode} data-short={layout.short ? "true" : "false"} data-players={wide && p.showPlayers ? "true" : "false"}>
+    <div class="stage" data-layout={mode} data-arrange={p.arrange} data-short={layout.short ? "true" : "false"} data-players={wide && p.showPlayers ? "true" : "false"}>
       {wide && p.showPlayers && <PlayersPanel />}
       <div class="center">
         <BossCard />

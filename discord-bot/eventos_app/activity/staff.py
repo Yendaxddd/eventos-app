@@ -69,7 +69,7 @@ for _perm, _ops in {
     "content": "data file_create file_delete file_get file_restore file_save achievements ach_save ach_delete objects object object_save "
                "object_image obj_approve obj_reject obj_reload powers",
     "cinema": "cinemas cinema_save cinema_delete cinema_duplicate cinema_link cinema_auto",
-    "stage": "cinema_play cinema_stop audio_play audio_stop music_play music_stop cue_test",
+    "stage": "cinema_play cinema_stop audio_play audio_stop music_play music_stop cue_test look look_set",
     "media": "audio audio_delete audio_update cue_set cue_clear phase_set phase_clear music_volume fx fx_set fx_clear fx_defaults fx_preview",
     "results": "results_show results_hide results_save results_delete results_auto",
     "summary": "summary_make summary_save summary_delete summary_post ai_get ai_set ai_test",

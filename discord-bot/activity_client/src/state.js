@@ -31,6 +31,7 @@ export const calib = signal(null);                     // result of the last lat
 
 // ---- settings -------------------------------------------------------------------------------------------------
 export const prefs = signal(loadLocalPrefs());
+export const eventLook = signal(null);                  // the look the game masters chose for the event (null: none)
 
 // ---- QTEs on screen (see qte-store.js) -------------------------------------------------------------------------
 export const qtes = signal([]);

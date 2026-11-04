@@ -3,11 +3,15 @@
 html { font-size: calc(16px * var(--text-scale)); -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
 html, body { height: 100%; margin: 0; }
 body {
-  background: var(--bg); color: var(--text); font: 400 .9375rem/1.45 var(--font-ui);
+  background:
+    radial-gradient(1100px 520px at 12% -10%, var(--glow-1), transparent 60%),
+    radial-gradient(900px 480px at 100% 0%, var(--glow-2), transparent 60%),
+    var(--bg);
+  color: var(--text); font: 400 .9375rem/1.45 var(--font-ui);
   font-feature-settings: "cv11", "ss01"; -webkit-font-smoothing: antialiased; text-rendering: optimizeLegibility;
   overflow: hidden; overscroll-behavior: none; -webkit-tap-highlight-color: transparent;
 }
-#root { height: 100%; }
+#root { height: 100%; position: relative; z-index: 1; }
 button, input, select, textarea { font: inherit; color: inherit; }
 button { cursor: pointer; }
 img, video { max-width: 100%; }
@@ -19,7 +23,7 @@ ul { list-style: none; margin: 0; padding: 0; }
 :focus-visible { outline: 2px solid var(--primary-2); outline-offset: 2px; border-radius: 6px; }
 ::selection { background: var(--primary-glow); }
 
-* { scrollbar-width: thin; scrollbar-color: var(--surface-4) transparent; }
+* { scrollbar-width: thin; scrollbar-color: var(--scrollbar) transparent; }
 ::-webkit-scrollbar { width: 8px; height: 8px; }
 ::-webkit-scrollbar-thumb { background: var(--surface-4); border-radius: 8px; border: 2px solid transparent; background-clip: content-box; }
 ::-webkit-scrollbar-thumb:hover { background: var(--line); background-clip: content-box; border: 2px solid transparent; }
@@ -94,8 +98,8 @@ ul { list-style: none; margin: 0; padding: 0; }
 .segmented button[aria-pressed="true"] { background: var(--surface-4); color: var(--text); box-shadow: var(--shadow-1); }
 
 /* ---- Cards + chips ---- */
-.card { background: var(--surface); border: 1px solid var(--line-soft); border-radius: var(--r-lg); padding: var(--sp-4); }
-.card-2 { background: var(--surface-2); border: 1px solid var(--line-soft); border-radius: var(--r-lg); padding: var(--sp-4); }
+.card { background: var(--panel-bg); border: 1px solid var(--panel-border); backdrop-filter: var(--panel-blur); border-radius: var(--r-lg); padding: var(--sp-4); }
+.card-2 { background: var(--card-bg); border: 1px solid var(--line-soft); border-radius: var(--r-lg); padding: var(--sp-4); }
 .card-title { display: flex; align-items: center; gap: 8px; margin-bottom: var(--sp-3); }
 .chip { display: inline-flex; align-items: center; gap: 6px; min-height: 24px; padding: 0 var(--sp-2); border-radius: var(--r-pill); background: var(--surface-3); color: var(--text-dim); font-size: .75rem; font-weight: 600; border: 1px solid var(--line-soft); white-space: nowrap; }
 .chip.ok { color: var(--ok); } .chip.warn { color: var(--warn); } .chip.bad { color: var(--bad); } .chip.info { color: var(--info); } .chip.primary { color: var(--primary-2); }

@@ -31,7 +31,13 @@
       "tutorialDone": false,
       "screenTop": 0,
       "screenBottom": 0,
-      "screenSide": 0
+      "screenSide": 0,
+      "accentColor": "#8b5cf6",
+      "baseColor": "#0b0b16",
+      "font": "tech",
+      "surface": "solid",
+      "arrange": "classic",
+      "followEvent": true
     }
   },
   {
@@ -69,7 +75,13 @@
       "tutorialDone": false,
       "screenTop": 0,
       "screenBottom": 0,
-      "screenSide": 0
+      "screenSide": 0,
+      "accentColor": "#8b5cf6",
+      "baseColor": "#0b0b16",
+      "font": "tech",
+      "surface": "solid",
+      "arrange": "classic",
+      "followEvent": true
     }
   },
   {
@@ -107,7 +119,13 @@
       "tutorialDone": false,
       "screenTop": 0,
       "screenBottom": 0,
-      "screenSide": 0
+      "screenSide": 0,
+      "accentColor": "#8b5cf6",
+      "baseColor": "#0b0b16",
+      "font": "tech",
+      "surface": "solid",
+      "arrange": "classic",
+      "followEvent": true
     }
   },
   {
@@ -144,7 +162,13 @@
       "tutorialDone": false,
       "screenTop": 0,
       "screenBottom": 0,
-      "screenSide": 0
+      "screenSide": 0,
+      "accentColor": "#8b5cf6",
+      "baseColor": "#0b0b16",
+      "font": "tech",
+      "surface": "solid",
+      "arrange": "classic",
+      "followEvent": true
     }
   },
   {
@@ -183,7 +207,13 @@
       "tutorialDone": false,
       "screenTop": 0,
       "screenBottom": 0,
-      "screenSide": 0
+      "screenSide": 0,
+      "accentColor": "#8b5cf6",
+      "baseColor": "#0b0b16",
+      "font": "tech",
+      "surface": "solid",
+      "arrange": "classic",
+      "followEvent": true
     }
   },
   {
@@ -221,7 +251,13 @@
       "tutorialDone": false,
       "screenTop": 0,
       "screenBottom": 0,
-      "screenSide": 0
+      "screenSide": 0,
+      "accentColor": "#8b5cf6",
+      "baseColor": "#0b0b16",
+      "font": "tech",
+      "surface": "solid",
+      "arrange": "classic",
+      "followEvent": true
     }
   },
   {
@@ -260,7 +296,13 @@
       "tutorialDone": false,
       "screenTop": 0,
       "screenBottom": 0,
-      "screenSide": 0
+      "screenSide": 0,
+      "accentColor": "#8b5cf6",
+      "baseColor": "#0b0b16",
+      "font": "tech",
+      "surface": "solid",
+      "arrange": "classic",
+      "followEvent": true
     }
   },
   {
@@ -297,7 +339,13 @@
       "tutorialDone": false,
       "screenTop": 0,
       "screenBottom": 0,
-      "screenSide": 0
+      "screenSide": 0,
+      "accentColor": "#8b5cf6",
+      "baseColor": "#0b0b16",
+      "font": "tech",
+      "surface": "solid",
+      "arrange": "classic",
+      "followEvent": true
     }
   },
   {
@@ -335,7 +383,13 @@
       "tutorialDone": false,
       "screenTop": 0,
       "screenBottom": 0,
-      "screenSide": 0
+      "screenSide": 0,
+      "accentColor": "#8b5cf6",
+      "baseColor": "#0b0b16",
+      "font": "tech",
+      "surface": "solid",
+      "arrange": "classic",
+      "followEvent": true
     }
   },
   {
@@ -370,7 +424,13 @@
       "tutorialDone": false,
       "screenTop": 0,
       "screenBottom": 0,
-      "screenSide": 0
+      "screenSide": 0,
+      "accentColor": "#8b5cf6",
+      "baseColor": "#0b0b16",
+      "font": "tech",
+      "surface": "solid",
+      "arrange": "classic",
+      "followEvent": true
     }
   },
   {
@@ -405,7 +465,13 @@
       "tutorialDone": false,
       "screenTop": 0,
       "screenBottom": 0,
-      "screenSide": 0
+      "screenSide": 0,
+      "accentColor": "#8b5cf6",
+      "baseColor": "#0b0b16",
+      "font": "tech",
+      "surface": "solid",
+      "arrange": "classic",
+      "followEvent": true
     }
   },
   {
@@ -445,7 +511,13 @@
       "tutorialDone": true,
       "screenTop": 0,
       "screenBottom": 0,
-      "screenSide": 0
+      "screenSide": 0,
+      "accentColor": "#8b5cf6",
+      "baseColor": "#0b0b16",
+      "font": "tech",
+      "surface": "solid",
+      "arrange": "classic",
+      "followEvent": true
     }
   },
   {
@@ -484,7 +556,13 @@
       "tutorialDone": false,
       "screenTop": 0,
       "screenBottom": 0,
-      "screenSide": 0
+      "screenSide": 0,
+      "accentColor": "#8b5cf6",
+      "baseColor": "#0b0b16",
+      "font": "tech",
+      "surface": "solid",
+      "arrange": "classic",
+      "followEvent": true
     }
   },
   {
@@ -524,7 +602,13 @@
       "tutorialDone": false,
       "screenTop": 0,
       "screenBottom": 0,
-      "screenSide": 0
+      "screenSide": 0,
+      "accentColor": "#8b5cf6",
+      "baseColor": "#0b0b16",
+      "font": "tech",
+      "surface": "solid",
+      "arrange": "classic",
+      "followEvent": true
     }
   },
   {
@@ -564,7 +648,13 @@
       "tutorialDone": false,
       "screenTop": 0,
       "screenBottom": 0,
-      "screenSide": 0
+      "screenSide": 0,
+      "accentColor": "#8b5cf6",
+      "baseColor": "#0b0b16",
+      "font": "tech",
+      "surface": "solid",
+      "arrange": "classic",
+      "followEvent": true
     }
   },
   {
@@ -601,7 +691,13 @@
       "tutorialDone": false,
       "screenTop": 0,
       "screenBottom": 0,
-      "screenSide": 0
+      "screenSide": 0,
+      "accentColor": "#8b5cf6",
+      "baseColor": "#0b0b16",
+      "font": "tech",
+      "surface": "solid",
+      "arrange": "classic",
+      "followEvent": true
     }
   },
   {
@@ -638,7 +734,13 @@
       "tutorialDone": false,
       "screenTop": 0,
       "screenBottom": 0,
-      "screenSide": 0
+      "screenSide": 0,
+      "accentColor": "#8b5cf6",
+      "baseColor": "#0b0b16",
+      "font": "tech",
+      "surface": "solid",
+      "arrange": "classic",
+      "followEvent": true
     }
   },
   {
@@ -677,7 +779,153 @@
       "tutorialDone": false,
       "screenTop": 80,
       "screenBottom": 0,
-      "screenSide": 30
+      "screenSide": 30,
+      "accentColor": "#8b5cf6",
+      "baseColor": "#0b0b16",
+      "font": "tech",
+      "surface": "solid",
+      "arrange": "classic",
+      "followEvent": true
+    }
+  },
+  {
+    "raw": {
+      "theme": "custom",
+      "baseColor": "#F4EFE6",
+      "accent": "custom",
+      "accentColor": "#12AB34"
+    },
+    "expected": {
+      "theme": "custom",
+      "accent": "custom",
+      "corners": "round",
+      "bg": "plain",
+      "palette": "default",
+      "textScale": 100,
+      "density": "comfortable",
+      "motion": "full",
+      "vfx": "full",
+      "buttonScale": 100,
+      "buttonPlacement": "random",
+      "keepEvade": false,
+      "queueMode": false,
+      "sound": true,
+      "volume": 60,
+      "haptics": true,
+      "audio": true,
+      "musicVolume": 70,
+      "sfxVolume": 85,
+      "cinema": true,
+      "showAvatars": true,
+      "showMedia": true,
+      "showTimestamps": true,
+      "showPlayers": true,
+      "compactHud": false,
+      "messageLimit": 150,
+      "tutorialDone": false,
+      "screenTop": 0,
+      "screenBottom": 0,
+      "screenSide": 0,
+      "accentColor": "#12ab34",
+      "baseColor": "#f4efe6",
+      "font": "tech",
+      "surface": "solid",
+      "arrange": "classic",
+      "followEvent": true
+    }
+  },
+  {
+    "raw": {
+      "accentColor": "red",
+      "baseColor": "#12345",
+      "font": "comic",
+      "surface": "glass",
+      "arrange": "mirror"
+    },
+    "expected": {
+      "theme": "dark",
+      "accent": "violet",
+      "corners": "round",
+      "bg": "plain",
+      "palette": "default",
+      "textScale": 100,
+      "density": "comfortable",
+      "motion": "full",
+      "vfx": "full",
+      "buttonScale": 100,
+      "buttonPlacement": "random",
+      "keepEvade": false,
+      "queueMode": false,
+      "sound": true,
+      "volume": 60,
+      "haptics": true,
+      "audio": true,
+      "musicVolume": 70,
+      "sfxVolume": 85,
+      "cinema": true,
+      "showAvatars": true,
+      "showMedia": true,
+      "showTimestamps": true,
+      "showPlayers": true,
+      "compactHud": false,
+      "messageLimit": 150,
+      "tutorialDone": false,
+      "screenTop": 0,
+      "screenBottom": 0,
+      "screenSide": 0,
+      "accentColor": "#8b5cf6",
+      "baseColor": "#0b0b16",
+      "font": "tech",
+      "surface": "glass",
+      "arrange": "mirror",
+      "followEvent": true
+    }
+  },
+  {
+    "raw": {
+      "theme": "light",
+      "bg": "dots",
+      "font": "serif",
+      "followEvent": 0,
+      "accent": "teal"
+    },
+    "expected": {
+      "theme": "light",
+      "accent": "teal",
+      "corners": "round",
+      "bg": "dots",
+      "palette": "default",
+      "textScale": 100,
+      "density": "comfortable",
+      "motion": "full",
+      "vfx": "full",
+      "buttonScale": 100,
+      "buttonPlacement": "random",
+      "keepEvade": false,
+      "queueMode": false,
+      "sound": true,
+      "volume": 60,
+      "haptics": true,
+      "audio": true,
+      "musicVolume": 70,
+      "sfxVolume": 85,
+      "cinema": true,
+      "showAvatars": true,
+      "showMedia": true,
+      "showTimestamps": true,
+      "showPlayers": true,
+      "compactHud": false,
+      "messageLimit": 150,
+      "tutorialDone": false,
+      "screenTop": 0,
+      "screenBottom": 0,
+      "screenSide": 0,
+      "accentColor": "#8b5cf6",
+      "baseColor": "#0b0b16",
+      "font": "serif",
+      "surface": "solid",
+      "arrange": "classic",
+      "followEvent": false
     }
   }
 ]

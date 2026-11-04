@@ -5,6 +5,7 @@ import { play, vibrate } from "../sound.js";
 import { testAudio } from "../audio.js";
 import { useState } from "preact/hooks";
 import { Page, Range, Section, Segmented, Setting, Switch } from "../ui/Controls.jsx";
+import { AppearanceSection } from "./Appearance.jsx";
 
 // How big the floating buttons will be, drawn the way they appear in a QTE.
 function Preview() {
@@ -42,19 +43,11 @@ export function SettingsPage() {
   const p = prefs.value;
   return (
     <Page title="Ajustes" icon={Palette} actions={<button class="btn btn-sm btn-ghost" type="button" onClick={resetPrefs}><RotateCcw size={14} /> Restablecer</button>}>
+      <Section title="Estilo">
+        <AppearanceSection />
+      </Section>
+
       <Section title="Pantalla">
-        <Setting title="Tema" hint="Muy oscuro ahorra batería en pantallas OLED; alto contraste ayuda si cuesta leer." stack>
-          <Segmented label="Tema" value={p.theme} onChange={(v) => setPrefs({ theme: v })} options={[["dark", "Oscuro"], ["oled", "Muy oscuro"], ["contrast", "Alto contraste"], ["midnight", "Medianoche"], ["ember", "Brasa"], ["forest", "Bosque"], ["rose", "Rosa"], ["sepia", "Sepia"]]} />
-        </Setting>
-        <Setting title="Color de acento" hint="El color de los botones y los resaltados." stack>
-          <Segmented label="Acento" value={p.accent} onChange={(v) => setPrefs({ accent: v })} options={[["violet", "Violeta"], ["blue", "Azul"], ["cyan", "Cian"], ["green", "Verde"], ["amber", "Ámbar"], ["pink", "Rosa"], ["red", "Rojo"]]} />
-        </Setting>
-        <Setting title="Esquinas" hint="Qué tan redondeados son los botones y las tarjetas." stack>
-          <Segmented label="Esquinas" value={p.corners} onChange={(v) => setPrefs({ corners: v })} options={[["sharp", "Rectas"], ["round", "Redondas"], ["soft", "Muy redondas"]]} />
-        </Setting>
-        <Setting title="Fondo" hint="Un detalle detrás de la pantalla." stack>
-          <Segmented label="Fondo" value={p.bg} onChange={(v) => setPrefs({ bg: v })} options={[["plain", "Liso"], ["grid", "Cuadrícula"], ["aurora", "Aurora"]]} />
-        </Setting>
         <Setting title="Colores del juego" hint="La opción para daltonismo cambia verde y amarillo por azul y naranja." stack>
           <Segmented label="Paleta" value={p.palette} onChange={(v) => setPrefs({ palette: v })} options={[["default", "Estándar"], ["cb", "Daltonismo"]]} />
         </Setting>

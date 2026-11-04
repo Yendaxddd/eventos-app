@@ -29,6 +29,7 @@ from .cinema import CinemaBook, CinemaDirector
 from .cinema_rpc import CinemaRpc
 from .staff import OP_PERMS, PERM_IDS, SHARED_OPS, StaffBook
 from .staff_rpc import StaffRpc
+from .look import LookBook, LookRpc
 from .fx import FxBook, FxDirector
 from .arena import ArenaQtes
 from .fx_rpc import FxRpc
@@ -129,12 +130,13 @@ VERDICT_WAITS, VERDICT_STEP = 15, 0.02     # up to about a quarter of a second f
 CURRENT_OP: contextvars.ContextVar[str] = contextvars.ContextVar("activity_rpc_op", default="")    # the request being answered (each runs in its own task)
 
 
-class ActivityBridge(PanelRpc, GmRpc, TupperRpc, AudioRpc, CinemaRpc, FxRpc, QuickRpc, MobsRpc, StaffRpc):
+class ActivityBridge(PanelRpc, GmRpc, TupperRpc, AudioRpc, CinemaRpc, FxRpc, QuickRpc, MobsRpc, StaffRpc, LookRpc):
     def __init__(self, hub: Hub, app: Any, pool: Callable[[], Any] | None = None, avatar_file: Path | None = None,
                  prefs_file: Path | None = None, latency_file: Path | None = None, data_dir: Path | None = None,
                  gm_log_file: Path | None = None, values_file: Path | None = None, files: MediaStore | None = None,
                  char_images_file: Path | None = None, audio_file: Path | None = None, cinema_file: Path | None = None,
-                 fx_file: Path | None = None, mobs_file: Path | None = None, staff_file: Path | None = None) -> None:
+                 fx_file: Path | None = None, mobs_file: Path | None = None, staff_file: Path | None = None,
+                 look_file: Path | None = None) -> None:
         self.hub, self.app = hub, app        # app: the AdvancedQTEBot instance
         self.pool = pool or (lambda: None)   # the SenderPool, for webhook sends
         self._listeners: list[tuple[Any, str]] = []
@@ -155,6 +157,7 @@ class ActivityBridge(PanelRpc, GmRpc, TupperRpc, AudioRpc, CinemaRpc, FxRpc, Qui
         self.mobs = Mobs(self, mobs_file)                                      # the mini enemies (mobs.py, mobs_rpc.py)
         self.cinema = CinemaDirector(hub, CinemaBook(cinema_file, self.audio.library), post=self._cinema_post)     # the scripts and their playing (cinema.py)
         self.gm = GmPanel(app, GmLog(gm_log_file), data_dir, values_file)       # the game-master panel (gm/, gm_rpc.py)
+        self.look = LookBook(look_file if look_file is not None else (Path(data_dir) / "activity_look.json" if data_dir else None))   # the event's style (look.py)
         self.staff = StaffBook(staff_file if staff_file is not None else (Path(data_dir) / "gm_staff.json" if data_dir else None))   # who is on the team, and with which boxes (staff.py)
 
     # ---- wiring ---------------------------------------------------------------------------------
@@ -539,7 +542,7 @@ class ActivityBridge(PanelRpc, GmRpc, TupperRpc, AudioRpc, CinemaRpc, FxRpc, Qui
         return {"perms": await self.perms_frame(conn), "prefs": self.prefs.get(conn.user_id) if self.prefs.has(conn.user_id) else None,
                 "calib": self.latency.get(conn.user_id),
                 "comp": comp, "rules": self.rules(), "charAvatars": self.char_avatars(conn.user_id), "audio": self.audio.welcome(),
-                "cine": self.cinema.current(), "mobs": self.mobs.public()}
+                "cine": self.cinema.current(), "mobs": self.mobs.public(), "look": self.look.value}
 
     async def save_prefs(self, conn: Conn, raw) -> dict:
         return self.prefs.set(conn.user_id, raw)
