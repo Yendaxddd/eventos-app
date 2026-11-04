@@ -106,7 +106,7 @@ def test_a_new_player_is_welcomed_with_rules_adjustment_and_no_settings_and_a_ga
             return gm_welcome, other
 
     gm, other = run(scenario())
-    assert gm["perms"] == {"gm": True} and other["perms"] == {"gm": False}
+    assert gm["perms"]["gm"] is True and other["perms"]["gm"] is False
     assert gm["prefs"] is None                                                      # the server knows nothing about them yet: the client sends its own
     assert gm["comp"] == {"net": 0.0, "device": 0.0, "cap": CAP_MS} and gm["calib"] is None
     assert gm["rules"]["times"]["easy"] == {"evade": 6.0, "parry": [4.0, 7.0], "perfect": None, "timeout": 6.75}

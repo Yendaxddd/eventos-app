@@ -136,7 +136,7 @@ class PanelRpc:
         return await self._characters_changed(conn)
 
     async def rpc_panel_power(self, conn: Conn, args: dict):
-        done = self.panel.save_power(conn.user_id, await self.is_gm(conn), args)
+        done = self.panel.save_power(conn.user_id, "content" in (await self.conn_access(conn))[0], args)
         log.info("%s guardó el poder %s de %s", conn.name, done["slot"], done["character"])
         return await self._characters_changed(conn)
 
@@ -154,7 +154,7 @@ class PanelRpc:
                 "cap": int(getattr(app, "ultimate_max_damage", 500) or 500), "selfRecharge": bool(getattr(app, "ultimate_self_recharge", False))}
 
     async def rpc_panel_unpower(self, conn: Conn, args: dict):
-        self.panel.remove_power(conn.user_id, await self.is_gm(conn), args.get("character"), args.get("slot"))
+        self.panel.remove_power(conn.user_id, "content" in (await self.conn_access(conn))[0], args.get("character"), args.get("slot"))
         return await self._characters_changed(conn)
 
     async def rpc_panel_image_add(self, conn: Conn, args: dict):

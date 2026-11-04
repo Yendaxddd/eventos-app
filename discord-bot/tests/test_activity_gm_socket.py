@@ -103,7 +103,7 @@ def test_nobody_without_the_role_gets_anything_from_any_request_and_nothing_happ
             return welcome, answers, lawful, full, rig.bot.calls, rig.bot.sent, json.dumps(rig.bridge.gm.state(), sort_keys=True) == before, rig.bridge.gm.log.recent()
 
     welcome, answers, lawful, full, calls, sent, unchanged, log = run(scenario())
-    assert welcome["perms"] == {"gm": False}
+    assert welcome["perms"]["gm"] is False and welcome["perms"]["can"] == []
     assert set(answers) == set(handlers())
     assert {op: a.get("reason") for op, a in answers.items() if a["t"] != "rpc_err" or a.get("reason") != NOT_GM} == {}
     assert lawful["t"] == "rpc_ok" and full["t"] == "rpc_err" and full["reason"] == NOT_GM
@@ -125,9 +125,9 @@ def test_a_game_master_is_one_only_while_the_bot_says_so():
             return welcome, allowed, refused, refused_write, hp_after, late_welcome, back
 
     welcome, allowed, refused, refused_write, hp_after, late_welcome, back = run(scenario())
-    assert welcome["perms"] == {"gm": True} and allowed["t"] == "rpc_ok" and allowed["data"]["fight"] is False
+    assert welcome["perms"]["gm"] is True and allowed["t"] == "rpc_ok" and allowed["data"]["fight"] is False
     assert refused["reason"] == NOT_GM and refused_write["reason"] == NOT_GM and hp_after == 100
-    assert late_welcome["perms"] == {"gm": False} and back["t"] == "rpc_ok"
+    assert late_welcome["perms"]["gm"] is False and back["t"] == "rpc_ok"
 
 
 def test_a_test_window_on_this_pc_gets_the_panel_only_if_it_asks_and_discord_users_cannot_ask():
@@ -146,9 +146,9 @@ def test_a_test_window_on_this_pc_gets_the_panel_only_if_it_asks_and_discord_use
             return plain, gm, asked_no, asked_yes, cheated, await rig.ask(cheat, "gm.state")
 
     plain, gm, asked_no, asked_yes, cheated, cheat_ask = run(scenario())
-    assert plain["perms"] == {"gm": False} and gm["perms"] == {"gm": True}
+    assert plain["perms"]["gm"] is False and gm["perms"]["gm"] is True
     assert asked_no["reason"] == NOT_GM and asked_yes["t"] == "rpc_ok"
-    assert cheated["perms"] == {"gm": False} and cheat_ask["reason"] == NOT_GM
+    assert cheated["perms"]["gm"] is False and cheat_ask["reason"] == NOT_GM
 
 
 # ---- using it ----------------------------------------------------------------------------------------------------------------------

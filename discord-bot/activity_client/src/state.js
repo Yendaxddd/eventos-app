@@ -6,7 +6,8 @@ import { DEFAULT_PREFS, loadLocalPrefs } from "./prefs.js";
 export const conn = signal({ state: "starting", text: "Conectando…", detail: "" });    // starting | connected | error
 export const banner = signal(null);                    // { text, kind } shown under the top bar (reconnecting, errors)
 export const you = signal(null);                       // { id, name, avatar }
-export const perms = signal({ gm: false });
+export const perms = signal({ gm: false, can: [], host: false });   // the boxes of the GM team this person has (staff.py)
+export const canDo = (...boxes) => boxes.some((b) => (perms.value.can || []).includes(b));
 export const channelName = signal("Evento");
 export const users = signal([]);                       // people inside the Activity
 export const canWrite = signal(false);

@@ -197,7 +197,24 @@ def clean_cinema(raw: Any, library: AudioLibrary | None, known_id: str | None = 
     return {"id": known_id or str(raw.get("id") or "") or secrets.token_hex(4), "name": name, "steps": steps, "triggers": triggers,
             "boss": _line(raw.get("boss"), 80), "bg": _color(raw.get("bg"), "Fondo", "#000000"), "bars": bool(raw.get("bars", True)), "skippable": bool(raw.get("skippable", True)),
             "see": bool(raw.get("see", False)),          # see-through: the game stays visible behind (a dialogue over the fight)
-            "duration": round(length + 1.0, 2)}
+            "duration": round(length + 1.0, 2), **clean_privacy(raw)}
+
+
+SHARES = ("private", "team")
+
+
+def clean_privacy(raw: dict) -> dict:
+    """Who wrote it and who may open it. A cinematic is a surprise: by default only its author (and the co-authors they name) can see
+    what is inside; the rest of the team sees a sealed card they can still play or bind to a moment. One with no author (written
+    before 2.1) stays open to the whole team, as it was."""
+    owner = raw.get("owner") if isinstance(raw.get("owner"), dict) else None
+    if owner is not None:
+        owner = {"id": str(owner.get("id") or "")[:24], "name": _line(owner.get("name"), 80)}
+        if not re.fullmatch(r"-?\d{1,20}", owner["id"]):
+            owner = None
+    editors = [str(e)[:24] for e in (raw.get("editors") or []) if re.fullmatch(r"-?\d{1,20}", str(e))][:10] if isinstance(raw.get("editors"), list) else []
+    share = raw.get("share") if raw.get("share") in SHARES else ("private" if owner else "team")
+    return {"owner": owner, "share": share, "editors": list(dict.fromkeys(editors)), "hint": _line(raw.get("hint"), 80)}
 
 
 class CinemaBook:
@@ -241,7 +258,8 @@ class CinemaBook:
     def get(self, cinema_id: Any) -> dict | None:
         return self.items.get(str(cinema_id))
 
-    def put(self, raw: Any) -> dict:
+    def put(self, raw: Any, author: dict | None = None) -> dict:
+        """Keep a script. Its author is whoever first saved it (`author`, decided by the server; what the page says is ignored)."""
         known = str(raw.get("id") or "") if isinstance(raw, dict) else ""
         if known not in self.items:
             known = ""                        # an id this book never gave: it becomes a new one
@@ -249,6 +267,9 @@ class CinemaBook:
                 raw = {**raw, "id": ""}
         if not known and len(self.items) >= MAX_CINEMAS:
             raise RpcError(f"Ya hay {MAX_CINEMAS} cinemáticas: borra las que no uses.")
+        if isinstance(raw, dict):
+            before = self.items.get(known)
+            raw = {**raw, "owner": before.get("owner") if before is not None else author}
         cinema = clean_cinema(raw, self.library, known_id=known or None)
         while not known and cinema["id"] in self.items:
             cinema["id"] = secrets.token_hex(4)
@@ -256,11 +277,11 @@ class CinemaBook:
         self.save()
         return dict(cinema)
 
-    def duplicate(self, cinema_id: Any) -> dict:
+    def duplicate(self, cinema_id: Any, author: dict | None = None) -> dict:
         original = self.get(cinema_id)
         if original is None:
             raise RpcError("Esa cinemática ya no existe.")
-        return self.put({**original, "id": "", "name": f"{original['name']} (copia)"[:80]})
+        return self.put({**original, "id": "", "name": f"{original['name']} (copia)"[:80]}, author=author or original.get("owner"))
 
     def delete(self, cinema_id: Any) -> dict:
         cinema = self.items.pop(str(cinema_id), None)

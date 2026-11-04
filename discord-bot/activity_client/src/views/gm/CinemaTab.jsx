@@ -1,9 +1,9 @@
 import { useMemo, useRef, useState } from "preact/hooks";
-import { ArrowLeft, Check, ChevronLeft, ChevronRight, Clapperboard, ClipboardPaste, CloudRain, Copy, Eye, Heading, ImagePlus, LayoutTemplate, Loader2, MessageSquare, Pencil, Play, Plus, Sparkles, Square, Trash2, TriangleAlert, Type, Volume2, X, Zap } from "lucide-preact";
+import { ArrowLeft, Check, ChevronLeft, Lock, Unlock, Users, ChevronRight, Clapperboard, ClipboardPaste, CloudRain, Copy, Eye, Heading, ImagePlus, LayoutTemplate, Loader2, MessageSquare, Pencil, Play, Plus, Sparkles, Square, Trash2, TriangleAlert, Type, Volume2, X, Zap } from "lucide-preact";
 import { Block, ConfirmButton, Empty, Pill } from "../../ui/Common.jsx";
 import { Range, Switch } from "../../ui/Controls.jsx";
 import { uploadCinemaImage } from "../../net.js";
-import { toast } from "../../state.js";
+import { canDo, perms, toast } from "../../state.js";
 import { previewCine } from "../../cine.js";
 import { LANES, STEP_LABELS, TEMPLATES, draggedTo, durationOf, newStep, orderOf, pasteAt, rulerTicks, templateSteps, validate } from "../../cinema-model.js";
 import { PRESETS, PRESET_IDS } from "../../fx-model.js";
@@ -349,6 +349,7 @@ function Editor({ start, d, onClose, replace }) {
             <button class="btn" type="button" onClick={() => previewCine(playable(draft), sel ? num(sel.at) : cursor)} data-testid="cine-preview-here" title="Ver desde el paso elegido (o desde el cursor)"><Eye size={15} /> Desde aquí</button>
             <button class="btn btn-primary" type="button" onClick={playNow} disabled={busy !== null || !!auto.reason} data-testid="cine-play-now"><Play size={15} /> Poner para todos</button>
           </div>
+          <Privacy draft={draft} set={set} mine={!draft.owner || draft.owner.id === d.me} />
           <details class="cine-settings" data-testid="cine-settings">
             <summary>Ajustes: {draft.see ? "sobre el juego · " : ""}{draft.bars ? "barras de cine" : "sin barras"} · {draft.skippable ? "se puede saltar" : "no se puede saltar"} · {draft.triggers.length ? `empieza sola con ${plural(draft.triggers.length, "suceso", "sucesos")}` : "solo la pones tú"}</summary>
             <div class="col" style={{ gap: "var(--sp-3)", marginTop: "var(--sp-3)" }}>
@@ -420,7 +421,25 @@ function Editor({ start, d, onClose, replace }) {
   );
 }
 
-const BLANK = () => ({ id: "", name: "Nueva cinemática", boss: "", steps: [newStep("scene", []), { ...newStep("text", [{ at: 0, duration: 1 }]), text: "Escribe aquí lo que se dice…" }], triggers: [], bg: "#000000", bars: true, skippable: true, see: false });
+const BLANK = () => ({ id: "", name: "Nueva cinemática", boss: "", steps: [newStep("scene", []), { ...newStep("text", [{ at: 0, duration: 1 }]), text: "Escribe aquí lo que se dice…" }], triggers: [], bg: "#000000", bars: true, skippable: true, see: false, share: "private", hint: "" });
+
+// Who may open it before it plays: a cinematic is a surprise, also for the rest of the team.
+function Privacy({ draft, set, mine }) {
+  return (
+    <div class="col cine-privacy" style={{ gap: "8px" }} data-testid="cine-privacy">
+      <span class="field-label">Quién la puede abrir antes de que se ponga</span>
+      {mine ? (
+        <div class="row wrap gm-chips" role="group" aria-label="Privacidad">
+          <button type="button" class="choice" aria-pressed={draft.share !== "team" ? "true" : "false"} onClick={() => set({ share: "private" })} data-testid="cine-share-private"><Lock size={13} /> Solo yo</button>
+          <button type="button" class="choice" aria-pressed={draft.share === "team" ? "true" : "false"} onClick={() => set({ share: "team" })} data-testid="cine-share-team"><Users size={13} /> Todo el equipo de GM</button>
+        </div>
+      ) : <span class="faint">La escribió {draft.owner?.name || "otro GM"}; solo quien la escribió decide quién la ve.</span>}
+      <label class="field"><span class="field-label">Nombre público <span class="faint">(lo que ve el resto del equipo mientras es privada; vacío: «Cinemática de …»)</span></span>
+        <input class="input" maxLength={80} value={draft.hint || ""} placeholder="p. ej. Final del capítulo 2" onInput={(e) => set({ hint: e.currentTarget.value })} data-testid="cine-hint" disabled={!mine} />
+      </label>
+    </div>
+  );
+}
 
 function List({ d, replace, edit }) {
   const [busy, run] = useDo();
@@ -433,7 +452,7 @@ function List({ d, replace, edit }) {
     <div class="dash-col" data-testid="cine-list">
       <Card title="Cinemáticas" icon={Clapperboard} testid="cine-card"
         hint="Escenas con texto, imágenes y sonido en el momento exacto, para todos a la vez. Pónlas tú o ligalas a lo que pasa (aparece el jefe, cae el jefe, un dominio…)."
-        actions={<button class="btn btn-sm btn-primary" type="button" onClick={() => edit(BLANK())} data-testid="cine-new"><Plus size={14} /> Nueva</button>}>
+        actions={canDo("cinema") && <button class="btn btn-sm btn-primary" type="button" onClick={() => edit(BLANK())} data-testid="cine-new"><Plus size={14} /> Nueva</button>}>
         <div class="row" style={{ gap: "10px", marginBottom: "var(--sp-3)" }}>
           <Switch label="Cinemáticas automáticas" checked={d.autoplay} onChange={auto} />
           <span>Que empiecen solas cuando pasa lo que tienen ligado</span>
@@ -441,18 +460,22 @@ function List({ d, replace, edit }) {
         {d.cinemas.length === 0
           ? <Empty icon={Clapperboard} title="Todavía no hay cinemáticas">Crea la primera: un texto, un sonido y un momento.</Empty>
           : d.cinemas.map((c) => (
-            <div key={c.id} class={cx("cine-item", d.running === c.id && "is-running")} data-testid={`cine-item-${c.id}`}>
+            <div key={c.id} class={cx("cine-item", d.running === c.id && "is-running", c.sealed && "is-sealed")} data-testid={`cine-item-${c.id}`}>
+              {c.sealed && <span class="cine-seal" aria-hidden="true"><Lock size={16} /></span>}
               <div class="info">
                 <strong class="ellipsis">{c.name}</strong>
-                <span class="faint">{plural(c.steps.length, "paso", "pasos")} · {Math.round(c.duration - 1)} s</span>
+                <span class="faint">{c.sealed ? `Privada de ${c.owner?.name || "otro GM"}` : plural(c.steps.length, "paso", "pasos")} · {Math.round(c.duration - 1)} s
+                  {!c.sealed && c.owner && (c.share === "team" ? <> · <Unlock size={11} /> equipo</> : <> · <Lock size={11} /> solo {c.owner.id === d.me ? "tú" : c.owner.name}</>)}</span>
                 <div class="row wrap" style={{ gap: "4px" }}>{c.triggers.map((t) => <Pill key={t} tone="info">{(d.events.find((e) => e.id === t) || { label: t }).label}</Pill>)}</div>
               </div>
               {d.running === c.id
                 ? <button class="btn btn-sm btn-danger" type="button" onClick={stop} data-testid={`cine-stop-${c.id}`}><Square size={14} /> Parar</button>
-                : <button class="btn btn-sm btn-primary" type="button" onClick={() => play(c)} disabled={busy !== null} data-testid={`cine-play-${c.id}`}><Play size={14} /> Poner</button>}
-              <button class="btn btn-sm" type="button" onClick={() => edit({ ...c, see: !!c.see, steps: c.steps.map((s) => ({ ...s, color: s.color || "", avatar: s.avatar || "", image: s.image || "", ...(s.type === "title" ? { subtitle: s.subtitle || "" } : {}) })) })} data-testid={`cine-edit-${c.id}`}><Pencil size={14} /> Editar</button>
-              <button class="btn btn-sm btn-ghost" type="button" onClick={() => copy(c)} aria-label={`Duplicar «${c.name}»`} title="Duplicar"><Copy size={14} /></button>
-              <ConfirmButton icon={Trash2} confirm="Sí, borrar" onConfirm={() => del(c)} class="btn-ghost" testid={`cine-delete-${c.id}`} label={`Borrar «${c.name}»`} />
+                : canDo("stage") && <button class="btn btn-sm btn-primary" type="button" onClick={() => play(c)} disabled={busy !== null} data-testid={`cine-play-${c.id}`}><Play size={14} /> Poner</button>}
+              {!c.sealed && canDo("cinema") && <>
+                <button class="btn btn-sm" type="button" onClick={() => edit({ ...c, see: !!c.see, share: c.share || "team", hint: c.hint || "", steps: c.steps.map((s) => ({ ...s, color: s.color || "", avatar: s.avatar || "", image: s.image || "", ...(s.type === "title" ? { subtitle: s.subtitle || "" } : {}) })) })} data-testid={`cine-edit-${c.id}`}><Pencil size={14} /> Editar</button>
+                <button class="btn btn-sm btn-ghost" type="button" onClick={() => copy(c)} aria-label={`Duplicar «${c.name}»`} title="Duplicar"><Copy size={14} /></button>
+              </>}
+              {(!c.sealed || perms.value.host) && canDo("cinema") && <ConfirmButton icon={Trash2} confirm="Sí, borrar" onConfirm={() => del(c)} class="btn-ghost" testid={`cine-delete-${c.id}`} label={`Borrar «${c.name}»`} />}
             </div>
           ))}
       </Card>

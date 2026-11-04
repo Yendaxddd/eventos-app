@@ -188,7 +188,7 @@ function onFrame(frame, arrival) {
         conn.value = { state: "connected", text: "Conectado", detail: "" };
         banner.value = null;
         you.value = frame.you;
-        perms.value = frame.perms || { gm: false };
+        perms.value = { gm: false, can: [], host: false, ...(frame.perms || {}) };
         channelName.value = frame.channel || "Evento";
         users.value = frame.users || [];
         canWrite.value = !!frame.canWrite;
@@ -217,6 +217,7 @@ function onFrame(frame, arrival) {
       break;
     }
     case "users": users.value = frame.users || []; break;
+    case "perms": perms.value = { gm: false, can: [], host: false, ...(frame.perms || {}) }; clearPanelCache(); break;   // the team changed what this person may do
     case "chars":                                           // the player registered or dropped a character (maybe from another screen)
       batch(() => {
         characters.value = frame.characters || [];

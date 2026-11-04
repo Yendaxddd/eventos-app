@@ -12,12 +12,13 @@ LINKED_EVENTS = ("fight_start", "boss_spawn", "boss_domain", "boss_defeated", "f
 
 
 class QuickRpc:
-    def _links(self) -> list[dict]:
+    def _links(self, conn: Conn | None = None) -> list[dict]:
         """For each moment of a fight, what is already bound to it: cinematics, music, an effect and a sound."""
         out = []
         library, fx = self.audio.library, self.fx.book
         for event in LINKED_EVENTS:
-            cinemas = [{"id": c["id"], "name": c["name"], "boss": c.get("boss", "")} for c in self.cinema.book.items.values() if event in c["triggers"]]
+            cinemas = [{"id": v["id"], "name": v["name"], "boss": v.get("boss", ""), "sealed": bool(v.get("sealed"))}
+                       for v in (self.cinema_view(conn, c) if conn is not None else c for c in self.cinema.book.items.values()) if event in v["triggers"]]
             phase = library.phases.get(event)
             cue = library.cues.get(event)
             effect = fx.events.get(event)
@@ -35,11 +36,12 @@ class QuickRpc:
             "state": state,
             "boss": {"active": state["boss"], "mode": state["bossMode"], "character": config["character"], "hp": config["hp"],
                      "abilities": [{"name": a["name"], "damage": a["damage"]} for a in config["abilities"][:12]], "domain": config["domain"]["name"] if config["domain"] else None},
-            "cinemas": [{"id": c["id"], "name": c["name"], "seconds": max(1, round(c["duration"] - 1)), "triggers": c["triggers"]} for c in self.cinema.book.listing()],
+            "cinemas": [{"id": v["id"], "name": v["name"], "seconds": max(1, round(v["duration"] - 1)), "triggers": v["triggers"], "sealed": bool(v.get("sealed"))}
+                        for v in (self.cinema_view(conn, c) for c in self.cinema.book.listing() if c.get("kind", "gm") == "gm" or c.get("status") == "approved")],
             "running": run["id"] if run else None,
             "music": None if music is None else {"name": music["sound"]["name"], "volume": music["volume"]},
             "tracks": [{"id": s["id"], "name": s["name"]} for s in self.audio.library.public() if s["kind"] == "music"],
-            "links": self._links(),
+            "links": self._links(conn),
             "sounds": [{"id": s["id"], "name": s["name"], "kind": s["kind"]} for s in self.audio.library.public()],
             "presets": list(PRESET_IDS),
             "mobs": {"bestiary": [{"id": t["id"], "name": t["name"], "hp": t["hp"]} for t in self.mobs.bestiary.items.values()], **self.mobs.public()},

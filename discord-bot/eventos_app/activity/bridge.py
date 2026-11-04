@@ -4,6 +4,7 @@ bot decides who may be there at all."""
 from __future__ import annotations
 
 import asyncio
+import contextvars
 import logging
 import re
 import json
@@ -26,6 +27,8 @@ from .audio import AudioDirector, AudioLibrary
 from .audio_rpc import AudioRpc
 from .cinema import CinemaBook, CinemaDirector
 from .cinema_rpc import CinemaRpc
+from .staff import OP_PERMS, PERM_IDS, SHARED_OPS, StaffBook
+from .staff_rpc import StaffRpc
 from .fx import FxBook, FxDirector
 from .arena import ArenaQtes
 from .fx_rpc import FxRpc
@@ -123,12 +126,15 @@ def serialize_message(message: Any, own_webhooks: set[int] | frozenset[int] = fr
 VERDICT_WAITS, VERDICT_STEP = 15, 0.02     # up to about a quarter of a second for the bot's verdict on an answer
 
 
-class ActivityBridge(PanelRpc, GmRpc, TupperRpc, AudioRpc, CinemaRpc, FxRpc, QuickRpc, MobsRpc):
+CURRENT_OP: contextvars.ContextVar[str] = contextvars.ContextVar("activity_rpc_op", default="")    # the request being answered (each runs in its own task)
+
+
+class ActivityBridge(PanelRpc, GmRpc, TupperRpc, AudioRpc, CinemaRpc, FxRpc, QuickRpc, MobsRpc, StaffRpc):
     def __init__(self, hub: Hub, app: Any, pool: Callable[[], Any] | None = None, avatar_file: Path | None = None,
                  prefs_file: Path | None = None, latency_file: Path | None = None, data_dir: Path | None = None,
                  gm_log_file: Path | None = None, values_file: Path | None = None, files: MediaStore | None = None,
                  char_images_file: Path | None = None, audio_file: Path | None = None, cinema_file: Path | None = None,
-                 fx_file: Path | None = None, mobs_file: Path | None = None) -> None:
+                 fx_file: Path | None = None, mobs_file: Path | None = None, staff_file: Path | None = None) -> None:
         self.hub, self.app = hub, app        # app: the AdvancedQTEBot instance
         self.pool = pool or (lambda: None)   # the SenderPool, for webhook sends
         self._listeners: list[tuple[Any, str]] = []
@@ -149,6 +155,7 @@ class ActivityBridge(PanelRpc, GmRpc, TupperRpc, AudioRpc, CinemaRpc, FxRpc, Qui
         self.mobs = Mobs(self, mobs_file)                                      # the mini enemies (mobs.py, mobs_rpc.py)
         self.cinema = CinemaDirector(hub, CinemaBook(cinema_file, self.audio.library), post=self._cinema_post)     # the scripts and their playing (cinema.py)
         self.gm = GmPanel(app, GmLog(gm_log_file), data_dir, values_file)       # the game-master panel (gm/, gm_rpc.py)
+        self.staff = StaffBook(staff_file if staff_file is not None else (Path(data_dir) / "gm_staff.json" if data_dir else None))   # who is on the team, and with which boxes (staff.py)
 
     # ---- wiring ---------------------------------------------------------------------------------
     def start(self) -> None:
@@ -481,31 +488,55 @@ class ActivityBridge(PanelRpc, GmRpc, TupperRpc, AudioRpc, CinemaRpc, FxRpc, Qui
     def compensation_of(self, conn: Conn) -> dict:
         return compensation(conn.net_ms, self.latency.device_ms(conn.user_id), self.cap_ms)
 
-    async def gm_user(self, user_id: int, dev_gm: bool = False) -> bool:
-        """The same question as `is_gm`, for somebody who is not connected through the socket (a file upload over HTTP)."""
-        if user_id < 0:                                  # a test window on this PC: only if it asked to be a game master
-            return dev_gm
+    async def access_of(self, user_id: int, dev: bool = False, dev_gm: bool = False) -> tuple[list[str], bool]:
+        """(the boxes of the GM team this person has, whether they are a host). Asked again on every action: a role taken away in
+        Discord, or a box unticked in the panel, counts at once."""
+        if dev:                                          # a test window on this PC: the host's own, if it asked to be a game master
+            return (list(PERM_IDS), True) if dev_gm else ([], False)
+        if user_id <= 0:
+            return [], False
         member = await self.member_of(user_id)
+        if member is None:
+            return [], False
         try:
-            return bool(member is not None and self.app.is_admin(member))
+            admin = bool(self.app.is_admin(member))
         except Exception:  # noqa: BLE001
-            return False
+            admin = False
+        roles = [r.id for r in (getattr(member, "roles", None) or []) if getattr(r, "id", None) is not None]
+        guild = getattr(member, "guild", None) or self.app.resolve_event_guild()
+        owner = getattr(guild, "owner_id", None) == user_id
+        return self.staff.resolve(user_id, roles, admin, owner)
+
+    async def conn_access(self, conn: Conn) -> tuple[list[str], bool]:
+        return await self.access_of(conn.user_id, conn.dev, conn.gm)
+
+    async def gm_user(self, user_id: int, dev_gm: bool = False, need: str | None = None) -> bool:
+        """The same question as `is_gm`, for somebody who is not connected through the socket (a file upload over HTTP)."""
+        perms, _host = await self.access_of(user_id, user_id < 0, dev_gm)
+        return bool(perms) if need is None else need in perms
 
     async def is_gm(self, conn: Conn) -> bool:
-        """May this connection use the game-master panel? The bot decides by role, every time it is asked."""
-        if conn.dev:
-            return conn.gm
-        member = await self.member_of(conn.user_id)
-        try:
-            return bool(member is not None and self.app.is_admin(member))
-        except Exception:  # noqa: BLE001
-            return False
+        """May this connection use the game-master panel at all (any box)? The bot decides, every time it is asked."""
+        perms, _host = await self.conn_access(conn)
+        return bool(perms)
+
+    async def perms_frame(self, conn: Conn) -> dict:
+        perms, host = await self.conn_access(conn)
+        return {"gm": bool(perms), "can": perms, "host": host}
+
+    async def push_perms(self) -> None:
+        """The team changed: every screen hears what it may do now (its menu and tabs follow)."""
+        for conn in list(self.hub.conns.values()):
+            try:
+                await self.hub.send(conn, {"t": "perms", "perms": await self.perms_frame(conn)})
+            except Exception:  # noqa: BLE001
+                log.exception("could not tell a screen its permissions")
 
     async def welcome_extras(self, conn: Conn) -> dict:
         comp = self.compensation_of(conn)
         conn.comp_sent = comp
         # prefs is None when the server knows nothing about this person yet: the client then keeps (and sends) the ones it has
-        return {"perms": {"gm": await self.is_gm(conn)}, "prefs": self.prefs.get(conn.user_id) if self.prefs.has(conn.user_id) else None,
+        return {"perms": await self.perms_frame(conn), "prefs": self.prefs.get(conn.user_id) if self.prefs.has(conn.user_id) else None,
                 "calib": self.latency.get(conn.user_id),
                 "comp": comp, "rules": self.rules(), "charAvatars": self.char_avatars(conn.user_id), "audio": self.audio.welcome(),
                 "cine": self.cinema.current(), "mobs": self.mobs.public()}
@@ -536,6 +567,7 @@ class ActivityBridge(PanelRpc, GmRpc, TupperRpc, AudioRpc, CinemaRpc, FxRpc, Qui
         handler = getattr(self, "rpc_" + op.replace(".", "_"), None) if op.replace(".", "_").replace("_", "").isalnum() else None
         if handler is None:
             raise RpcError("Esa acción no existe.")
+        CURRENT_OP.set(op)
         return await handler(conn, args)
 
     async def rpc_ping(self, conn: Conn, args: dict):

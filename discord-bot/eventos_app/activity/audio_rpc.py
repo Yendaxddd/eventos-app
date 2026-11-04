@@ -120,7 +120,7 @@ class AudioRpc:
 
     # ---- the uploads (the page sends the file over HTTP) -------------------------------------------------------------------
     async def store_audio(self, user_id: int, filename: str, kind: str, data: bytes, dev_gm: bool = False) -> dict:
-        if not await self.gm_user(user_id, dev_gm):
+        if not await self.gm_user(user_id, dev_gm, need="media"):
             raise RpcError("Esto es solo para el equipo de GM.")
         sound = self.audio.library.add(filename, data, kind)
         who = (await self.who_is(user_id, fetch=False))[0]

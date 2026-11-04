@@ -17,9 +17,18 @@ log = logging.getLogger("eventos_app.activity")
 class GmRpc:
     gm: GmPanel
 
-    async def _gm(self, conn: Conn) -> str:
-        if not await self.is_gm(conn):
+    async def _gm(self, conn: Conn, need: str | None = None) -> str:
+        """Is this person on the team, with the box this request needs? Raises RpcError if not. Returns their name for the history."""
+        from .bridge import CURRENT_OP                   # noqa: PLC0415 - the bridge imports this module
+        from .staff import OP_PERMS, PERMS, SHARED_OPS   # noqa: PLC0415
+        perms, _host = await self.conn_access(conn)
+        if not perms:
             raise RpcError("Esto es solo para el equipo de GM.")
+        op = CURRENT_OP.get()
+        wanted = (need,) if need else SHARED_OPS.get(op) or ((OP_PERMS[op],) if op in OP_PERMS else ())
+        if wanted and not any(w in perms for w in wanted):
+            label = dict((p[0], p[1]) for p in PERMS).get(wanted[0], wanted[0])
+            raise RpcError(f"No tienes el permiso «{label}» del equipo de GM.")
         return conn.name
 
     @staticmethod

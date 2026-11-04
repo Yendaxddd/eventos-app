@@ -73,7 +73,7 @@ function PaletteBox() {
   const [query, setQuery] = useState("");
   const [index, setIndex] = useState(0);
   const input = useRef(null);
-  const found = searchDestinations(query, { gm: perms.value.gm }).filter((d) => d.view !== "menu" || !query);
+  const found = searchDestinations(query, { gm: perms.value.gm, can: perms.value.can || [] }).filter((d) => d.view !== "menu" || !query);
   const pick = Math.min(index, Math.max(0, found.length - 1));
   useLayoutEffect(() => { input.current && input.current.focus(); }, []);          // at once: the first letters typed must land in it
   const onKey = (e) => {
