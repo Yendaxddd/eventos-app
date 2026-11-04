@@ -489,7 +489,7 @@ class ActivityBridge(PanelRpc, GmRpc, TupperRpc, AudioRpc, CinemaRpc, FxRpc, Qui
             "times": {d: {"evade": t.get("evade_window"), "parry": list(t.get("parry_window") or (0, 0)), "perfect": t.get("perfect_parry"),
                           "timeout": timeouts.get(d)} for d, t in times.items()},
             "bfWindow": float(getattr(app, "bf_timing_window", 0.2)), "chainWindow": float(getattr(app, "bf_chain_timing_window", 0.15)),
-            "counterWindow": float(getattr(app, "counter_window", 1.5) or 1.5), "saveLimit": int(getattr(app, "save_limit", 2)), "saveWindow": float(getattr(app, "save_time_window", 60)),
+            "counterWindow": float(getattr(app, "counter_window", 5.0) or 5.0), "saveLimit": int(getattr(app, "save_limit", 2)), "saveWindow": float(getattr(app, "save_time_window", 60)),
             "ultimateCost": float(getattr(app, "ultimate_cost", 100)),
         }
 

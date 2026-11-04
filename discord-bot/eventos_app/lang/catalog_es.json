@@ -2784,12 +2784,6 @@
 "es": "Probabilidad de contraataque (0-100%)"
 },
 {
-"id": "fc037f21d653",
-"kind": "user",
-"en": "Counter window in seconds (0.5-5, default 1.5)",
-"es": "Ventana de contraataque en segundos (0.5-5, por defecto 1.5)"
-},
-{
 "id": "4c281d3dcaa5",
 "kind": "user",
 "en": "Current",
@@ -7360,5 +7354,17 @@
 "kind": "user",
 "en": "⏱️ The Mirror Shard is recharging: **{1}s** left.",
 "es": "⏱️ El Mirror Shard se está recargando: faltan **{1} s**."
+},
+{
+"id": "4a388eaef7f0",
+"kind": "user",
+"en": "**{1}**: Evade {2}s, Parry {3}-{4}s, Timeout {5}s\n",
+"es": "**{1}**: Esquive {2}s, Parry {3}-{4}s, Límite {5}s\n"
+},
+{
+"id": "6cba8772e075",
+"kind": "user",
+"en": "Counter window in seconds (0.5-5, default 5)",
+"es": "Ventana de contraataque en segundos (0.5-5, por defecto 5)"
 }
 ]

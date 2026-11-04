@@ -88,6 +88,16 @@ log, LOG_FILENAME = setup_logging()
 console.print(f"[cyan]📝 Logging to: {LOG_FILENAME}[/cyan]")
 
 # Timing profiler for performance diagnostics
+# QTE timing per difficulty (seconds from the start of the QTE). /config reset goes back to these.
+DEFAULT_QTE_TIMES = {
+    'easy': {'evade_window': 6.0, 'parry_window': (4.0, 7.0), 'perfect_parry': 5.5},
+    'medium': {'evade_window': 4.5, 'parry_window': (3.0, 5.0), 'perfect_parry': 4.0},
+    'hard': {'evade_window': 4.0, 'parry_window': (2.5, 4.5), 'perfect_parry': 3.5},
+    'impossible': {'evade_window': 1.5, 'parry_window': (0.8, 1.7), 'perfect_parry': 1.25},
+}
+DEFAULT_QTE_TIMEOUTS = {'easy': 6.75, 'medium': 5.0, 'hard': 5.75, 'impossible': 3.5}
+
+
 class TimingProfiler:
     """Track timing of operations for performance diagnostics"""
     def __init__(self):
@@ -328,14 +338,8 @@ class AdvancedQTEBot:
         self.max_hp = 100
         self.hp_bar_messages = {}  # Cache: {user_id_or_boss_name: message_id} - prevents slow history searches
         
-        # ========== QTE TIMING SYSTEM ==========
-        self.qte_timings = {
-            'easy': {'evade_window': 6.0, 'parry_start': 4.0, 'parry_end': 7.0, 'timeout': 10.0},
-            'medium': {'evade_window': 4.5, 'parry_start': 3.0, 'parry_end': 5.0, 'timeout': 7.0},
-            'hard': {'evade_window': 4.0, 'parry_start': 2.5, 'parry_end': 4.5, 'timeout': 5.0},
-            'impossible': {'evade_window': 1.5, 'parry_start': 0.8, 'parry_end': 1.7, 'timeout': 3.0}
-        }
-        
+        # QTE timing: self.qte_times / self.qte_timeout_durations (below) are what the handlers, /config qte and the Activity use
+
         # Variable damage per difficulty
         self.damage_ranges = {
             'easy': (1, 3),        # Random 1-3 damage
@@ -382,7 +386,7 @@ class AdvancedQTEBot:
         self.counter_enabled_players = {}  # {user_id: qte_id}
         self.counter_deadlines = {}  # {user_id: time.time() when the counter window closes} (shown by the Discord Activity)
         self.counter_context = {}  # {user_id: {"qte_id": qte_id, "difficulty": difficulty}}
-        self.counter_window = 1.5  # LOWERED: 1.5 seconds from QTE start (was 2.0)
+        self.counter_window = 5.0  # seconds to counter-attack after an evade (/editvalues, the Activity's GM panel; its bar uses it too)
         self.feedback_mode = os.environ.get("EVENTOS_FEEDBACK", "auto").strip().lower()   # see feedback_quiet
         if self.feedback_mode not in ("auto", "quiet", "chat"):
             self.feedback_mode = "auto"
@@ -656,36 +660,10 @@ class AdvancedQTEBot:
         self.latency_offset = 0.25
 
         # QTE timing configurations (+500ms for better balance)
-        self.qte_times = {
-            'easy': {
-                'evade_window': 6.0,      # Was 5.5, +0.5s
-                'parry_window': (4.0, 7.0),  # Was (3.5, 6.5), +0.5s
-                'perfect_parry': 5.5      # Center adjusted
-            },
-            'medium': {
-                'evade_window': 4.5,      # Was 4.0, +0.5s
-                'parry_window': (3.0, 5.0),  # Was (2.5, 4.5), +0.5s
-                'perfect_parry': 4.0
-            },
-            'hard': {
-                'evade_window': 4.0,      # Was 3.5, +0.5s
-                'parry_window': (2.5, 4.5),  # Was (2.0, 4.0), +0.5s
-                'perfect_parry': 3.5
-            },
-            'impossible': {
-                'evade_window': 1.5,      # Was 1.0, +0.5s
-                'parry_window': (0.8, 1.7),  # Was (0.3, 1.2), +0.5s
-                'perfect_parry': 1.25
-            }
-        }
+        self.qte_times = {d: dict(t) for d, t in DEFAULT_QTE_TIMES.items()}
 
         # Seconds until an unanswered single/group QTE counts as failed (the Discord Activity draws its bar with these)
-        self.qte_timeout_durations = {
-            'easy': 6.75,
-            'medium': 5.0,
-            'hard': 5.75,
-            'impossible': 3.5
-        }
+        self.qte_timeout_durations = dict(DEFAULT_QTE_TIMEOUTS)
 
         # Difficulty emoji indicators
         self.difficulty_emoji = {
@@ -884,7 +862,6 @@ class AdvancedQTEBot:
     def save_live_config(self):
         """Save the live configuration (what /config save writes and _load_live_config restores). Also used by the Activity's GM panel."""
         save_data("live_config", {
-            "qte_timings": self.qte_timings,
             "damage_ranges": {k: list(v) for k, v in self.damage_ranges.items()},
             "revenge_threshold": self.revenge_threshold,
             "revenge_damage_multiplier": self.revenge_damage_multiplier,
@@ -901,9 +878,7 @@ class AdvancedQTEBot:
             config = load_data("live_config", None)
             if config:
                 # QTE Timings
-                if "qte_timings" in config:
-                    self.qte_timings.update(config["qte_timings"])
-                    console.print("[cyan]✓ Loaded saved QTE timings[/cyan]")
+                # (an old "qte_timings" entry is ignored: it never reached the game; the timings are kept in qte_settings)
                 
                 # Damage Ranges
                 if "damage_ranges" in config:
@@ -1576,9 +1551,9 @@ Your response (1-2 sentences max):"""
     
     async def fake_qte_timeout(self, qte_id: int, difficulty: str, target_member):
         """Handle fake QTE timeout - success if no one responded!"""
-        timing = self.qte_times.get(difficulty, {'timeout': 3.0})
-        await asyncio.sleep(timing.get('timeout', 3.0) + self.answer_grace())
-        
+        # as long as a real QTE of its difficulty: one that ends sooner gives itself away (the Activity draws it this long too)
+        await asyncio.sleep(self.qte_timeout_durations.get(difficulty, 3.0) + self.answer_grace())
+
         if qte_id not in self.active_qtes:
             return  # Someone failed it already
         
@@ -3138,8 +3113,9 @@ Your response (1-2 sentences max):"""
                     
                     # QTE Timing
                     timing_text = ""
-                    for diff, timing in self.qte_timings.items():
-                        timing_text += f"**{diff.title()}**: Evade {timing['evade_window']}s, Parry {timing['parry_start']}-{timing['parry_end']}s\n"
+                    for diff, timing in self.qte_times.items():
+                        p_start, p_end = timing['parry_window']
+                        timing_text += f"**{diff.title()}**: Evade {timing['evade_window']}s, Parry {p_start}-{p_end}s, Timeout {self.qte_timeout_durations.get(diff, '?')}s\n"
                     embed.add_field(name="⏱️ QTE Timing", value=timing_text, inline=False)
                     
                     # Damage Ranges
@@ -3188,19 +3164,25 @@ Your response (1-2 sentences max):"""
                         return
                     
                     diff = param1.lower()
-                    if diff not in self.qte_timings:
+                    if diff not in self.qte_times:
                         await interaction.response.send_message(f"❌ Invalid difficulty: {diff}", ephemeral=True)
                         return
-                    
+
                     try:
-                        evade = float(param2) if param2 else self.qte_timings[diff]['evade_window']
-                        parry_start = float(param3) if param3 else self.qte_timings[diff]['parry_start']
-                        parry_end = float(param4) if param4 else self.qte_timings[diff]['parry_end']
-                        
-                        self.qte_timings[diff]['evade_window'] = evade
-                        self.qte_timings[diff]['parry_start'] = parry_start
-                        self.qte_timings[diff]['parry_end'] = parry_end
-                        
+                        # the table the QTE handlers, the Activity and its GM panel use (the old `qte_timings` never reached the game)
+                        old_start, old_end = self.qte_times[diff]['parry_window']
+                        evade = float(param2) if param2 else self.qte_times[diff]['evade_window']
+                        parry_start = float(param3) if param3 else old_start
+                        parry_end = float(param4) if param4 else old_end
+                        if not (0 < evade <= 30 and 0 <= parry_start < parry_end <= 30):
+                            raise ValueError
+
+                        self.qte_times[diff].update({'evade_window': evade, 'parry_window': (parry_start, parry_end),
+                                                     'perfect_parry': round((parry_start + parry_end) / 2, 3)})
+                        # the QTE has to last at least until its parry window closes
+                        self.qte_timeout_durations[diff] = max(self.qte_timeout_durations.get(diff, 0), parry_end)
+                        self.save_qte_settings()
+
                         await interaction.response.send_message(
                             f"✅ **{diff.title()} QTE timing updated:**\n"
                             f"Evade: {evade}s, Parry: {parry_start}-{parry_end}s",
@@ -3330,12 +3312,9 @@ Your response (1-2 sentences max):"""
                 
                 elif action == "reset":
                     # Reset to defaults
-                    self.qte_timings = {
-                        'easy': {'evade_window': 6.0, 'parry_start': 4.0, 'parry_end': 7.0, 'timeout': 10.0},
-                        'medium': {'evade_window': 4.5, 'parry_start': 3.0, 'parry_end': 5.0, 'timeout': 7.0},
-                        'hard': {'evade_window': 4.0, 'parry_start': 2.5, 'parry_end': 4.5, 'timeout': 5.0},
-                        'impossible': {'evade_window': 1.5, 'parry_start': 0.8, 'parry_end': 1.7, 'timeout': 3.0}
-                    }
+                    self.qte_times = {d: dict(t) for d, t in DEFAULT_QTE_TIMES.items()}
+                    self.qte_timeout_durations = dict(DEFAULT_QTE_TIMEOUTS)
+                    self.save_qte_settings()
                     self.damage_ranges = {
                         'easy': (1, 3),
                         'medium': (1, 5),
@@ -4988,7 +4967,7 @@ Your response (1-2 sentences max):"""
             charge_dealt="% charge per 10 damage dealt (0-20, default 2)",
             charge_taken="% charge per 5 damage taken (0-20, default 5)",
             charge_counter="% charge per counter (0-20, default 3)",
-            counter_window="Counter window in seconds (0.5-5, default 1.5)",
+            counter_window="Counter window in seconds (0.5-5, default 5)",
             ult_cooldown_per_dmg="Extra cooldown seconds per damage point (0-5, default 0.5)"
         )
         async def editvalues_command(
@@ -7590,8 +7569,8 @@ Your response (1-2 sentences max):"""
                     asyncio.create_task(channel.send(f"⛩️ **SHRINE** interrupted! Duration -5s (remaining: **{new_duration}s**)"))
             # =====================================================
         
-        # Cancel domain expansion cast if in progress
-        if user_id in self.domain_casting:
+        # Cancel domain expansion cast if in progress (a hit a shield took whole does not break it)
+        if actual_damage > 0 and user_id in self.domain_casting:
             casting_data = self.domain_casting.pop(user_id)
             console.print(f"[red]🌌 DOMAIN INTERRUPTED - {user_id} took damage during cast![/red]")
             # Notify in channel
@@ -7962,7 +7941,7 @@ Your response (1-2 sentences max):"""
     async def send_success_with_counter(self, channel, author_mention, response_time, user_id, qte_id, difficulty):
         """Send SUCCESS + COUNTER message merged into one - saves rate limit"""
         self.counter_enabled_players[user_id] = qte_id
-        self.counter_deadlines[user_id] = time.time() + 5.0
+        self.counter_deadlines[user_id] = time.time() + self.counter_window
         # Store difficulty for accurate adaptation tracking during counter
         self.counter_context[user_id] = {"qte_id": qte_id, "difficulty": difficulty}
         
@@ -7974,7 +7953,7 @@ Your response (1-2 sentences max):"""
         counter_msg = await self.feedback(
             user_id, "evade_ok",
             f"✅ {author_mention} **evaded!** ({response_time:.2f}s) "
-            f"| ⚡ **COUNTER** `*attack*` <t:{int(time.time() + 5)}:R>",
+            f"| ⚡ **COUNTER** `*attack*` <t:{int(time.time() + self.counter_window)}:R>",
             ms=round(response_time * 1000), counter=True
         )
         
@@ -7982,7 +7961,7 @@ Your response (1-2 sentences max):"""
             self.counter_messages[user_id] = counter_msg
         
         # Set counter window timeout (will delete message when expired)
-        asyncio.create_task(self.counter_window_timeout(user_id, qte_id, 5.0))
+        asyncio.create_task(self.counter_window_timeout(user_id, qte_id, self.counter_window))
     
     def get_parry_visual_indicator(self, response_time: float, difficulty: str, user_id: int) -> str:
         """Get visual indicator for parry timing - shows Black Flash zones (GUARANTEED if in window!)"""
