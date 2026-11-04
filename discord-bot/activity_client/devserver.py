@@ -81,6 +81,13 @@ async def main():
                 say("boss_defeated", {"name": "Rey de las Maldiciones"})
             return {"ok": True}
         rig.bridge.rpc_dev_fight = dev_fight
+
+        async def dev_power(conn, args):
+            """Dev only: whoever calls it «uses» a power, so their approved cinematic request plays. From the console:
+            await window.__eventos.rpc("dev.power", {slot: "1", character: ""})"""
+            rig.bridge.on_event("power_used", {"user": conn.user_id, "character": args.get("character", ""), "slot": str(args.get("slot", "1")), "name": "Poder"})
+            return {"ok": True}
+        rig.bridge.rpc_dev_power = dev_power
         print(f"Activity dev server: http://127.0.0.1:{rig.port}/?dev=Ana&gm=1", flush=True)
         await asyncio.Event().wait()
 

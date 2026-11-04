@@ -51,7 +51,8 @@ export function useDraft(server) {
 
 // Saves `value` by itself a moment after it stops changing (see autosave.js). `key` says which thing is open: changing it starts over from
 // `value` as what the server has. `save(value)` must resolve to false (or throw) when it did not work; `check(value)` gives "" or why it cannot be saved yet.
-export function useAutosave(value, { save, check = () => "", delay = 700, key = "" }) {
+// `unsaved`: what is on screen is not on the server yet (a new thing that should be kept even if nobody touches it).
+export function useAutosave(value, { save, check = () => "", delay = 700, key = "", unsaved = false }) {
   const [info, setInfo] = useState({ status: "saved", reason: "" });
   const latest = useRef({ save, check });
   latest.current = { save, check };
@@ -60,7 +61,7 @@ export function useAutosave(value, { save, check = () => "", delay = 700, key = 
     saver.current = new Autosaver((v) => latest.current.save(v), { delay, check: (v) => latest.current.check(v), onStatus: (status, reason) => setInfo({ status, reason }) });
   }
   const json = JSON.stringify(value);
-  useEffect(() => { saver.current.baseline(value); }, [key]);
+  useEffect(() => { saver.current.baseline(unsaved ? null : value); }, [key]);
   useEffect(() => { saver.current.update(value); }, [json]);
   useEffect(() => () => { saver.current.flush(); saver.current.dispose(); }, []);
   return { ...info, flush: () => saver.current.flush(), baseline: (v) => saver.current.baseline(v) };

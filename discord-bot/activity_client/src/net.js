@@ -5,7 +5,7 @@ import { initSdk, afterAuth, sdk, SdkTimeout } from "./discord.js";
 import { inDiscord, devName, devGm, devHost, base, store } from "./util.js";
 import { SyncEstimator, qualityOf } from "./clock.js";
 import {
-  conn, banner, you, perms, eventLook, agendaNext, agendaRev, resultsScreen, resultsOpen, summariesRev, channelName, users, canWrite, version, messages, game, me, characters, charAvatars, activeAs,
+  conn, banner, you, perms, eventLook, agendaNext, agendaRev, resultsScreen, resultsOpen, summariesRev, creqRev, channelName, users, canWrite, version, messages, game, me, characters, charAvatars, activeAs,
   rules, link, comp, calib, prefs, toast, flash, myHp, sayRefused,
 } from "./state.js";
 import { DEFAULT_PREFS, sanitizePrefs, saveLocalPrefs } from "./prefs.js";
@@ -229,6 +229,7 @@ function onFrame(frame, arrival) {
       } else resultsOpen.value = false;
       break;
     }
+    case "creq": creqRev.value++; break;                                  // a cinematic request was sent or decided
     case "summaries":                                                       // the published summaries changed
       summariesRev.value++;
       if (frame.new) toast(`Nuevo resumen: «${frame.title}» (Menú → Resúmenes)`, "info", 6000);

@@ -1,4 +1,4 @@
-import { Backpack, BookOpen, CalendarDays, ClipboardList, Crown, Drama, Dumbbell, Gauge, GitBranch, GraduationCap, Image as ImageIcon, LifeBuoy, Medal, Settings, Sparkles, Swords, Trophy, UserRound } from "lucide-preact";
+import { Backpack, BookOpen, CalendarDays, Clapperboard, ClipboardList, Crown, Drama, Dumbbell, Gauge, GitBranch, GraduationCap, Image as ImageIcon, LifeBuoy, Medal, Settings, Sparkles, Swords, Trophy, UserRound } from "lucide-preact";
 import { agendaNext, resultsOpen, resultsScreen, go, link, tutorial, you, version, perms } from "../state.js";
 import { NextEvent } from "./Agenda.jsx";
 import { QUALITY } from "../terms.js";
@@ -24,6 +24,7 @@ const MINE = [
   ["inventory", "Inventario", "Objetos especiales y su progreso.", Backpack, "#fb923c"],
   ["images", "Imágenes", "Las que salen cuando contraatacas.", ImageIcon, "#60a5fa"],
   ["effects", "Mis efectos", "Cómo se ve lo que te pasa a ti.", Sparkles, "#c084fc"],
+  ["cinemas", "Mis cinemáticas", "Escenas para tus poderes (las aprueba el GM).", Clapperboard, "#f97316"],
   ["ranking", "Ranking", "Quién va primero en cada cosa.", Medal, "#fb7185"],
 ];
 

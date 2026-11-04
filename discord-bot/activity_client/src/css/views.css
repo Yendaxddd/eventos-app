@@ -221,3 +221,9 @@
 .sum-editor { display: flex; flex-direction: column; gap: var(--sp-3); margin-top: var(--sp-3); }
 .sum-textarea { font-family: var(--font-mono, ui-monospace, monospace); font-size: .8125rem; line-height: 1.5; }
 .gm-hint svg { vertical-align: -2px; }
+
+/* ── Players' cinematic requests ────────────────────────────────────────────────────────────────────────────────── */
+.creq-bind { display: flex; flex-direction: column; gap: var(--sp-2); padding: var(--sp-3); border-radius: var(--r-md); background: color-mix(in srgb, var(--primary) 8%, var(--surface)); border: 1px solid color-mix(in srgb, var(--primary) 30%, var(--line-soft)); }
+.creq-review, .creq-note { display: block; margin: 4px 0 0; font-size: .8rem; color: var(--text-dim); font-style: italic; }
+.creq-gm { display: flex; flex-direction: column; gap: var(--sp-2); padding: var(--sp-3); border-radius: var(--r-md); background: var(--surface); border: 1px solid var(--line-soft); }
+.creq-gm + .creq-gm { margin-top: var(--sp-2); }

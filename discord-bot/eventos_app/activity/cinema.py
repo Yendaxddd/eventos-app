@@ -25,6 +25,7 @@ import json
 import logging
 import re
 import secrets
+import time
 from pathlib import Path
 from typing import Any, Awaitable, Callable
 
@@ -197,7 +198,40 @@ def clean_cinema(raw: Any, library: AudioLibrary | None, known_id: str | None = 
     return {"id": known_id or str(raw.get("id") or "") or secrets.token_hex(4), "name": name, "steps": steps, "triggers": triggers,
             "boss": _line(raw.get("boss"), 80), "bg": _color(raw.get("bg"), "Fondo", "#000000"), "bars": bool(raw.get("bars", True)), "skippable": bool(raw.get("skippable", True)),
             "see": bool(raw.get("see", False)),          # see-through: the game stays visible behind (a dialogue over the fight)
-            "duration": round(length + 1.0, 2), **clean_privacy(raw)}
+            "duration": round(length + 1.0, 2), **clean_privacy(raw), **clean_request(raw)}
+
+
+# A player's cinematic for their own power or action (cinema_requests.py): it plays when THEY do that, once a game master approves it.
+REQUEST_STATUSES = ("draft", "pending", "approved", "rejected")
+PLAYER_EVENTS = ("power_used", "black_flash", "domain", "domain_cast", "counter", "parry_ok", "rescue_ok", "mirror_invoke", "chain_max", "combo_done")
+
+
+def clean_request(raw: dict) -> dict:
+    if raw.get("kind") != "request":
+        return {"kind": "gm"}
+    bind = raw.get("bind") if isinstance(raw.get("bind"), dict) else {}
+    event = bind.get("event") if bind.get("event") in PLAYER_EVENTS else "power_used"
+    slot = str(bind.get("slot") or "")
+    try:
+        cooldown = max(0, min(3600, int(bind.get("cooldown", 300))))
+    except (TypeError, ValueError):
+        cooldown = 300
+    return {"kind": "request", "status": raw.get("status") if raw.get("status") in REQUEST_STATUSES else "draft",
+            "bind": {"event": event, "user": str(bind.get("user") or "")[:24], "character": _line(bind.get("character"), 80),
+                     "slot": slot if slot in ("1", "2") else "", "cooldown": cooldown},
+            "note": _line(raw.get("note"), 300), "review": _line(raw.get("review"), 300)}
+
+
+def request_matches(cinema: dict, event: str, data: dict) -> bool:
+    """Does this approved player cinematic belong to what just happened (their event, their character, their power)?"""
+    bind = cinema.get("bind") or {}
+    if cinema.get("kind") != "request" or cinema.get("status") != "approved" or bind.get("event") != event:
+        return False
+    if str(data.get("user") or "") != bind.get("user"):
+        return False
+    if bind.get("character") and str(data.get("character") or "").casefold() != bind["character"].casefold():
+        return False
+    return not bind.get("slot") or str(data.get("slot") or "") == bind["slot"]
 
 
 SHARES = ("private", "team")
@@ -299,6 +333,7 @@ class CinemaDirector:
         self.run: dict | None = None                    # {"id", "cinema", "startedAt"}
         self._tasks: list[asyncio.Task] = []
         self.on_event_enabled = True
+        self._last_played: dict[str, float] = {}           # a player's cinematic -> when it last played (its cooldown)
         self.on_played: Callable[[dict], Any] | None = None    # told each time a cinematic starts (the summaries' log)
 
     def current(self) -> dict | None:
@@ -360,8 +395,17 @@ class CinemaDirector:
         """Something happened in the game: start the first cinematic bound to it (unless one is already playing)."""
         if not self.on_event_enabled or self.current() is not None:
             return False
-        who = str((data or {}).get("name") or "").strip().casefold()
-        candidates = [c for c in self.book.items.values() if event in c["triggers"]]
+        data = data or {}
+        now = time.monotonic()
+        for cinema in self.book.items.values():            # a player's own cinematic for this very power or action goes first
+            if request_matches(cinema, event, data):
+                if now - self._last_played.get(cinema["id"], -1e9) < cinema["bind"].get("cooldown", 300):
+                    continue
+                self._last_played[cinema["id"]] = now
+                await self.play(cinema["id"])
+                return True
+        who = str(data.get("name") or "").strip().casefold()
+        candidates = [c for c in self.book.items.values() if event in c["triggers"] and c.get("kind", "gm") == "gm"]
         # one made for this boss wins over one for any boss
         candidates.sort(key=lambda c: 0 if c.get("boss") and event in BOSS_EVENTS else 1)
         for cinema in candidates:

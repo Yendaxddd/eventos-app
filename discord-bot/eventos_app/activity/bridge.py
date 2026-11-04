@@ -33,6 +33,7 @@ from .look import LookBook, LookRpc
 from .agenda import AgendaBook, AgendaRpc
 from .results import ResultsBook, ResultsRpc, RoundTracker
 from .summary import AiConfig, CinemaLog, SummaryBook, SummaryRpc
+from .cinema_requests import CinemaRequestRpc
 from .fx import FxBook, FxDirector
 from .arena import ArenaQtes
 from .fx_rpc import FxRpc
@@ -133,7 +134,7 @@ VERDICT_WAITS, VERDICT_STEP = 15, 0.02     # up to about a quarter of a second f
 CURRENT_OP: contextvars.ContextVar[str] = contextvars.ContextVar("activity_rpc_op", default="")    # the request being answered (each runs in its own task)
 
 
-class ActivityBridge(PanelRpc, GmRpc, TupperRpc, AudioRpc, CinemaRpc, FxRpc, QuickRpc, MobsRpc, StaffRpc, LookRpc, AgendaRpc, ResultsRpc, SummaryRpc):
+class ActivityBridge(PanelRpc, GmRpc, TupperRpc, AudioRpc, CinemaRpc, FxRpc, QuickRpc, MobsRpc, StaffRpc, LookRpc, AgendaRpc, ResultsRpc, SummaryRpc, CinemaRequestRpc):
     def __init__(self, hub: Hub, app: Any, pool: Callable[[], Any] | None = None, avatar_file: Path | None = None,
                  prefs_file: Path | None = None, latency_file: Path | None = None, data_dir: Path | None = None,
                  gm_log_file: Path | None = None, values_file: Path | None = None, files: MediaStore | None = None,

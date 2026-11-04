@@ -159,8 +159,8 @@ class CinemaRpc:
 
     # ---- a picture for a cinematic (a game master uploads it over HTTP; it stays on this PC) ----------------------------------------
     async def store_cinema_image(self, user_id: int, filename: str, data: bytes, dev_gm: bool = False) -> dict:
-        if not await self.gm_user(user_id, dev_gm, need="cinema"):
-            raise RpcError("Esto es solo para el equipo de GM.")
+        if not await self.gm_user(user_id, dev_gm, need="cinema") and not self.creq_can_upload(user_id):
+            raise RpcError("Ya subiste muchas imágenes esta hora: espera un poco.")
         store = self.audio.library.store
         if store is None:
             raise RpcError("Esta Actividad no puede guardar archivos en este PC.")

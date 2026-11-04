@@ -271,7 +271,9 @@ let stepKey = 0;
 const withKeys = (cinema) => ({ ...cinema, steps: cinema.steps.map((s) => ({ ...s, _k: ++stepKey })) });
 const bare = (draft) => { const { id, ...rest } = draft; return { ...rest, steps: draft.steps.map(({ _k, _n, ...s }) => s) }; };
 
-function Editor({ start, d, onClose, replace }) {
+// `player`: a player's own request (cinema_requests.py): saved with `save`, no sounds or channel messages, no privacy or triggers (the
+// player ties it to a power instead, in `extra`), and it cannot be put on for everybody from here.
+export function Editor({ start, d, onClose, replace, player = false, save: saveWith = null, extra = null, steps: allowed = null }) {
   const [draft, setDraft] = useState(() => withKeys(start));
   const [id, setId] = useState(start.id || "");
   const [selected, setSelected] = useState(null);
@@ -286,9 +288,11 @@ function Editor({ start, d, onClose, replace }) {
 
   const auto = useAutosave(bare(draft), {
     key: start.id || "new",
+    unsaved: player && !start.id,
     check: validate,
     save: async (value) => {
-      const out = await act("gm.cinema_save", { cinema: { ...value, id: idRef.current, steps: orderOf(value.steps) } });
+      const cinema = { ...value, id: idRef.current, steps: orderOf(value.steps) };
+      const out = saveWith ? await saveWith(cinema) : await act("gm.cinema_save", { cinema });
       if (!out) return false;
       if (!idRef.current && out.saved) setId(out.saved.id);
       replace(out);
@@ -306,7 +310,7 @@ function Editor({ start, d, onClose, replace }) {
     setSelected(fresh._k);
   };
   const addTemplate = (tid) => {
-    const fresh = templateSteps(tid, cursor).map((st) => ({ ...st, _k: ++stepKey }));
+    const fresh = templateSteps(tid, cursor).filter((st) => !allowed || allowed.includes(st.type)).map((st) => ({ ...st, _k: ++stepKey }));
     if (!fresh.length) return;
     setDraft((old) => ({ ...old, steps: [...old.steps, ...fresh] }));
     setSelected(fresh[0]._k);
@@ -347,11 +351,12 @@ function Editor({ start, d, onClose, replace }) {
             <input class="input grow" maxLength={80} value={draft.name} onInput={(e) => set({ name: e.currentTarget.value })} placeholder="Nombre: p. ej. Llegada del Rey" aria-label="Nombre" data-testid="cine-name" />
             <button class="btn" type="button" onClick={() => previewCine(playable(draft))} data-testid="cine-preview"><Eye size={15} /> Ver aquí</button>
             <button class="btn" type="button" onClick={() => previewCine(playable(draft), sel ? num(sel.at) : cursor)} data-testid="cine-preview-here" title="Ver desde el paso elegido (o desde el cursor)"><Eye size={15} /> Desde aquí</button>
-            <button class="btn btn-primary" type="button" onClick={playNow} disabled={busy !== null || !!auto.reason} data-testid="cine-play-now"><Play size={15} /> Poner para todos</button>
+            {!player && <button class="btn btn-primary" type="button" onClick={playNow} disabled={busy !== null || !!auto.reason} data-testid="cine-play-now"><Play size={15} /> Poner para todos</button>}
           </div>
-          <Privacy draft={draft} set={set} mine={!draft.owner || draft.owner.id === d.me} />
+          {extra && extra(draft, set)}
+          {!player && <Privacy draft={draft} set={set} mine={!draft.owner || draft.owner.id === d.me} />}
           <details class="cine-settings" data-testid="cine-settings">
-            <summary>Ajustes: {draft.see ? "sobre el juego · " : ""}{draft.bars ? "barras de cine" : "sin barras"} · {draft.skippable ? "se puede saltar" : "no se puede saltar"} · {draft.triggers.length ? `empieza sola con ${plural(draft.triggers.length, "suceso", "sucesos")}` : "solo la pones tú"}</summary>
+            <summary>Ajustes: {draft.see ? "sobre el juego · " : ""}{draft.bars ? "barras de cine" : "sin barras"} · {draft.skippable ? "se puede saltar" : "no se puede saltar"}{player ? "" : ` · ${draft.triggers.length ? `empieza sola con ${plural(draft.triggers.length, "suceso", "sucesos")}` : "solo la pones tú"}`}</summary>
             <div class="col" style={{ gap: "var(--sp-3)", marginTop: "var(--sp-3)" }}>
               <div class="row wrap" style={{ gap: "16px" }}>
                 <label class="row" style={{ gap: "8px" }}><Switch label="Barras de cine" checked={draft.bars} onChange={(v) => set({ bars: v })} /><span>Barras de cine</span></label>
@@ -359,18 +364,18 @@ function Editor({ start, d, onClose, replace }) {
                 <label class="row" style={{ gap: "8px" }}><Switch label="Sobre el juego" checked={!!draft.see} onChange={(v) => set({ see: v })} /><span>Sobre el juego <span class="faint">(fondo transparente: se sigue viendo y usando el juego)</span></span></label>
                 {!draft.see && <label class="row" style={{ gap: "8px" }}><span class="faint">Fondo</span><input type="color" value={draft.bg || "#000000"} onInput={(e) => set({ bg: e.currentTarget.value })} aria-label="Color de fondo de la cinemática" /></label>}
               </div>
-              {draft.triggers.some((t) => ["boss_spawn", "boss_defeated", "boss_domain"].includes(t)) && (
+              {!player && draft.triggers.some((t) => ["boss_spawn", "boss_defeated", "boss_domain"].includes(t)) && (
                 <label class="field"><span class="field-label">Solo para el jefe <span class="faint">(vacío: para cualquiera)</span></span>
                   <input class="input" maxLength={80} value={draft.boss || ""} placeholder="Nombre del jefe, tal como aparece" list="cine-bosses" onInput={(e) => set({ boss: e.currentTarget.value })} data-testid="cine-boss" />
                   <datalist id="cine-bosses">{(d.bosses || []).map((b) => <option key={b} value={b} />)}</datalist>
                 </label>
               )}
-              <div class="col" style={{ gap: "6px" }}>
+              {!player && <div class="col" style={{ gap: "6px" }}>
                 <span class="field-label">Empieza sola cuando… <span class="faint">(si no marcas nada, solo la pones tú)</span></span>
                 <div class="row wrap gm-chips">
                   {d.events.map((e) => <button key={e.id} type="button" class="choice" aria-pressed={draft.triggers.includes(e.id) ? "true" : "false"} onClick={() => toggleTrigger(e.id)} data-testid={`cine-trigger-${e.id}`}>{e.label}</button>)}
                 </div>
-              </div>
+              </div>}
             </div>
           </details>
         </div>
@@ -383,7 +388,7 @@ function Editor({ start, d, onClose, replace }) {
         <div class="cine-add" data-testid="cine-add">
           <span class="faint">Añadir en el segundo</span>
           <NumberInput value={cursor} min={0} max={3600} step={0.5} unit="s" label="Segundo donde se añade" testid="cine-cursor" width="110px" onInput={(v) => setCursor(Math.max(0, num(v)))} />
-          {Object.keys(STEP_LABELS).map((type) => { const Icon = ICON[type]; return <button key={type} class="btn btn-sm" type="button" onClick={() => add(type)} data-testid={`cine-add-${type}`}><Icon size={14} /> {STEP_LABELS[type]}</button>; })}
+          {Object.keys(STEP_LABELS).filter((type) => !allowed || allowed.includes(type)).map((type) => { const Icon = ICON[type]; return <button key={type} class="btn btn-sm" type="button" onClick={() => add(type)} data-testid={`cine-add-${type}`}><Icon size={14} /> {STEP_LABELS[type]}</button>; })}
           <button class="btn btn-sm btn-ghost" type="button" onClick={paste} data-testid="cine-paste" title="Pegar el paso copiado en el segundo elegido"><ClipboardPaste size={14} /> Pegar</button>
         </div>
         <div class="cine-templates" data-testid="cine-templates">

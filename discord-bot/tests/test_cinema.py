@@ -3,6 +3,7 @@ stops and writes its messages, what starts one by itself, and that only game mas
 import asyncio
 import json
 import sys
+import time
 from pathlib import Path
 
 import pytest
@@ -12,6 +13,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from eventos_app.activity import Hub, media  # noqa: E402
 from eventos_app.activity.audio import AudioLibrary  # noqa: E402
+from eventos_app.activity.cinema_requests import UPLOADS_PER_HOUR  # noqa: E402
+from eventos_app.activity.server import dev_identity  # noqa: E402
 from eventos_app.activity.cinema import MAX_STEPS, CinemaBook, CinemaDirector, clean_cinema, text_duration  # noqa: E402
 from eventos_app.activity.hub import Conn, RpcError  # noqa: E402
 from test_activity_gm_socket import GmRig, handlers  # noqa: E402
@@ -242,6 +245,7 @@ def test_the_cinematics_tab_works_for_game_masters_only_and_every_change_is_hear
             player, _ = await rig.login(OTHER)
             base = f"http://127.0.0.1:{rig.port}"
             png = b"\x89PNG\r\n\x1a\n" + b"\x00" * 40
+            rig.bridge._creq_uploads = {dev_identity("Ana")[0]: [time.time()] * UPLOADS_PER_HOUR}      # a player may add a few pictures an hour for their requests
             async with rig.http.post(f"{base}/api/image", data=png, headers={"X-Dev": "Ana", "X-Filename": "fondo.png"}) as r:
                 no_gm = (r.status, (await r.json())["error"])
             async with rig.http.post(f"{base}/api/image", data=b"<html>", headers={"X-Dev": "Ana", "X-Gm": "1"}) as r:
@@ -269,7 +273,7 @@ def test_the_cinematics_tab_works_for_game_masters_only_and_every_change_is_hear
                     store.exists(media.IMAGES, picture.rsplit("/", 1)[1]))
 
     (no_gm, junk, picture, refused, state, bad, saved, copy, played, heard, joined, stopped, auto, deleted, posted, history, stored) = run(scenario())
-    assert no_gm[0] == 403 and "equipo de GM" in no_gm[1] and junk[0] == 400 and "imágenes" in junk[1] and picture.startswith("files/images/") and stored
+    assert no_gm[0] in (400, 403) and "esta hora" in no_gm[1] and junk[0] == 400 and "imágenes" in junk[1] and picture.startswith("files/images/") and stored
     assert refused["t"] == "rpc_err" and "equipo de GM" in refused["reason"]
     assert state["data"]["cinemas"] == [] and {e["id"] for e in state["data"]["events"]} >= {"boss_defeated", "domain", "player_down"} and "qte_hard" not in {e["id"] for e in state["data"]["events"]}
     assert state["data"]["sounds"][0]["name"] == "boom" and state["data"]["canStore"] is True
