@@ -24,6 +24,7 @@ import { GmPage } from "../views/Gm.jsx";
 import { TutorialHost } from "../views/Tutorial.jsx";
 import { BottomNav, Palette } from "./Navigation.jsx";
 import { PowerShow } from "./PowerShow.jsx";
+import { ResultsLayer } from "./Results.jsx";
 
 function Splash() {
   const c = conn.value;
@@ -119,6 +120,7 @@ export function App() {
       </div>
       <CinemaLayer />
       <PowerShow />
+      <ResultsLayer />
       <QteLayer />
       {sheet.value === "players" && (
         <Sheet title="Jugadores y tú" onClose={() => { sheet.value = null; }}>

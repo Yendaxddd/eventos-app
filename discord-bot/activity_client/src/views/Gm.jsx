@@ -1,4 +1,4 @@
-import { Bug, Clapperboard, Database, History, Music, ShieldCheck, Skull, SlidersHorizontal, Sparkles, Swords, Users } from "lucide-preact";
+import { Bug, ClipboardList, Clapperboard, Database, History, Music, ShieldCheck, Skull, SlidersHorizontal, Sparkles, Swords, Users } from "lucide-preact";
 import { perms } from "../state.js";
 import { TabbedPage } from "../ui/Tabbed.jsx";
 import { Empty } from "../ui/Common.jsx";
@@ -13,6 +13,7 @@ import { ValuesTab } from "./gm/ValuesTab.jsx";
 import { DataTab } from "./gm/DataTab.jsx";
 import { HistoryTab } from "./gm/HistoryTab.jsx";
 import { StaffTab } from "./gm/StaffTab.jsx";
+import { ResultsTab } from "./gm/ResultsTab.jsx";
 
 // [id, label, Icon, Component, the boxes that open it (any of them)]
 export const GM_TABS = [
@@ -20,6 +21,7 @@ export const GM_TABS = [
   ["boss", "Jefe", Skull, BossTab, ["boss"]],
   ["players", "Jugadores", Users, PlayersTab, ["players"]],
   ["mobs", "Enemigos", Bug, MobsTab, ["mobs"]],
+  ["results", "Resultados", ClipboardList, ResultsTab, ["results"]],
   ["cinema", "Cinemáticas", Clapperboard, CinemaTab, ["cinema", "stage"]],
   ["audio", "Audio", Music, AudioTab, ["media"]],
   ["fx", "Efectos", Sparkles, FxTab, ["media"]],

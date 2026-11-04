@@ -33,6 +33,8 @@ export const calib = signal(null);                     // result of the last lat
 export const prefs = signal(loadLocalPrefs());
 export const agendaNext = signal(null);                 // the next event date the game masters picked (agenda.py), or null
 export const agendaRev = signal(0);                     // bumps when the agenda changes, so an open agenda fetches it again
+export const resultsScreen = signal(null);              // the results screen shown last by the game masters (results.py)
+export const resultsOpen = signal(false);               // whether its overlay is open on this screen
 export const eventLook = signal(null);                  // the look the game masters chose for the event (null: none)
 
 // ---- QTEs on screen (see qte-store.js) -------------------------------------------------------------------------

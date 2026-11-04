@@ -5,7 +5,7 @@ import { initSdk, afterAuth, sdk, SdkTimeout } from "./discord.js";
 import { inDiscord, devName, devGm, devHost, base, store } from "./util.js";
 import { SyncEstimator, qualityOf } from "./clock.js";
 import {
-  conn, banner, you, perms, eventLook, agendaNext, agendaRev, channelName, users, canWrite, version, messages, game, me, characters, charAvatars, activeAs,
+  conn, banner, you, perms, eventLook, agendaNext, agendaRev, resultsScreen, resultsOpen, channelName, users, canWrite, version, messages, game, me, characters, charAvatars, activeAs,
   rules, link, comp, calib, prefs, toast, flash, myHp, sayRefused,
 } from "./state.js";
 import { DEFAULT_PREFS, sanitizePrefs, saveLocalPrefs } from "./prefs.js";
@@ -191,6 +191,7 @@ function onFrame(frame, arrival) {
         perms.value = { gm: false, can: [], host: false, ...(frame.perms || {}) };
         eventLook.value = frame.look || null;
         agendaNext.value = frame.agendaNext || null;
+        if (frame.results) { resultsScreen.value = frame.results; resultsOpen.value = true; }
         channelName.value = frame.channel || "Evento";
         users.value = frame.users || [];
         canWrite.value = !!frame.canWrite;
@@ -220,6 +221,14 @@ function onFrame(frame, arrival) {
     }
     case "users": users.value = frame.users || []; break;
     case "look": eventLook.value = frame.look || null; break;
+    case "results": {                                                       // a game master showed, edited or took away a results screen
+      const was = resultsScreen.value;
+      if (frame.screen) {
+        if (!was || was.id !== frame.screen.id || frame.reopen) resultsOpen.value = true;   // a live edit does not reopen it for who closed it
+        resultsScreen.value = frame.screen;
+      } else resultsOpen.value = false;
+      break;
+    }
     case "agenda": agendaNext.value = frame.next || null; agendaRev.value++; break;   // someone changed the agenda                  // the game masters changed the event's look
     case "perms": perms.value = { gm: false, can: [], host: false, ...(frame.perms || {}) }; clearPanelCache(); break;   // the team changed what this person may do
     case "chars":                                           // the player registered or dropped a character (maybe from another screen)

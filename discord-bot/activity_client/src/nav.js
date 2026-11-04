@@ -25,6 +25,7 @@ export const DESTINATIONS = [
   ["gm-mobs", "GM · Enemigos", "mini enemigos bestiario mobs", "gm", "mobs", "mobs"],
   ["gm-audio", "GM · Audio", "música sonidos biblioteca", "gm", "audio", "media"],
   ["gm-fx", "GM · Efectos", "vfx efectos visuales poderes", "gm", "fx", "media"],
+  ["gm-results", "GM · Resultados", "resultados podio premios mvp pantalla capítulo ronda estadísticas", "gm", "results", "results"],
   ["gm-cinema", "GM · Cinemáticas", "escenas diálogo editor", "gm", "cinema", "cinema stage"],
   ["gm-values", "GM · Valores", "números tiempos ventanas", "gm", "values", "values"],
   ["gm-data", "GM · Contenido", "archivos objetos logros árboles aprobar", "gm", "data", "content"],

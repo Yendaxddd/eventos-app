@@ -31,6 +31,7 @@ from .staff import OP_PERMS, PERM_IDS, SHARED_OPS, StaffBook
 from .staff_rpc import StaffRpc
 from .look import LookBook, LookRpc
 from .agenda import AgendaBook, AgendaRpc
+from .results import ResultsBook, ResultsRpc, RoundTracker
 from .fx import FxBook, FxDirector
 from .arena import ArenaQtes
 from .fx_rpc import FxRpc
@@ -131,13 +132,14 @@ VERDICT_WAITS, VERDICT_STEP = 15, 0.02     # up to about a quarter of a second f
 CURRENT_OP: contextvars.ContextVar[str] = contextvars.ContextVar("activity_rpc_op", default="")    # the request being answered (each runs in its own task)
 
 
-class ActivityBridge(PanelRpc, GmRpc, TupperRpc, AudioRpc, CinemaRpc, FxRpc, QuickRpc, MobsRpc, StaffRpc, LookRpc, AgendaRpc):
+class ActivityBridge(PanelRpc, GmRpc, TupperRpc, AudioRpc, CinemaRpc, FxRpc, QuickRpc, MobsRpc, StaffRpc, LookRpc, AgendaRpc, ResultsRpc):
     def __init__(self, hub: Hub, app: Any, pool: Callable[[], Any] | None = None, avatar_file: Path | None = None,
                  prefs_file: Path | None = None, latency_file: Path | None = None, data_dir: Path | None = None,
                  gm_log_file: Path | None = None, values_file: Path | None = None, files: MediaStore | None = None,
                  char_images_file: Path | None = None, audio_file: Path | None = None, cinema_file: Path | None = None,
                  fx_file: Path | None = None, mobs_file: Path | None = None, staff_file: Path | None = None,
-                 look_file: Path | None = None, agenda_file: Path | None = None) -> None:
+                 look_file: Path | None = None, agenda_file: Path | None = None,
+                 results_file: Path | None = None) -> None:
         self.hub, self.app = hub, app        # app: the AdvancedQTEBot instance
         self.pool = pool or (lambda: None)   # the SenderPool, for webhook sends
         self._listeners: list[tuple[Any, str]] = []
@@ -160,6 +162,8 @@ class ActivityBridge(PanelRpc, GmRpc, TupperRpc, AudioRpc, CinemaRpc, FxRpc, Qui
         self.gm = GmPanel(app, GmLog(gm_log_file), data_dir, values_file)       # the game-master panel (gm/, gm_rpc.py)
         self.look = LookBook(look_file if look_file is not None else (Path(data_dir) / "activity_look.json" if data_dir else None))   # the event's style (look.py)
         self.agenda = AgendaBook(agenda_file if agenda_file is not None else (Path(data_dir) / "activity_agenda.json" if data_dir else None))   # availability and date polls (agenda.py)
+        self.round = RoundTracker()                                             # what each player did this round (results.py)
+        self.results = ResultsBook(results_file if results_file is not None else (Path(data_dir) / "activity_results.json" if data_dir else None))
         self.staff = StaffBook(staff_file if staff_file is not None else (Path(data_dir) / "gm_staff.json" if data_dir else None))   # who is on the team, and with which boxes (staff.py)
 
     # ---- wiring ---------------------------------------------------------------------------------
@@ -300,6 +304,7 @@ class ActivityBridge(PanelRpc, GmRpc, TupperRpc, AudioRpc, CinemaRpc, FxRpc, Qui
         self._spawn(self.cinema.on_event(event, data or {}))
         self._spawn(self.fx.dispatch(event, data or {}))
         self._spawn(self._game_event(event, data or {}))
+        self.track_results(event, data or {})
 
     async def _game_event(self, event: str, data: dict) -> None:
         """What the Activity itself does when something happens: a power's picture on the screens, its blow on the mini enemies..."""
@@ -544,7 +549,8 @@ class ActivityBridge(PanelRpc, GmRpc, TupperRpc, AudioRpc, CinemaRpc, FxRpc, Qui
         return {"perms": await self.perms_frame(conn), "prefs": self.prefs.get(conn.user_id) if self.prefs.has(conn.user_id) else None,
                 "calib": self.latency.get(conn.user_id),
                 "comp": comp, "rules": self.rules(), "charAvatars": self.char_avatars(conn.user_id), "audio": self.audio.welcome(),
-                "cine": self.cinema.current(), "mobs": self.mobs.public(), "look": self.look.value, "agendaNext": self.agenda.next_event()}
+                "cine": self.cinema.current(), "mobs": self.mobs.public(), "look": self.look.value, "agendaNext": self.agenda.next_event(),
+                "results": self.results.get(self.results.showing)}
 
     async def save_prefs(self, conn: Conn, raw) -> dict:
         return self.prefs.set(conn.user_id, raw)

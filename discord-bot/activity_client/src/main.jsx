@@ -2,7 +2,7 @@ import { render } from "preact";
 import { effect } from "@preact/signals";
 import "./css/main.css";
 import { App } from "./ui/App.jsx";
-import { boot } from "./net.js";
+import { rpc, boot } from "./net.js";
 import { installKeys } from "./keys.js";
 import { eventLook, prefs, qtes, you, messages, link, comp, me, game, conn, view, tutorial, characters, perms, go } from "./state.js";
 import { applyPrefs } from "./prefs.js";
@@ -25,7 +25,7 @@ window.__eventos = {
   get link() { return link.value; }, get comp() { return comp.value; }, get me() { return me.value; }, get game() { return game.value; },
   get conn() { return conn.value; }, get view() { return view.value; }, get prefs() { return prefs.value; }, get tutorial() { return tutorial.value; },
   get characters() { return characters.value; }, get perms() { return perms.value; }, go, setPrefs, get cine() { return cine.value; }, vfxLog,
-  get music() { return music.value; }, get mobs() { return mobs.value; },
+  get music() { return music.value; }, get mobs() { return mobs.value; }, rpc,
 };
 
 render(<App />, document.getElementById("root"));
