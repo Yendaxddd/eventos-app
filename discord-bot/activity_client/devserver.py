@@ -41,7 +41,25 @@ async def main():
             return "image/png", PIXEL
         rig.server._media_fetch = media
         rig.hub.channel_name = "evento-principal"
-        rig.hub.backlog.extend(BACKLOG)
+        import time as _time
+        now = int(_time.time() * 1000)
+        recent = [{**f, "ts": now - (len(BACKLOG) - i) * 90_000} for i, f in enumerate(BACKLOG)]   # «the last hour», for the summaries
+        rig.hub.backlog.extend(recent)
+
+        async def fake_ai(cfg, messages, **_):
+            """Dev only: an «AI» that answers without any API, so the summaries can be tried. Uses the real API if a key is set."""
+            if cfg.api_key:
+                from eventos_app.activity.summary import chat
+                return await chat(cfg, messages, **_)
+            body = messages[-1]["content"]
+            if "listo" in body:
+                return "listo"
+            cines = [line.split("«")[1].split("»")[0] for line in body.splitlines() if "CINEMÁTICA «" in line]
+            lines = ["## Lo que pasó", "- El grupo se enfrentó al **Rey de las Maldiciones**.", "- **Ana** conectó un *Black Flash* perfecto.",
+                     "- Kuro respiró hondo y se negó a retroceder."] + [f"- Se vio la cinemática «{c}»." for c in cines] + [
+                     "", "## Cómo queda", "El jefe sigue en pie y prepara algo grande. (Resumen de prueba del servidor de desarrollo.)"]
+            return "\n".join(lines)
+        rig.bridge.ai_chat = fake_ai
 
         async def dev_fight(conn, args):
             """Dev only: a short made-up fight, so the results screens have something to count. Run from the console:

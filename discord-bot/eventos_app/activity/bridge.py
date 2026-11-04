@@ -32,6 +32,7 @@ from .staff_rpc import StaffRpc
 from .look import LookBook, LookRpc
 from .agenda import AgendaBook, AgendaRpc
 from .results import ResultsBook, ResultsRpc, RoundTracker
+from .summary import AiConfig, CinemaLog, SummaryBook, SummaryRpc
 from .fx import FxBook, FxDirector
 from .arena import ArenaQtes
 from .fx_rpc import FxRpc
@@ -132,7 +133,7 @@ VERDICT_WAITS, VERDICT_STEP = 15, 0.02     # up to about a quarter of a second f
 CURRENT_OP: contextvars.ContextVar[str] = contextvars.ContextVar("activity_rpc_op", default="")    # the request being answered (each runs in its own task)
 
 
-class ActivityBridge(PanelRpc, GmRpc, TupperRpc, AudioRpc, CinemaRpc, FxRpc, QuickRpc, MobsRpc, StaffRpc, LookRpc, AgendaRpc, ResultsRpc):
+class ActivityBridge(PanelRpc, GmRpc, TupperRpc, AudioRpc, CinemaRpc, FxRpc, QuickRpc, MobsRpc, StaffRpc, LookRpc, AgendaRpc, ResultsRpc, SummaryRpc):
     def __init__(self, hub: Hub, app: Any, pool: Callable[[], Any] | None = None, avatar_file: Path | None = None,
                  prefs_file: Path | None = None, latency_file: Path | None = None, data_dir: Path | None = None,
                  gm_log_file: Path | None = None, values_file: Path | None = None, files: MediaStore | None = None,
@@ -164,6 +165,11 @@ class ActivityBridge(PanelRpc, GmRpc, TupperRpc, AudioRpc, CinemaRpc, FxRpc, Qui
         self.agenda = AgendaBook(agenda_file if agenda_file is not None else (Path(data_dir) / "activity_agenda.json" if data_dir else None))   # availability and date polls (agenda.py)
         self.round = RoundTracker()                                             # what each player did this round (results.py)
         self.results = ResultsBook(results_file if results_file is not None else (Path(data_dir) / "activity_results.json" if data_dir else None))
+        base = Path(data_dir) if data_dir else None
+        self.ai = AiConfig(base / "activity_ai.json" if base else None)                     # the AI endpoint for summaries (summary.py)
+        self.cine_log = CinemaLog(base / "activity_cinema_log.json" if base else None)      # when each cinematic played
+        self.summaries = SummaryBook(base / "activity_summaries.json" if base else None)
+        self.cinema.on_played = self.cine_log.played
         self.staff = StaffBook(staff_file if staff_file is not None else (Path(data_dir) / "gm_staff.json" if data_dir else None))   # who is on the team, and with which boxes (staff.py)
 
     # ---- wiring ---------------------------------------------------------------------------------

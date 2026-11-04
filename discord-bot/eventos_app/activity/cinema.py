@@ -299,6 +299,7 @@ class CinemaDirector:
         self.run: dict | None = None                    # {"id", "cinema", "startedAt"}
         self._tasks: list[asyncio.Task] = []
         self.on_event_enabled = True
+        self.on_played: Callable[[dict], Any] | None = None    # told each time a cinematic starts (the summaries' log)
 
     def current(self) -> dict | None:
         """What a player coming in now needs to join the running cinematic, or None."""
@@ -316,6 +317,11 @@ class CinemaDirector:
         await self.stop(announce=False)
         self.run = {"id": cinema["id"], "cinema": cinema, "startedAt": self.hub.now_ms()}
         await self.hub.broadcast({"t": "cine", "op": "start", "run": self.current()})
+        if self.on_played is not None:
+            try:
+                self.on_played(cinema)
+            except Exception:  # noqa: BLE001 - the log must never stop a cinematic
+                log.exception("could not log a cinematic")
         for step in cinema["steps"]:
             if step["type"] == "post" and self.post is not None:
                 self._tasks.append(asyncio.get_running_loop().create_task(self._post_at(step["at"], step["text"], cinema["id"])))

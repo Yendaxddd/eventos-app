@@ -1,4 +1,4 @@
-import { Backpack, CalendarDays, ClipboardList, Crown, Drama, Dumbbell, Gauge, GitBranch, GraduationCap, Image as ImageIcon, LifeBuoy, Medal, Settings, Sparkles, Swords, Trophy, UserRound } from "lucide-preact";
+import { Backpack, BookOpen, CalendarDays, ClipboardList, Crown, Drama, Dumbbell, Gauge, GitBranch, GraduationCap, Image as ImageIcon, LifeBuoy, Medal, Settings, Sparkles, Swords, Trophy, UserRound } from "lucide-preact";
 import { agendaNext, resultsOpen, resultsScreen, go, link, tutorial, you, version, perms } from "../state.js";
 import { NextEvent } from "./Agenda.jsx";
 import { QUALITY } from "../terms.js";
@@ -64,6 +64,7 @@ export function MenuPage() {
       <Section title="La Actividad">
         <div class="tiles">
           {resultsScreen.value && <Tile id="results" icon={ClipboardList} title="Últimos resultados" sub={resultsScreen.value.title} color="#fbbf24" onClick={() => { resultsOpen.value = true; }} />}
+          <Tile id="summaries" icon={BookOpen} title="Resúmenes" sub="Lo que pasó en las sesiones que te perdiste, con sus cinemáticas." color="#a78bfa" onClick={() => go("summaries")} />
           <Tile id="agenda" icon={CalendarDays} title="Agenda" sub="Cuándo puedes jugar, cuándo puede el equipo y las votaciones de fechas." color="#22d3ee" onClick={() => go("agenda")} />
           <Tile id="settings" icon={Settings} title="Ajustes" sub="Pantalla, botones de QTE, sonido y chat." color="#a78bfa" onClick={() => go("settings")} />
           <Tile id="latency" icon={Gauge} title="Prueba de latencia" sub="Mide tu conexión y tu dispositivo para ajustar tus tiempos." color="#34d399" onClick={() => go("latency")} />

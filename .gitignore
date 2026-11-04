@@ -85,3 +85,6 @@ discord-bot/activity_client/node_modules/
 # counter pictures the bot keeps at run time: never in the repository
 discord-bot/assets/counter_gifs/*
 !discord-bot/assets/counter_gifs/.gitkeep
+
+# Activity: the AI endpoint for summaries keeps an API key — never in the repository
+discord-bot/data/activity_ai.json

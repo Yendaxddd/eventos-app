@@ -204,3 +204,20 @@
 .rs-ed-preview { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
 .rs-preview { width: 100%; max-height: 640px; animation: none; position: sticky; top: 0; }
 @media (max-width: 900px) { .rs-editor { grid-template-columns: minmax(0, 1fr); } }
+
+/* ── Summaries ──────────────────────────────────────────────────────────────────────────────────────────────────── */
+.sum-card { border-radius: var(--r-md); background: var(--card-bg); border: 1px solid var(--line-soft); overflow: hidden; }
+.sum-card + .sum-card { margin-top: var(--sp-2); }
+.sum-card.open { border-color: color-mix(in srgb, var(--primary) 40%, var(--line-soft)); }
+.sum-head { display: flex; width: 100%; padding: var(--sp-3) var(--sp-4); border: 0; background: none; color: var(--text); text-align: left; cursor: pointer; }
+.sum-head strong { display: block; font: 700 1rem/1.3 var(--font-display); }
+.sum-head .faint { display: block; font-size: .75rem; margin-top: 2px; }
+.sum-body { display: flex; flex-direction: column; gap: var(--sp-3); padding: 0 var(--sp-4) var(--sp-4); }
+.sum-text { line-height: 1.6; font-size: .9375rem; }
+.sum-text h1, .sum-text h2, .sum-text h3 { margin: var(--sp-3) 0 var(--sp-1); font-family: var(--font-display); }
+.sum-cines { display: flex; flex-direction: column; gap: 6px; padding-top: var(--sp-2); border-top: 1px solid var(--line-soft); }
+.sum-cines .eyebrow { display: inline-flex; align-items: center; gap: 6px; }
+.sum-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: var(--sp-3); }
+.sum-editor { display: flex; flex-direction: column; gap: var(--sp-3); margin-top: var(--sp-3); }
+.sum-textarea { font-family: var(--font-mono, ui-monospace, monospace); font-size: .8125rem; line-height: 1.5; }
+.gm-hint svg { vertical-align: -2px; }

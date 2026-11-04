@@ -16,6 +16,7 @@ import { CinemaLayer } from "./CinemaLayer.jsx";
 import { MenuPage } from "../views/Menu.jsx";
 import { SettingsPage } from "../views/Settings.jsx";
 import { AgendaPage } from "../views/Agenda.jsx";
+import { SummariesPage } from "../views/Summaries.jsx";
 import { HelpPage } from "../views/Help.jsx";
 import { LatencyPage } from "../views/Latency.jsx";
 import { TrainingPage } from "../views/Training.jsx";
@@ -80,6 +81,7 @@ function Pages({ layout }) {
       {v === "menu" && <MenuPage />}
       {v === "settings" && <SettingsPage />}
       {v === "agenda" && <AgendaPage />}
+      {v === "summaries" && <SummariesPage />}
       {v === "latency" && <LatencyPage />}
       {v === "training" && <TrainingPage />}
       {v === "help" && <HelpPage />}
