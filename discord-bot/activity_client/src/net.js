@@ -5,7 +5,7 @@ import { initSdk, afterAuth, sdk, SdkTimeout } from "./discord.js";
 import { inDiscord, devName, devGm, devHost, base, store } from "./util.js";
 import { SyncEstimator, qualityOf } from "./clock.js";
 import {
-  conn, banner, you, perms, eventLook, channelName, users, canWrite, version, messages, game, me, characters, charAvatars, activeAs,
+  conn, banner, you, perms, eventLook, agendaNext, agendaRev, channelName, users, canWrite, version, messages, game, me, characters, charAvatars, activeAs,
   rules, link, comp, calib, prefs, toast, flash, myHp, sayRefused,
 } from "./state.js";
 import { DEFAULT_PREFS, sanitizePrefs, saveLocalPrefs } from "./prefs.js";
@@ -190,6 +190,7 @@ function onFrame(frame, arrival) {
         you.value = frame.you;
         perms.value = { gm: false, can: [], host: false, ...(frame.perms || {}) };
         eventLook.value = frame.look || null;
+        agendaNext.value = frame.agendaNext || null;
         channelName.value = frame.channel || "Evento";
         users.value = frame.users || [];
         canWrite.value = !!frame.canWrite;
@@ -218,7 +219,8 @@ function onFrame(frame, arrival) {
       break;
     }
     case "users": users.value = frame.users || []; break;
-    case "look": eventLook.value = frame.look || null; break;                  // the game masters changed the event's look
+    case "look": eventLook.value = frame.look || null; break;
+    case "agenda": agendaNext.value = frame.next || null; agendaRev.value++; break;   // someone changed the agenda                  // the game masters changed the event's look
     case "perms": perms.value = { gm: false, can: [], host: false, ...(frame.perms || {}) }; clearPanelCache(); break;   // the team changed what this person may do
     case "chars":                                           // the player registered or dropped a character (maybe from another screen)
       batch(() => {

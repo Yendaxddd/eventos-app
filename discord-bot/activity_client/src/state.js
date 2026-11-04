@@ -31,6 +31,8 @@ export const calib = signal(null);                     // result of the last lat
 
 // ---- settings -------------------------------------------------------------------------------------------------
 export const prefs = signal(loadLocalPrefs());
+export const agendaNext = signal(null);                 // the next event date the game masters picked (agenda.py), or null
+export const agendaRev = signal(0);                     // bumps when the agenda changes, so an open agenda fetches it again
 export const eventLook = signal(null);                  // the look the game masters chose for the event (null: none)
 
 // ---- QTEs on screen (see qte-store.js) -------------------------------------------------------------------------

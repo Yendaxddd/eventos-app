@@ -1,5 +1,6 @@
-import { Backpack, Crown, Drama, Dumbbell, Gauge, GitBranch, GraduationCap, Image as ImageIcon, LifeBuoy, Medal, Settings, Sparkles, Swords, Trophy, UserRound } from "lucide-preact";
-import { go, link, tutorial, you, version, perms } from "../state.js";
+import { Backpack, CalendarDays, Crown, Drama, Dumbbell, Gauge, GitBranch, GraduationCap, Image as ImageIcon, LifeBuoy, Medal, Settings, Sparkles, Swords, Trophy, UserRound } from "lucide-preact";
+import { agendaNext, go, link, tutorial, you, version, perms } from "../state.js";
+import { NextEvent } from "./Agenda.jsx";
 import { QUALITY } from "../terms.js";
 import { Avatar } from "../ui/Avatar.jsx";
 import { Page, Section } from "../ui/Controls.jsx";
@@ -42,6 +43,8 @@ export function MenuPage() {
         <button class="btn btn-sm" type="button" onClick={() => go("event")}>Volver al evento</button>
       </div>
 
+      {agendaNext.value && <button type="button" class="agenda-next-link" onClick={() => go("agenda")}><NextEvent next={agendaNext.value} compact /></button>}
+
       <Section title="Mi personaje">
         <div class="tiles">
           {MINE.map(([tab, title, sub, Icon, color]) => (
@@ -60,6 +63,7 @@ export function MenuPage() {
 
       <Section title="La Actividad">
         <div class="tiles">
+          <Tile id="agenda" icon={CalendarDays} title="Agenda" sub="Cuándo puedes jugar, cuándo puede el equipo y las votaciones de fechas." color="#22d3ee" onClick={() => go("agenda")} />
           <Tile id="settings" icon={Settings} title="Ajustes" sub="Pantalla, botones de QTE, sonido y chat." color="#a78bfa" onClick={() => go("settings")} />
           <Tile id="latency" icon={Gauge} title="Prueba de latencia" sub="Mide tu conexión y tu dispositivo para ajustar tus tiempos." color="#34d399" onClick={() => go("latency")} />
           <Tile id="training" icon={Dumbbell} title="Entrenamiento" sub="QTE al azar con el tipo, la dificultad y el ritmo que elijas." color="#fb923c" onClick={() => go("training")} />

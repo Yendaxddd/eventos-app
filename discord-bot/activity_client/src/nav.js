@@ -12,6 +12,7 @@ export const DESTINATIONS = [
   ["images", "Imágenes", "contraataque gif", "panel", "images", false],
   ["effects", "Mis efectos", "vfx efectos visuales personalizar mis colores rótulo", "panel", "effects", false],
   ["ranking", "Ranking", "clasificación tabla líderes", "panel", "ranking", false],
+  ["agenda", "Agenda", "disponibilidad fechas horario calendario cuándo votación próximo evento semana", "agenda", null, false],
   ["training", "Entrenamiento", "practicar práctica qte al azar", "training", null, false],
   ["latency", "Prueba de latencia", "ping retraso conexión dispositivo calibrar", "latency", null, false],
   ["settings", "Ajustes", "opciones tema sonido botones accesibilidad tamaño", "settings", null, false],

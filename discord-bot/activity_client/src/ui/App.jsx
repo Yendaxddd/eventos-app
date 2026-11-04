@@ -15,6 +15,7 @@ import { QteLayer } from "./QteLayer.jsx";
 import { CinemaLayer } from "./CinemaLayer.jsx";
 import { MenuPage } from "../views/Menu.jsx";
 import { SettingsPage } from "../views/Settings.jsx";
+import { AgendaPage } from "../views/Agenda.jsx";
 import { HelpPage } from "../views/Help.jsx";
 import { LatencyPage } from "../views/Latency.jsx";
 import { TrainingPage } from "../views/Training.jsx";
@@ -77,6 +78,7 @@ function Pages({ layout }) {
     <div class="stage" data-layout={layout.mode} data-short={layout.short ? "true" : "false"} data-page="true">
       {v === "menu" && <MenuPage />}
       {v === "settings" && <SettingsPage />}
+      {v === "agenda" && <AgendaPage />}
       {v === "latency" && <LatencyPage />}
       {v === "training" && <TrainingPage />}
       {v === "help" && <HelpPage />}
