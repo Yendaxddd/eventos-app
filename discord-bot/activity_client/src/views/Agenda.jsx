@@ -1,16 +1,16 @@
-// «Agenda»: when everybody can play. Each player paints their week (in their own clock), the team's week shows as a heat map
-// with the best stretches, and the game masters with the «Agenda» box open date polls and pick the winner.
+// «Agenda»: when everybody can play. Each player paints their week (in their own clock) and marks concrete dates on a calendar
+// (AgendaCalendar.jsx), the team's week shows as a heat map with the best stretches, and the game masters with the «Agenda» box
+// open date polls and pick the winner. Each person's time zone is the device's or one they pick by hand.
 import { useEffect, useMemo, useRef, useState } from "preact/hooks";
 import { CalendarCheck, CalendarClock, CalendarDays, CalendarPlus, Check, Eraser, Lock, Plus, RotateCcw, Trash2, Users, X } from "lucide-preact";
 import { agendaRev, toast } from "../state.js";
 import { rpc } from "../net.js";
 import { Page, Section, Segmented } from "../ui/Controls.jsx";
 import {
-  DAYS, DAYS_SHORT, HOURS, bestSlots, fromInput, heat, hourLabel, leader, localShift, nextAt, peakOf, strength, tally, toInput, toLocal, toUtc, untilLabel, whenLabel,
+  DAYS, DAYS_SHORT, HOURS, bestSlots, deviceZone, fromInput, heat, hourLabel, leader, nextAt, peakOf, strength, tally, toInput, toLocal, toUtc, untilLabel, whenLabel,
+  zoneLabel, zoneOffset,
 } from "../agenda-model.js";
-
-const SHIFT = localShift();
-const TZ = (() => { try { return Intl.DateTimeFormat().resolvedOptions().timeZone || ""; } catch { return ""; } })();
+import { Calendar, PollCalendar, TeamZones, ZonePicker } from "./AgendaCalendar.jsx";
 const ANSWER = [["yes", "Puedo"], ["maybe", "Quizá"], ["no", "No"]];
 
 function useAgenda() {
@@ -46,7 +46,7 @@ export function NextEvent({ next, compact }) {
 }
 
 // ── a date poll ───────────────────────────────────────────────────────────────────────────────────────────────────
-function PollCard({ poll, me, canEdit, run }) {
+function PollCard({ poll, me, canEdit, run, people }) {
   const t = tally(poll);
   const mine = (poll.votes || {})[me] || {};
   const lead = leader(poll);
@@ -91,6 +91,7 @@ function PollCard({ poll, me, canEdit, run }) {
                   {c.who.maybe.map((name) => <span class="chip maybe" key={`m${name}`}>{name}?</span>)}
                 </div>
               )}
+              {poll.open && <PollCalendar people={people} at={o.at} />}
             </div>
           );
         })}
@@ -192,9 +193,9 @@ function WeekGrid({ cells, paint, onCell, onDay, onHour, testid, selected }) {
   );
 }
 
-function MyWeek({ data, run }) {
+function MyWeek({ data, run, shift, zone }) {
   const mine = data.people.find((p) => p.id === data.me);
-  const [local, setLocal] = useState(() => toLocal(mine ? mine.week : "", SHIFT));
+  const [local, setLocal] = useState(() => toLocal(mine ? mine.week : "", shift));
   const [note, setNote] = useState(mine ? mine.note : "");
   const [brush, setBrush] = useState(2);
   const [saved, setSaved] = useState("");
@@ -203,7 +204,8 @@ function MyWeek({ data, run }) {
     clearTimeout(timer.current);
     setSaved("…");
     timer.current = setTimeout(async () => {
-      const d = await run("agenda.week", { week: toUtc(next, SHIFT), note: nextNote, tz: TZ });
+      const device = deviceZone();
+      const d = await run("agenda.week", { week: toUtc(next, shift), note: nextNote, tz: device, offset: zoneOffset(device) });
       setSaved(d ? "Guardado" : "");
     }, 700);
   };
@@ -226,7 +228,7 @@ function MyWeek({ data, run }) {
         <span class="faint grow" style={{ fontSize: ".75rem" }}>{marked} h marcadas{saved ? ` · ${saved}` : ""}</span>
         {marked > 0 && <button class="btn btn-sm btn-ghost" type="button" onClick={() => confirm("¿Borrar toda tu semana?") && change((w) => w.fill(0))}><Trash2 size={14} /> Vaciar</button>}
       </div>
-      <p class="faint" style={{ fontSize: ".78rem", margin: 0 }}>Toca las horas (o arrastra con el ratón). Toca un día o una hora para marcar toda la columna o la fila. Las horas son las tuyas{TZ ? ` (${TZ})` : ""}.</p>
+      <p class="faint" style={{ fontSize: ".78rem", margin: 0 }}>Toca las horas (o arrastra con el ratón). Toca un día o una hora para marcar toda la columna o la fila. Las horas son las tuyas ({zoneLabel(zone.tz, zone.offset)}).</p>
       <WeekGrid cells={local} paint onCell={onCell} onDay={onDay} onHour={onHour} testid="my-week" />
       <label class="field"><span>Una nota para el equipo (opcional)</span>
         <input class="input" value={note} maxLength={200} placeholder="Los domingos solo por la tarde; en exámenes hasta el 20" onInput={(e) => { const v = e.currentTarget.value; setNote(v); save(local, v); }} />
@@ -269,18 +271,41 @@ function TeamWeek({ data, cells, slots }) {
               {notes.map((p) => <p key={p.id}><b>{p.name}:</b> {p.note}</p>)}
             </div>
           )}
+          <TeamZones people={data.people} />
         </>
       )}
     </div>
   );
 }
 
+// The clock this screen shows: the zone picked by hand, else the device's.
+function zoneOf(data) {
+  const mine = data && data.people.find((p) => p.id === data.me);
+  const tz = mine && mine.tzManual && mine.tz ? mine.tz : deviceZone();
+  return { tz, offset: zoneOffset(tz) };
+}
+
+// For each weekday (Monday 0) the stretch my week marks, «18:00–22:00», or "".
+function weekHours(week, shift) {
+  const local = toLocal(week, shift);
+  return DAYS.map((_, day) => {
+    const row = local.slice(day * 24, day * 24 + 24);
+    const first = row.findIndex((v) => v > 0);
+    if (first < 0) return "";
+    const last = 23 - [...row].reverse().findIndex((v) => v > 0);
+    return `${hourLabel(first)}–${last === 23 ? "24:00" : hourLabel(last + 1)}`;
+  });
+}
+
 export function AgendaPage() {
   const { data, error, run } = useAgenda();
   const [making, setMaking] = useState(false);
-  const cells = useMemo(() => (data ? heat(data.people, SHIFT) : Array.from({ length: HOURS }, () => ({ yes: 0, maybe: 0, who: [] }))), [data]);
+  const zone = zoneOf(data);
+  const shift = Math.round(zone.offset / 60);
+  const cells = useMemo(() => (data ? heat(data.people, shift) : Array.from({ length: HOURS }, () => ({ yes: 0, maybe: 0, who: [] }))), [data, shift]);
   const slots = useMemo(() => bestSlots(cells, { min: 2, max: 4, top: 5 }), [cells]);
   if (!data) return <Page title="Agenda" icon={CalendarDays}><p class="faint">{error || "Cargando…"}</p></Page>;
+  const mine = data.people.find((p) => p.id === data.me);
   const open = data.polls.filter((p) => p.open), closed = data.polls.filter((p) => !p.open);
   return (
     <Page title="Agenda" icon={CalendarDays}
@@ -289,14 +314,16 @@ export function AgendaPage() {
       {making && <NewPoll slots={slots} run={run} onDone={() => setMaking(false)} />}
       {open.length > 0 && (
         <Section title="Votaciones abiertas">
-          {open.map((p) => <PollCard key={p.id} poll={p} me={data.me} canEdit={data.canEdit} run={run} />)}
+          {open.map((p) => <PollCard key={p.id} poll={p} me={data.me} canEdit={data.canEdit} run={run} people={data.people} />)}
         </Section>
       )}
-      <Section title="Mi semana"><MyWeek data={data} run={run} /></Section>
+      <ZonePicker mine={mine} zone={zone} run={run} />
+      <Section title="Calendario"><Calendar data={data} zone={zone} myHours={weekHours(mine ? mine.week : "", shift)} run={run} /></Section>
+      <Section title="Mi semana (lo de siempre)"><MyWeek key={shift} data={data} run={run} shift={shift} zone={zone} /></Section>
       <Section title="La semana del equipo"><TeamWeek data={data} cells={cells} slots={slots} /></Section>
       {closed.length > 0 && (
         <Section title="Fechas elegidas">
-          {closed.map((p) => <PollCard key={p.id} poll={p} me={data.me} canEdit={data.canEdit} run={run} />)}
+          {closed.map((p) => <PollCard key={p.id} poll={p} me={data.me} canEdit={data.canEdit} run={run} people={data.people} />)}
         </Section>
       )}
       {!data.canEdit && open.length === 0 && <p class="faint agenda-foot"><Lock size={13} /> Las votaciones de fechas las abre el equipo de GM. <CalendarClock size={13} /> Marca tu semana para que sepan cuándo puedes.</p>}

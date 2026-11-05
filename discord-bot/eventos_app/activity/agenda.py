@@ -1,18 +1,23 @@
 """The agenda: when people can play, so the game masters know when an event works best.
 
-Two things live here:
+Three things live here:
 - each player's week: 168 hours (Monday 00:00 UTC first), each «no», «maybe» or «yes». The screen converts to and from the
   player's own clock, so everybody sees the week in their local time.
+- each player's calendar: concrete dates (in their own calendar, «2026-11-15») that override the week for that day: yes / maybe /
+  no, an optional range of hours in their clock and a short note («where»: «en el móvil», «desde el tren»). With their time zone
+  (IANA name and the offset in minutes it had when they saved) everybody else's screen converts those hours to its own clock.
 - date polls the game masters open (box «Agenda»): a few concrete dates, everybody answers yes / maybe / no, and a game
   master picks the winner, which every screen then shows as the next event.
 
-Ops: `agenda.get`, `agenda.week`, `agenda.vote` for everybody; `gm.schedule_propose`, `gm.schedule_close`,
+Ops: `agenda.get`, `agenda.week`, `agenda.day`, `agenda.zone`, `agenda.vote` for everybody; `gm.schedule_propose`, `gm.schedule_close`,
 `gm.schedule_delete` for the box. Every change sends `{"t": "agenda"}` so open screens fetch it again."""
 from __future__ import annotations
 
 import json
 import logging
+import re
 import time
+from datetime import date, timedelta
 import uuid
 from pathlib import Path
 from typing import Any
@@ -26,6 +31,10 @@ ANSWERS = ("yes", "maybe", "no")
 MAX_OPTIONS = 8
 MAX_POLLS = 12
 DAY_MS = 86_400_000
+MAX_DAYS = 120                  # concrete dates a player can have marked at once
+DAY_NOTE = 120
+_DATE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
+_TIME = re.compile(r"^([01]\d|2[0-3]):([0-5]\d)$")
 
 
 def clean_week(raw: Any) -> str:
@@ -38,6 +47,44 @@ def clean_week(raw: Any) -> str:
 
 def _text(raw: Any, limit: int) -> str:
     return " ".join(str(raw or "").split())[:limit]
+
+
+def clean_date(raw: Any) -> str:
+    text = str(raw or "")
+    if not _DATE.match(text):
+        raise RpcError("Esa fecha no es válida.")
+    try:
+        date.fromisoformat(text)
+    except ValueError:
+        raise RpcError("Esa fecha no es válida.") from None
+    return text
+
+
+def clean_time(raw: Any) -> str:
+    """«HH:MM» or "" (no hour given); «24:00» means the end of the day."""
+    text = str(raw or "").strip()
+    if text == "24:00":
+        return text
+    return text if _TIME.match(text) else ""
+
+
+def clean_offset(raw: Any) -> int:
+    """Minutes ahead of UTC (Madrid in summer: 120), within what the world uses."""
+    try:
+        return max(-14 * 60, min(14 * 60, int(raw)))
+    except (TypeError, ValueError):
+        return 0
+
+
+def clean_day(raw: Any) -> dict:
+    if not isinstance(raw, dict) or raw.get("a") not in ANSWERS:
+        raise RpcError("Di si puedes, quizá o no.")
+    start, end = clean_time(raw.get("from")), clean_time(raw.get("to"))
+    if start and end and end <= start:
+        raise RpcError("La hora de fin tiene que ir después de la de inicio.")
+    if raw["a"] == "no":
+        start = end = ""
+    return {"a": raw["a"], "from": start, "to": end, "note": _text(raw.get("note"), DAY_NOTE)}
 
 
 class AgendaBook:
@@ -64,16 +111,61 @@ class AgendaBook:
         except OSError:
             log.warning("could not save %s", self.path)
 
-    # ---- the week ---------------------------------------------------------------------------------------
-    def set_week(self, user_id: int, name: str, week: Any, note: Any = "", tz: Any = "") -> dict:
-        entry = {"name": _text(name, 60) or "Alguien", "week": clean_week(week), "note": _text(note, 200),
-                 "tz": _text(tz, 60), "updated": int(time.time() * 1000)}
-        if entry["week"] == "0" * HOURS and not entry["note"]:
+    # ---- one person ------------------------------------------------------------------------------------
+    def _entry(self, user_id: int, name: str) -> dict:
+        old = self.people.get(str(user_id)) or {}
+        return {"name": _text(name, 60) or old.get("name") or "Alguien", "week": old.get("week") or "0" * HOURS,
+                "note": old.get("note", ""), "tz": old.get("tz", ""), "offset": old.get("offset", 0),
+                "tzManual": bool(old.get("tzManual")), "days": dict(old.get("days") or {}), "updated": int(time.time() * 1000)}
+
+    def _keep(self, user_id: int, entry: dict, today: str | None = None) -> dict:
+        try:
+            base = date.fromisoformat(str(today)) if today else date.today()
+        except ValueError:
+            base = date.today()
+        cutoff = (base - timedelta(days=2)).isoformat()
+        entry["days"] = {k: v for k, v in sorted(entry["days"].items()) if k >= cutoff}     # the past goes
+        if entry["week"] == "0" * HOURS and not entry["note"] and not entry["days"] and not entry["tzManual"]:
             self.people.pop(str(user_id), None)                          # nothing marked: forget the person
         else:
             self.people[str(user_id)] = entry
         self.save()
         return entry
+
+    # ---- the week ---------------------------------------------------------------------------------------
+    def set_week(self, user_id: int, name: str, week: Any, note: Any = "", tz: Any = "", offset: Any = None) -> dict:
+        entry = self._entry(user_id, name)
+        entry["week"], entry["note"] = clean_week(week), _text(note, 200)
+        self._device(entry, tz, offset)
+        return self._keep(user_id, entry)
+
+    @staticmethod
+    def _device(entry: dict, tz: Any, offset: Any) -> None:
+        """The browser's zone, unless they chose one by hand."""
+        if tz and not entry["tzManual"]:
+            entry["tz"] = _text(tz, 60)
+            if offset is not None:
+                entry["offset"] = clean_offset(offset)
+
+    def set_zone(self, user_id: int, name: str, tz: Any, offset: Any, manual: Any = True) -> dict:
+        """The time zone the player picked by hand (manual) or the browser's again (not manual)."""
+        entry = self._entry(user_id, name)
+        entry["tz"], entry["offset"], entry["tzManual"] = _text(tz, 60), clean_offset(offset), bool(manual)
+        return self._keep(user_id, entry)
+
+    # ---- the calendar ------------------------------------------------------------------------------------
+    def set_day(self, user_id: int, name: str, day: Any, value: Any, today: str | None = None, tz: Any = "", offset: Any = None) -> dict:
+        """Mark one concrete date (in the player's own calendar), or clear it with `value` None."""
+        key = clean_date(day)
+        entry = self._entry(user_id, name)
+        self._device(entry, tz, offset)
+        if value is None:
+            entry["days"].pop(key, None)
+        else:
+            if key not in entry["days"] and len(entry["days"]) >= MAX_DAYS:
+                raise RpcError(f"Puedes marcar hasta {MAX_DAYS} días: quita alguno.")
+            entry["days"][key] = clean_day(value)
+        return self._keep(user_id, entry, today)
 
     # ---- polls --------------------------------------------------------------------------------------------
     def poll(self, poll_id: str) -> dict:
@@ -174,7 +266,18 @@ class AgendaRpc:
         return await self._agenda_state(conn)
 
     async def rpc_agenda_week(self, conn: Conn, args: dict):
-        self.agenda.set_week(conn.user_id, conn.name, args.get("week"), args.get("note"), args.get("tz"))
+        self.agenda.set_week(conn.user_id, conn.name, args.get("week"), args.get("note"), args.get("tz"), args.get("offset"))
+        await self._agenda_changed()
+        return await self._agenda_state(conn)
+
+    async def rpc_agenda_day(self, conn: Conn, args: dict):
+        self.agenda.set_day(conn.user_id, conn.name, args.get("date"), args.get("day"), args.get("today"),
+                             args.get("tz"), args.get("offset"))
+        await self._agenda_changed()
+        return await self._agenda_state(conn)
+
+    async def rpc_agenda_zone(self, conn: Conn, args: dict):
+        self.agenda.set_zone(conn.user_id, conn.name, args.get("tz"), args.get("offset"), args.get("manual", True))
         await self._agenda_changed()
         return await self._agenda_state(conn)
 

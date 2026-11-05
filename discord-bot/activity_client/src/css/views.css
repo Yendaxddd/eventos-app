@@ -129,6 +129,40 @@
 .agenda-who { display: flex; flex-direction: column; gap: 6px; }
 .agenda-notes { display: flex; flex-direction: column; gap: 4px; font-size: .8125rem; color: var(--text-dim); }
 .agenda-notes p { margin: 0; }
+.chip.no { background: color-mix(in srgb, var(--bad) 25%, var(--surface-3)); color: var(--text); }
+.cal-zone { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-size: .8125rem; padding: 8px 12px; border-radius: var(--r-md); background: var(--card-bg); border: 1px solid var(--line-soft); }
+.cal-zone > .grow { flex: 1 1 240px; min-width: 0; }
+.cal-zone select { flex: 1 1 160px; max-width: 240px; }
+.cal-zones { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; font-size: .75rem; }
+.cal-zones .faint { display: inline-flex; align-items: center; gap: 4px; margin-right: 4px; }
+.cal-head { display: flex; align-items: center; gap: 8px; }
+.cal-head strong { text-align: center; }
+.cal { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 4px; }
+.cal-dow { text-align: center; font: 600 .6875rem/1 var(--font-ui); color: var(--text-dim); padding-bottom: 2px; }
+.cal-day { position: relative; display: flex; flex-direction: column; align-items: center; justify-content: flex-start; gap: 2px; min-height: 52px; padding: 6px 2px; border-radius: var(--r-sm); background: var(--surface-2); border: 1px solid var(--line-soft); color: var(--text); font: inherit; cursor: pointer; }
+.cal-day:hover { border-color: var(--line); }
+.cal-day.out { opacity: .45; }
+.cal-day.past { opacity: .5; }
+.cal-day.today .cal-num { color: var(--primary); font-weight: 800; }
+.cal-day.sel { outline: 2px solid var(--text); outline-offset: 1px; }
+.cal-num { font: 600 .8125rem/1 var(--font-ui); }
+.cal-mark { font-size: .66rem; font-weight: 700; }
+.cal-day.a-yes { background: color-mix(in srgb, var(--ok) 35%, var(--surface-2)); }
+.cal-day.a-maybe { background: color-mix(in srgb, var(--warn) 30%, var(--surface-2)); }
+.cal-day.a-no { background: color-mix(in srgb, var(--bad) 30%, var(--surface-2)); }
+.cal-dot { width: 6px; height: 6px; border-radius: 50%; background: color-mix(in srgb, var(--ok) 70%, transparent); }
+.cal-counts { display: flex; gap: 2px; flex-wrap: wrap; justify-content: center; }
+.cal-counts b { min-width: 16px; padding: 0 3px; border-radius: 8px; font-size: .625rem; line-height: 14px; text-align: center; }
+.cal-counts .y { background: var(--ok); color: #062b16; }
+.cal-counts .m { background: color-mix(in srgb, var(--warn) 55%, var(--surface-3)); }
+.cal-counts .n { background: color-mix(in srgb, var(--bad) 45%, var(--surface-3)); }
+.cal-editor { display: flex; flex-direction: column; gap: 8px; }
+.cal-title::first-letter { text-transform: uppercase; }
+.cal-person { display: flex; align-items: flex-start; gap: 8px; font-size: .8125rem; padding: 6px 0; border-top: 1px solid var(--line-soft); }
+.cal-person .grow { min-width: 0; }
+.cal-note { display: flex; align-items: center; gap: 4px; color: var(--text-dim); font-size: .75rem; margin-top: 2px; }
+.cal-tz { font-size: .7rem; white-space: nowrap; }
+.poll-cal { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 4px; font-size: .75rem; }
 @media (max-width: 560px) {
   .poll-opt { grid-template-columns: minmax(0, 1fr) auto; }
   .poll-answer { grid-column: 1 / -1; grid-row: auto; }
@@ -136,6 +170,8 @@
   .poll-bar { grid-row: auto; } .poll-count { grid-row: auto; }
   .week { grid-template-columns: 36px repeat(7, minmax(0, 1fr)); }
   .week-cell { height: 20px; }
+  .cal-day { min-height: 44px; }
+  .cal-tz { display: none; }
 }
 
 /* ── Results screen (players' overlay, menu copy and the GM's preview) ──────────────────────────────────────────── */
