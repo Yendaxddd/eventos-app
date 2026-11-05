@@ -1,5 +1,11 @@
 [
 {
+"id": "fc037f21d653",
+"kind": "user",
+"en": "Counter window in seconds (0.5-5, default 1.5)",
+"es": "Ventana de contraataque en segundos (0.5-5, por defecto 1.5)"
+},
+{
 "id": "c959364b6310",
 "kind": "console",
 "en": "[/cyan bold]\n[green]✓ QTE System Ready![/green]",
@@ -7360,12 +7366,6 @@
 "kind": "user",
 "en": "**{1}**: Evade {2}s, Parry {3}-{4}s, Timeout {5}s\n",
 "es": "**{1}**: Esquive {2}s, Parry {3}-{4}s, Límite {5}s\n"
-},
-{
-"id": "6cba8772e075",
-"kind": "user",
-"en": "Counter window in seconds (0.5-5, default 5)",
-"es": "Ventana de contraataque en segundos (0.5-5, por defecto 5)"
 },
 {
 "id": "9857469323c9",

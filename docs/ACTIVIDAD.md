@@ -346,7 +346,7 @@ devolver avisa al jugador. Aprobada, va **antes** que las del GM para ese moment
 
 ### Mecánicas
 Ver las notas de la 2.1.0: venganza que se quita al curarse, suerte de Black Flash anti-mala-suerte, más daño al fallar un QTE,
-tiempos ordenados por dificultad y arreglos de `/config qte`, del QTE trampa y de la ventana de contraataque. Los archivos de ajustes
+tiempos ordenados por dificultad y arreglos de `/config qte`, del QTE trampa y de la barra del contraataque. Los archivos de ajustes
 guardan la versión de sus valores por defecto: un valor viejo que nadie eligió da paso al nuevo; lo que un GM eligió se respeta.
 
 ## Puesta en marcha (una sola vez)

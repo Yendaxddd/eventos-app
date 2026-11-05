@@ -190,9 +190,9 @@ function Widget({ entry, phase, rank, lead, spot, size, ctx }) {
   );
 }
 
-// ---- the counter-attack window (5 s after an evade) --------------------------------------------------------------------------
+// ---- the counter-attack window (counterDuration, 5 s, after a fast enough evade) --------------------------------------------------------------------------
 function CounterWidget({ left, spot, size }) {
-  const total = (rules.value && rules.value.counterWindow) || 5;
+  const total = (rules.value && rules.value.counterDuration) || 5;
   const [startedLeft] = useState(left);
   const style = { animationDuration: `${total}s`, animationDelay: `${-clamp(total - startedLeft, 0, total)}s` };
   return (

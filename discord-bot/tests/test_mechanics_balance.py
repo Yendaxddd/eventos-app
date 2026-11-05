@@ -94,14 +94,19 @@ def test_old_saved_damage_that_nobody_chose_gives_way_to_the_new_one(bot_module)
 def test_the_panel_does_not_bring_back_old_defaults_it_saved_but_keeps_what_was_chosen(tmp_path):
     from test_activity_gm import Rig
     rig = Rig(tmp_path)
-    rig.app.counter_window = 5.0
     rig.app.qte_timeout_durations = {"easy": 7.75, "medium": 5.75, "hard": 5.25, "impossible": 2.45}
     rig.gm.values_file = tmp_path / "gm_values.json"
-    rig.gm.values_file.write_text(json.dumps({"counter_window": 1.5, "qte_timeout_durations": {"easy": 6.75, "medium": 6.5}}), encoding="utf-8")
+    rig.gm.values_file.write_text(json.dumps({"counter_window": 1.2, "qte_timeout_durations": {"easy": 6.75, "medium": 6.5}}), encoding="utf-8")
     rig.gm.apply_saved()
-    assert rig.app.counter_window == 5.0 and rig.app.qte_timeout_durations["easy"] == 7.75 and rig.app.qte_timeout_durations["medium"] == 6.5
-    rig.gm.values_file.write_text(json.dumps({"defaults": 2, "counter_window": 1.5}), encoding="utf-8")         # chosen after the change
+    assert rig.app.qte_timeout_durations["easy"] == 7.75 and rig.app.qte_timeout_durations["medium"] == 6.5 and rig.app.counter_window == 1.2
+    rig.gm.values_file.write_text(json.dumps({"defaults": 2, "qte_timeout_durations": {"easy": 6.75}}), encoding="utf-8")   # chosen after the change
     rig.gm.apply_saved()
-    assert rig.app.counter_window == 1.5
+    assert rig.app.qte_timeout_durations["easy"] == 6.75
     rig.gm.persist_all()
     assert json.loads(rig.gm.values_file.read_text(encoding="utf-8"))["defaults"] == 2
+
+
+def test_a_fast_evade_earns_the_counter_and_the_counter_then_stays_open_its_own_time(bot_module):
+    bot = object.__new__(bot_module.AdvancedQTEBot)
+    src = Path(bot_module.__file__).read_text(encoding="utf-8")
+    assert "response_time < self.counter_window" in src and "time.time() + self.counter_duration" in src

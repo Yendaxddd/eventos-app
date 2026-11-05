@@ -400,7 +400,8 @@ class AdvancedQTEBot:
         self.counter_enabled_players = {}  # {user_id: qte_id}
         self.counter_deadlines = {}  # {user_id: time.time() when the counter window closes} (shown by the Discord Activity)
         self.counter_context = {}  # {user_id: {"qte_id": qte_id, "difficulty": difficulty}}
-        self.counter_window = 5.0  # seconds to counter-attack after an evade (/editvalues, the Activity's GM panel; its bar uses it too)
+        self.counter_window = 1.5  # evade faster than this (seconds from the QTE's start) to earn a counter-attack
+        self.counter_duration = 5.0  # how long the counter-attack then stays open (the Activity's counter bar uses it too)
         self.feedback_mode = os.environ.get("EVENTOS_FEEDBACK", "auto").strip().lower()   # see feedback_quiet
         if self.feedback_mode not in ("auto", "quiet", "chat"):
             self.feedback_mode = "auto"
@@ -4976,7 +4977,7 @@ Your response (1-2 sentences max):"""
             charge_dealt="% charge per 10 damage dealt (0-20, default 2)",
             charge_taken="% charge per 5 damage taken (0-20, default 5)",
             charge_counter="% charge per counter (0-20, default 3)",
-            counter_window="Counter window in seconds (0.5-5, default 5)",
+            counter_window="Counter window in seconds (0.5-5, default 1.5)",
             ult_cooldown_per_dmg="Extra cooldown seconds per damage point (0-5, default 0.5)"
         )
         async def editvalues_command(
@@ -7963,7 +7964,7 @@ Your response (1-2 sentences max):"""
     async def send_success_with_counter(self, channel, author_mention, response_time, user_id, qte_id, difficulty):
         """Send SUCCESS + COUNTER message merged into one - saves rate limit"""
         self.counter_enabled_players[user_id] = qte_id
-        self.counter_deadlines[user_id] = time.time() + self.counter_window
+        self.counter_deadlines[user_id] = time.time() + self.counter_duration
         # Store difficulty for accurate adaptation tracking during counter
         self.counter_context[user_id] = {"qte_id": qte_id, "difficulty": difficulty}
         
@@ -7975,7 +7976,7 @@ Your response (1-2 sentences max):"""
         counter_msg = await self.feedback(
             user_id, "evade_ok",
             f"✅ {author_mention} **evaded!** ({response_time:.2f}s) "
-            f"| ⚡ **COUNTER** `*attack*` <t:{int(time.time() + self.counter_window)}:R>",
+            f"| ⚡ **COUNTER** `*attack*` <t:{int(time.time() + self.counter_duration)}:R>",
             ms=round(response_time * 1000), counter=True
         )
         
@@ -7983,7 +7984,7 @@ Your response (1-2 sentences max):"""
             self.counter_messages[user_id] = counter_msg
         
         # Set counter window timeout (will delete message when expired)
-        asyncio.create_task(self.counter_window_timeout(user_id, qte_id, self.counter_window))
+        asyncio.create_task(self.counter_window_timeout(user_id, qte_id, self.counter_duration))
     
     def get_parry_visual_indicator(self, response_time: float, difficulty: str, user_id: int) -> str:
         """Get visual indicator for parry timing - shows Black Flash zones (GUARANTEED if in window!)"""

@@ -48,7 +48,7 @@ SPECS: list[Spec] = [
     Spec("ultimate_cooldown_per_damage", "power", "Recarga extra por daño", "Segundos de recarga por cada punto de daño del poder.", "float", 0, 5, 0.1, "file", "s"),
     Spec("ultimate_max_damage", "power", "Daño máximo de un poder", "Tope del daño de cualquier poder.", "int", 0, 99999, 50, "live"),
     Spec("ultimate_self_recharge", "power", "El poder se recarga a sí mismo", "Si el daño del propio poder da carga.", "bool", 0, 1, 1, "file"),
-    Spec("counter_window", "combat", "Ventana de contraataque", "Segundos para contraatacar tras un esquive.", "float", 0.5, 5, 0.1, "file", "s"),
+    Spec("counter_window", "combat", "Ventana de contraataque", "Esquiva antes de estos segundos para ganarte un contraataque.", "float", 0.5, 5, 0.1, "file", "s"),
     Spec("revenge_threshold", "combat", "Modo venganza desde", "Al bajar de este % de vida, el jugador entra en modo venganza.", "percent", 0, 100, 1, "live", "%"),
     Spec("revenge_damage_multiplier", "combat", "Daño en venganza", "Multiplicador de daño en modo venganza.", "float", 1, 10, 0.1, "live", "×"),
     Spec("revenge_bf_bonus", "combat", "Black Flash extra en venganza", "% extra de probabilidad en modo venganza.", "percent", 0, 100, 1, "live", "%"),
@@ -58,7 +58,7 @@ BY_KEY = {spec.key: spec for spec in SPECS}
 # Saved values carry the version of the bot's defaults they were written with (DEFAULTS_VERSION in the bot). One saved by an older
 # version that still equals that version's default was never picked by a game master, so the bot's current default stays.
 DEFAULTS_VERSION = 2
-OLD_DEFAULTS = {"counter_window": 1.5}                                       # it did nothing before version 2 (the window was 5 s)
+OLD_DEFAULTS: dict = {}                                                      # (no single value changed its default in version 2)
 OLD_TIMEOUTS = {"easy": 6.75, "medium": 5.0, "hard": 5.75, "impossible": 3.5}
 
 LIVE_KEYS = ("revenge_threshold", "revenge_damage_multiplier", "revenge_bf_bonus", "bf_timing_window", "ultimate_base_cooldown", "charge_per_damage_dealt", "ultimate_max_damage")
