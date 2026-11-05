@@ -43,6 +43,28 @@ function Row({ p, onOpen }) {
   );
 }
 
+// Who opens the Activity gets the event's participant role (QTEs and HP follow it); /join gives it to whoever is not in it.
+function AutoRole({ state, replace }) {
+  const [busy, run] = useDo();
+  const flip = async () => {
+    const out = await run("auto", "gm.auto_role", { on: !state.on }, null);
+    if (!out) return;
+    toast(out.on ? (out.given ? `Activado: ${plural(out.given, "persona recibió", "personas recibieron")} el rol ya.` : "Activado: quien entre a la Actividad recibe el rol.") : "Desactivado.", "ok");
+    replace(out);
+  };
+  return (
+    <div class="setting" data-testid="gm-auto-role">
+      <div class="info">
+        <strong>Dar el rol de participante al entrar</strong>
+        <span>{state.roleId ? <>Quien abre la Actividad recibe {state.role ? <b>@{state.role}</b> : "el rol de participante"} y el bot le sigue la vida y los QTE.
+          Quien no entre puede usar <code>/join</code> (o un admin, <code>/join @persona</code>). No se da a quien lleva el evento o el jefe.</>
+          : "El evento no tiene rol de participante: elígelo en la app (o con /setchannel)."}</span>
+      </div>
+      <button type="button" role="switch" class="switch" aria-checked={state.on ? "true" : "false"} aria-label="Dar el rol de participante al entrar" disabled={busy !== null} onClick={flip} data-testid="gm-auto-role-switch" />
+    </div>
+  );
+}
+
 function List({ onOpen }) {
   const q = usePanel("gm.players");
   const [filter, setFilter] = useState("");
@@ -68,6 +90,7 @@ function List({ onOpen }) {
                 <ConfirmButton icon={HeartPulse} confirm="Sí, a todos" onConfirm={resetAll} disabled={busy !== null || d.players.length === 0} testid="gm-hp-all">Restaurar la vida de todos</ConfirmButton>
               </div>
               <p class="faint gm-hint">{plural(d.players.length, "persona", "personas")} · {d.players.filter((p) => p.online).length} en la Actividad ahora.</p>
+              {d.autoRole && <AutoRole state={d.autoRole} replace={(autoRole) => q.replace({ ...d, autoRole: { on: autoRole.on, role: autoRole.role, roleId: autoRole.roleId } })} />}
               {shown.length === 0 ? <Empty icon={Users} title="No hay nadie con ese nombre">Prueba con otra búsqueda.</Empty>
                 : <div class="gm-players">{shown.map((p) => <Row key={p.id} p={p} onOpen={onOpen} />)}</div>}
             </>

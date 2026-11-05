@@ -552,11 +552,42 @@ class ActivityBridge(PanelRpc, GmRpc, TupperRpc, AudioRpc, CinemaRpc, FxRpc, Qui
             except Exception:  # noqa: BLE001
                 log.exception("could not tell a screen its permissions")
 
+    # ---- the participant role ------------------------------------------------------------------------------
+    def auto_role_state(self) -> dict:
+        app = self.app
+        role_id = int(getattr(app, "qte_player_role_id", 0) or 0)
+        guild = self.app.resolve_event_guild() if role_id else None
+        role = guild.get_role(role_id) if guild is not None else None
+        return {"on": bool(getattr(app, "auto_player_role", False)), "role": getattr(role, "name", "") if role else "",
+                "roleId": str(role_id) if role_id else ""}
+
+    async def ensure_player_role(self, user_id: int, perms: dict | None = None) -> str:
+        """Somebody opened the Activity: give them the event's participant role, so the bot tracks their HP and sends them QTEs.
+        Not for whoever runs the fight (a host, or the «Evento» / «Jefe» boxes): they play the world, not a character."""
+        app = self.app
+        if not getattr(app, "auto_player_role", False) or not hasattr(app, "grant_player_role"):
+            return "off"
+        if perms is not None and (perms.get("host") or {"event", "boss"} & set(perms.get("can") or [])):
+            return "staff"
+        member = await self.member_of(user_id)
+        if member is None or getattr(member, "bot", False):
+            return "none"
+        result = await app.grant_player_role(member, "Opened the event's Activity")
+        if result == "added":
+            self.gm.log.add("Actividad", f"Rol de participante para {getattr(member, 'display_name', user_id)} (entró a la Actividad)")
+        elif result == "forbidden" and not getattr(self, "_role_warned", False):
+            self._role_warned = True
+            self.gm.log.add("Actividad", "No pude dar el rol de participante: el bot necesita «Gestionar roles» y estar por encima de ese rol")
+        return result
+
     async def welcome_extras(self, conn: Conn) -> dict:
         comp = self.compensation_of(conn)
         conn.comp_sent = comp
+        perms = await self.perms_frame(conn)
+        if not conn.dev and not conn.hidden:
+            self._spawn(self.ensure_player_role(conn.user_id, perms))
         # prefs is None when the server knows nothing about this person yet: the client then keeps (and sends) the ones it has
-        return {"perms": await self.perms_frame(conn), "prefs": self.prefs.get(conn.user_id) if self.prefs.has(conn.user_id) else None,
+        return {"perms": perms, "prefs": self.prefs.get(conn.user_id) if self.prefs.has(conn.user_id) else None,
                 "calib": self.latency.get(conn.user_id),
                 "comp": comp, "rules": self.rules(), "charAvatars": self.char_avatars(conn.user_id), "audio": self.audio.welcome(),
                 "cine": self.cinema.current(), "mobs": self.mobs.public(), "look": self.look.value, "agendaNext": self.agenda.next_event(), "scene": scene_public(self.scenes.current()),

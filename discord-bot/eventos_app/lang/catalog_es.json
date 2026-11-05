@@ -7378,5 +7378,83 @@
 "kind": "user",
 "en": "🏃 {1} **No parry here!** Use *evade*",
 "es": "🏃 {1} **¡Aquí no hay parry!** Usa *evade*"
+},
+{
+"id": "daae20787bac",
+"kind": "console",
+"en": "[green]✓ {1} got the participant role ({2})[/green]",
+"es": "[green]✓ {1} recibió el rol de participante ({2})[/green]"
+},
+{
+"id": "1fc499410f46",
+"kind": "console",
+"en": "[yellow]⚠ Could not give the participant role: the bot needs Manage Roles, above that role[/yellow]",
+"es": "[yellow]⚠ No se pudo dar el rol de participante: el bot necesita «Gestionar roles» y estar por encima de ese rol[/yellow]"
+},
+{
+"id": "3ae0731f64ed",
+"kind": "user",
+"en": "(Admins) give the role to this person instead",
+"es": "(Admins) dar el rol a esta persona"
+},
+{
+"id": "a1adaa92c2a9",
+"kind": "user",
+"en": "Join the event: get the participant role so the bot tracks you",
+"es": "Únete al evento: recibe el rol de participante para que el bot te siga"
+},
+{
+"id": "d527182469e3",
+"kind": "user",
+"en": "Joined the event",
+"es": "Se unió al evento"
+},
+{
+"id": "15b381831634",
+"kind": "user",
+"en": "ℹ️ You already have the participant role.",
+"es": "ℹ️ Ya tienes el rol de participante."
+},
+{
+"id": "3dcdf4660748",
+"kind": "user",
+"en": "ℹ️ {1} already has the participant role.",
+"es": "ℹ️ {1} ya tiene el rol de participante."
+},
+{
+"id": "3d403a4bd5d5",
+"kind": "user",
+"en": "⚠️ I can't give that role: I need the Manage Roles permission and my role must be above it.",
+"es": "⚠️ No puedo dar ese rol: necesito el permiso «Gestionar roles» y que mi rol esté por encima."
+},
+{
+"id": "cefe5ec2d8d3",
+"kind": "user",
+"en": "⚠️ The event has no participant role yet: an admin must choose it in the app (or with /setchannel).",
+"es": "⚠️ El evento todavía no tiene rol de participante: un admin debe elegirlo en la app (o con /setchannel)."
+},
+{
+"id": "f37f98503d5d",
+"kind": "user",
+"en": "✅ You're in! You now have the participant role: the bot will track your HP and QTEs.",
+"es": "✅ ¡Dentro! Ya tienes el rol de participante: el bot seguirá tu vida y tus QTE."
+},
+{
+"id": "a276abc5f7b7",
+"kind": "user",
+"en": "✅ {1} now has the participant role.",
+"es": "✅ {1} ya tiene el rol de participante."
+},
+{
+"id": "f39da8ffe5a4",
+"kind": "user",
+"en": "❌ Bots don't take part in the event.",
+"es": "❌ Los bots no participan en el evento."
+},
+{
+"id": "4159e6ed6756",
+"kind": "user",
+"en": "❌ Only admins can give the participant role to someone else.",
+"es": "❌ Solo los admins pueden dar el rol de participante a otra persona."
 }
 ]

@@ -64,7 +64,8 @@ for _perm, _ops in {
     "boss": "boss boss_config boss_hp boss_mode boss_register boss_remove boss_spawn ability_remove ability_save ability_use "
             "domain_clear domain_expand domain_save gif_add gif_remove",
     "mobs": "mobs mob_delete mob_hp mob_pause mob_remove mob_save mob_spawn",
-    "players": "players player hp hp_reset charges cooldowns points skills_reset support slots ach_give ach_remove obj_give obj_take obj_spins afk",
+    "players": "players player hp hp_reset charges cooldowns points skills_reset support slots ach_give ach_remove obj_give obj_take obj_spins afk "
+               "auto_role",
     "values": "values value_set qte_set",
     "content": "data file_create file_delete file_get file_restore file_save achievements ach_save ach_delete objects object object_save "
                "object_image obj_approve obj_reject obj_reload powers",

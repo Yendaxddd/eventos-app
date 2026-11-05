@@ -73,7 +73,7 @@ def test_configure_event_creates_the_hp_thread_and_saves_everything(tmp_path, mo
     assert bot.last_cache_update is None  # player list will be rebuilt for the new channel/role
     saved = module.load_data("channel_config", {})
     assert saved == {"guild_id": 1, "qte_channel_id": 500, "hp_bar_thread_id": channel.created[0].id,
-                     "qte_player_role_id": 10, "admin_role_id": 11}
+                     "qte_player_role_id": 10, "admin_role_id": 11, "auto_player_role": True}
 
 
 def test_configure_event_reuses_an_existing_hp_thread_and_keeps_roles_when_not_given(tmp_path, monkeypatch):

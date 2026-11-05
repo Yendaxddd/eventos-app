@@ -277,6 +277,7 @@ class AdvancedQTEBot:
         self.admin_role_id = int(os.getenv("ADMIN_ROLE_ID", "0"))  # For restricted commands
         self.hp_bar_thread_id = int(os.getenv("HP_BAR_THREAD_ID", "0"))  # Initialize before loading config
         self.event_guild_id = 0  # Server the event runs in (saved in channel_config.json)
+        self.auto_player_role = True  # give the participant role to whoever opens the Activity (saved in channel_config.json)
         self._ready_once = False  # on_ready fires again after every reconnect; init work must run once
 
         # Validate configuration
@@ -761,6 +762,8 @@ class AdvancedQTEBot:
                     self.admin_role_id = config["admin_role_id"]
                 if config.get("guild_id"):
                     self.event_guild_id = config["guild_id"]
+                if "auto_player_role" in config:
+                    self.auto_player_role = bool(config["auto_player_role"])
                 console.print("[cyan]✓ Loaded saved channel configuration[/cyan]")
         except Exception as e:
             console.print(f"[yellow]⚠ Could not load channel config: {e}[/yellow]")
@@ -773,6 +776,7 @@ class AdvancedQTEBot:
             "hp_bar_thread_id": self.hp_bar_thread_id,
             "qte_player_role_id": self.qte_player_role_id,
             "admin_role_id": self.admin_role_id,
+            "auto_player_role": getattr(self, "auto_player_role", True),
         }
         save_data("channel_config", config)
         console.print("[green]💾 Channel configuration saved[/green]")
@@ -3425,6 +3429,38 @@ Your response (1-2 sentences max):"""
             except Exception as e:
                 log.error(f"Error in qte command: {e}")
                 await interaction.response.send_message("❌ An error occurred.", ephemeral=True)
+
+        @self.bot.tree.command(name="join", description="Join the event: get the participant role so the bot tracks you")
+        @app_commands.describe(member="(Admins) give the role to this person instead")
+        async def join_command(interaction: discord.Interaction, member: discord.Member = None):
+            try:
+                target = member or interaction.user
+                if member is not None and member.id != interaction.user.id and not self.is_admin(interaction.user):
+                    await interaction.response.send_message("❌ Only admins can give the participant role to someone else.", ephemeral=True)
+                    return
+                if getattr(target, "bot", False):
+                    await interaction.response.send_message("❌ Bots don't take part in the event.", ephemeral=True)
+                    return
+                result = await self.grant_player_role(target, f"/join by {interaction.user.name}")
+                if result in ("added", "had") and member is None and target.id in self.afk_users:
+                    self.afk_users.discard(target.id)       # joining yourself again means taking part again (as /qte would)
+                    await self.update_qte_player_cache()
+                if result == "added":
+                    text = (f"✅ {target.mention} now has the participant role." if member else
+                            "✅ You're in! You now have the participant role: the bot will track your HP and QTEs.")
+                elif result == "had":
+                    text = f"ℹ️ {target.mention} already has the participant role." if member else "ℹ️ You already have the participant role."
+                elif result == "no_role":
+                    text = "⚠️ The event has no participant role yet: an admin must choose it in the app (or with /setchannel)."
+                elif result == "forbidden":
+                    text = "⚠️ I can't give that role: I need the Manage Roles permission and my role must be above it."
+                else:
+                    text = "❌ An error occurred."
+                await interaction.response.send_message(text, ephemeral=True)
+            except Exception as e:
+                log.error(f"Error in join command: {e}")
+                if not interaction.response.is_done():
+                    await interaction.response.send_message("❌ An error occurred.", ephemeral=True)
 
         @self.bot.tree.command(
             name="register",
@@ -8417,6 +8453,29 @@ Your response (1-2 sentences max):"""
 
     # ==============================================
 
+
+    async def grant_player_role(self, member, reason="Joined the event"):
+        """Give `member` the event's participant role: QTEs, HP tracking and the dashboards follow whoever has it.
+
+        Returns "added", "had" (already had it), "no_role" (no role set or it no longer exists), "forbidden" (the bot may not
+        manage roles, or the role is above its own) or "error"."""
+        try:
+            guild = getattr(member, "guild", None)
+            role = guild.get_role(self.qte_player_role_id) if guild is not None and self.qte_player_role_id else None
+            if role is None:
+                return "no_role"
+            if any(getattr(r, "id", None) == role.id for r in (getattr(member, "roles", None) or [])):
+                return "had"
+            await member.add_roles(role, reason=reason)
+        except discord.Forbidden:
+            console.print("[yellow]⚠ Could not give the participant role: the bot needs Manage Roles, above that role[/yellow]")
+            return "forbidden"
+        except Exception as e:
+            log.error(f"Error giving the participant role: {e}")
+            return "error"
+        console.print(f"[green]✓ {getattr(member, 'name', member)} got the participant role ({reason})[/green]")
+        await self.update_qte_player_cache()
+        return "added"
 
     async def update_qte_player_cache(self):
         """Update the cache of QTE players"""

@@ -134,7 +134,22 @@ class GmRpc:
         await self._gm(conn)
         ids = self.gm.player_ids()
         people = dict(zip(ids, await asyncio.gather(*(self.who_is(i, fetch=False) for i in ids))))
-        return {"players": self.gm.rows(people, {c.user_id for c in self.hub.conns.values()})}
+        return {"players": self.gm.rows(people, {c.user_id for c in self.hub.conns.values()}), "autoRole": self.auto_role_state()}
+
+    async def rpc_gm_auto_role(self, conn: Conn, args: dict):
+        """Switch on/off giving the participant role to whoever opens the Activity; on, it is given at once to whoever is in."""
+        actor = await self._gm(conn)
+        on = bool(args.get("on"))
+        self.app.auto_player_role = on
+        if hasattr(self.app, "_save_channel_config"):
+            self.app._save_channel_config()
+        self.gm.log.add(actor, "Rol de participante automático: " + ("activado" if on else "desactivado"))
+        given = 0
+        if on:
+            for c in list(self.hub.conns.values()):
+                if not c.dev and not c.hidden and await self.ensure_player_role(c.user_id, await self.perms_frame(c)) == "added":
+                    given += 1
+        return {**self.auto_role_state(), "given": given}
 
     async def rpc_gm_player(self, conn: Conn, args: dict):
         await self._gm(conn)

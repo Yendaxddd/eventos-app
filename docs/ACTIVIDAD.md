@@ -324,6 +324,13 @@ maldición la carga.
 fecha** del GM. Al cerrar una votación, el menú muestra el **próximo evento** con su cuenta atrás. Se guarda en
 `data/activity_agenda.json` (hora UTC; cada uno la ve en la suya).
 
+**Calendario**: días concretos que mandan sobre la semana («el 15 no puedo», «el 22 sí, de 18:00 a 23:00»), con una nota de dónde
+o cómo («desde el móvil», «solo voz»). *Equipo* muestra el mes con cuántos pueden, quizá y no cada día; al tocar un día salen las
+personas con sus horas **pasadas a tu hora** (lo marcado y, si no, lo que dice su semana). En las votaciones abiertas, bajo cada
+fecha sale quién la tiene marcada como «no puedo» o fuera de su horario. **Zona horaria**: cada uno ve la suya arriba de la Agenda
+y puede elegirla a mano (o volver a la del dispositivo); la del resto sale en *La semana del equipo* con la hora que es allí.
+Los días ya pasados se borran solos.
+
 ### Resultados
 Al derrotar al jefe sale la pantalla de resultados de esa ronda (podio, premios repartidos, tabla). *GM → Resultados* crea y edita
 pantallas por bloques y las cambia **en directo**; *Mostrar* la abre a todos de nuevo. Se guardan en `data/activity_results.json`.
@@ -343,6 +350,19 @@ siguen las casillas.
 jugador (y unas pocas imágenes por hora). Se liga a un poder (personaje y Poder 1/2) o a una acción, con una espera mínima entre
 usos (1 min a 1 h). *Enviar al GM* la pasa a *GM → Solicitudes* (casilla *Solicitudes*), que avisa a quien la tenga; aprobar o
 devolver avisa al jugador. Aprobada, va **antes** que las del GM para ese momento, solo cuando lo hace ese jugador.
+
+### Escenas de QTE
+*GM → Evento → Escena*: qué QTE salen solos según el momento. De serie: **Jefe** (parry, Black Flash, contraataque), **Combate**,
+**Huida** y **Esquivar** (sin parry ni contraataque). Cada escena es un peso por tipo de QTE (0 = nunca) y si una esquiva rápida
+da contraataque. Cambiarla en directo avisa a todos (se ve en la ficha y en el mini-HUD). Vale para los QTE automáticos, F9-F12, el
+lote, las habilidades del jefe y los ataques «al azar» de los enemigos. Deslizar, arrastrar y machacar solo existen en la Actividad:
+a quien juegue desde el canal le sale uno de dirección (o de esquivar). Se guardan en `data/activity_scenes.json`.
+
+### Rol de participante
+El bot sigue (vida, QTE, paneles) a quien tiene el **rol de participante** del evento. Ahora quien abre la Actividad lo recibe
+solo (no quien lleva el evento: anfitriones y las casillas *Evento* o *Jefe*). Quien no entra a la Actividad usa **`/join`**; un
+admin puede dárselo a otro con `/join @persona`. Se apaga en *GM → Jugadores* («Dar el rol de participante al entrar»). El bot
+necesita el permiso **Gestionar roles** y su rol por encima del de participante; si no, lo apunta en el historial del GM.
 
 ### Mecánicas
 Ver las notas de la 2.1.0: venganza que se quita al curarse, suerte de Black Flash anti-mala-suerte, más daño al fallar un QTE,
