@@ -1,0 +1,112 @@
+[
+ {
+  "raw": null,
+  "expected": {
+   "preset": "impacto",
+   "color": "",
+   "intensity": 100,
+   "speed": 100,
+   "delay": 0,
+   "banner": "",
+   "name": false,
+   "sound": "",
+   "scope": "all"
+  }
+ },
+ {
+  "raw": {},
+  "expected": {
+   "preset": "impacto",
+   "color": "",
+   "intensity": 100,
+   "speed": 100,
+   "delay": 0,
+   "banner": "",
+   "name": false,
+   "sound": "",
+   "scope": "all"
+  }
+ },
+ {
+  "raw": {
+   "preset": "nope",
+   "color": "red",
+   "intensity": 999,
+   "speed": 1,
+   "delay": -5,
+   "banner": "  ¡Hola!\n ",
+   "name": "yes",
+   "sound": "zz",
+   "scope": "x",
+   "extra": 1
+  },
+  "expected": {
+   "preset": "impacto",
+   "color": "",
+   "intensity": 200,
+   "speed": 50,
+   "delay": 0,
+   "banner": "¡Hola!",
+   "name": false,
+   "sound": "",
+   "scope": "all"
+  }
+ },
+ {
+  "raw": {
+   "preset": "explosion",
+   "color": "#FF00AA",
+   "intensity": 150,
+   "speed": 80,
+   "delay": 1200,
+   "banner": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+   "name": true,
+   "sound": "ab12",
+   "scope": "target"
+  },
+  "expected": {
+   "preset": "explosion",
+   "color": "#ff00aa",
+   "intensity": 150,
+   "speed": 80,
+   "delay": 1200,
+   "banner": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+   "name": true,
+   "sound": "ab12",
+   "scope": "target"
+  }
+ },
+ {
+  "raw": {
+   "preset": "ninguno",
+   "intensity": true,
+   "speed": "fast",
+   "delay": 2.6
+  },
+  "expected": {
+   "preset": "ninguno",
+   "color": "",
+   "intensity": 100,
+   "speed": 100,
+   "delay": 3,
+   "banner": "",
+   "name": false,
+   "sound": "",
+   "scope": "all"
+  }
+ },
+ {
+  "raw": "text",
+  "expected": {
+   "preset": "impacto",
+   "color": "",
+   "intensity": 100,
+   "speed": 100,
+   "delay": 0,
+   "banner": "",
+   "name": false,
+   "sound": "",
+   "scope": "all"
+  }
+ }
+]

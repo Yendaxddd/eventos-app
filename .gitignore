@@ -46,6 +46,7 @@ logs/
 build/
 dist/
 *.spec
+!discord-bot/packaging/*.spec
 
 # Secrets - NEVER commit these!
 discord-bot/.env
@@ -70,6 +71,20 @@ discord-bot/config.json
 *.bak
 *.cache
 
+# Desktop app: per-user settings (contains the bot token!) and generated files
+settings.json
+settings.json.bad
+settings.json.tmp
+discord-bot/data/webhook_lanes.json
+discord-bot/data/sender_owners.json
+
+# Activity client: build output (made by `npm run build` in discord-bot/activity_client) and dependencies
+discord-bot/eventos_app/activity/web/
+discord-bot/activity_client/node_modules/
+
 # counter pictures the bot keeps at run time: never in the repository
 discord-bot/assets/counter_gifs/*
 !discord-bot/assets/counter_gifs/.gitkeep
+
+# Activity: the AI endpoint for summaries keeps an API key — never in the repository
+discord-bot/data/activity_ai.json

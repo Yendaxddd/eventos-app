@@ -9,13 +9,15 @@ import threading
 import asyncio
 import json
 import random
+import collections
 import os
+import queue
+import re
 import pathlib
 import logging
 from datetime import datetime, timedelta, timezone
 from typing import List
 from dotenv import load_dotenv
-from rich.console import Console
 from rich.panel import Panel
 from rich.table import Table
 from rich.layout import Layout
@@ -40,21 +42,23 @@ except Exception as e:
     print(f"⚠️ Keyboard library error: {e}")
     KEYBOARD_AVAILABLE = False
 
-# Initialize Rich console
-console = Console()
+# Console output goes through a proxy: a normal rich console when run headless,
+# or the log panel of the desktop app (see eventos_app/console_bridge.py).
+from eventos_app.console_bridge import console
+from eventos_app import paths as app_paths
+from eventos_app.activity.qte import QteBook
+from eventos_app import powers as power_effects
 
-# Load environment variables
-load_dotenv()
+# Load environment variables (an optional .env next to the app / script)
+load_dotenv(app_paths.app_home() / ".env")
 
 # Setup logging with session rotation - each bot start gets a new log file
 def setup_logging():
     """Setup logging with timestamped log file per session in central logs folder"""
     session_time = datetime.now().strftime("%Y%m%d_%H%M%S")
-    # Centralize logs under eventos-app/logs regardless of cwd
-    project_root = pathlib.Path(__file__).resolve().parents[1]
-    logs_dir = project_root / "logs"
+    # Logs live in <app home>/logs regardless of cwd
     try:
-        logs_dir.mkdir(parents=True, exist_ok=True)
+        logs_dir = app_paths.logs_dir()
     except Exception:
         # Fallback: write next to script if creation fails
         logs_dir = pathlib.Path(__file__).resolve().parent
@@ -84,6 +88,35 @@ log, LOG_FILENAME = setup_logging()
 console.print(f"[cyan]📝 Logging to: {LOG_FILENAME}[/cyan]")
 
 # Timing profiler for performance diagnostics
+# QTE timing per difficulty (seconds from the start of the QTE). /config reset goes back to these.
+DEFAULT_QTE_TIMES = {
+    'easy': {'evade_window': 6.0, 'parry_window': (4.0, 7.0), 'perfect_parry': 5.5},
+    'medium': {'evade_window': 4.5, 'parry_window': (3.0, 5.0), 'perfect_parry': 4.0},
+    'hard': {'evade_window': 4.0, 'parry_window': (2.5, 4.5), 'perfect_parry': 3.5},
+    'impossible': {'evade_window': 1.5, 'parry_window': (0.8, 1.7), 'perfect_parry': 1.25},
+}
+# Each QTE ends 0.75 s after its parry window closes: a harder one is always shorter.
+DEFAULT_QTE_TIMEOUTS = {'easy': 7.75, 'medium': 5.75, 'hard': 5.25, 'impossible': 2.45}
+# Damage of a failed QTE (players have 100 HP; boss abilities hit for 30-55).
+DEFAULT_DAMAGE_RANGES = {'easy': (3, 6), 'medium': (5, 10), 'hard': (8, 15), 'impossible': (20, 20)}
+
+# Saved settings carry the version of the defaults they were written with. A value saved by an older version that still equals
+# that version's default was never chosen by anybody, so the current default applies instead (a value a GM picked is kept).
+DEFAULTS_VERSION = 2
+OLD_DAMAGE_RANGES = {'easy': (1, 3), 'medium': (1, 5), 'hard': (1, 10), 'impossible': (15, 15)}
+
+
+def chosen_damage_ranges(saved: dict, version) -> dict:
+    """The damage ranges of a settings file, as tuples, without the old defaults nobody chose."""
+    out = {}
+    for diff, dmg in (saved or {}).items():
+        dmg = tuple(dmg) if isinstance(dmg, list) else dmg
+        if (version or 1) < 2 and dmg == OLD_DAMAGE_RANGES.get(diff):
+            continue
+        out[diff] = dmg
+    return out
+
+
 class TimingProfiler:
     """Track timing of operations for performance diagnostics"""
     def __init__(self):
@@ -141,7 +174,7 @@ profiler = TimingProfiler()
 def resolve_data_dir():
     """Pick a writable data directory with a home fallback."""
     candidates = [
-        pathlib.Path(__file__).parent / "data",
+        app_paths.data_dir(),
         pathlib.Path.home() / ".eventos-bot" / "data",
     ]
 
@@ -165,12 +198,47 @@ def resolve_data_dir():
 
 DATA_DIR = resolve_data_dir()
 
-# Resolve assets directory (same folder as the script)
-ASSETS_DIR = pathlib.Path(__file__).parent / "assets"
+# Resolve assets directory (<app home>/assets)
+ASSETS_DIR = app_paths.assets_dir()
 log.info(f"Using assets directory: {ASSETS_DIR}")
+
+# Saving used to write ~10 JSON files on the event loop thread; on Windows (antivirus scanning every
+# write) that froze every handler for tens to hundreds of ms. Now the loop only serialises (fast) and a
+# writer thread does the file work, atomically (temp file + replace), so a crash can't leave half a file.
+_write_queue: "queue.Queue" = queue.Queue()
+_writer_lock = threading.Lock()
+_writer_thread = None
+
+
+def _writer_loop():
+    while True:
+        path, text = _write_queue.get()
+        try:
+            tmp = path.with_suffix(path.suffix + ".tmp")
+            for attempt in range(5):  # Windows: the file can be held for a moment by an antivirus scan
+                try:
+                    tmp.parent.mkdir(parents=True, exist_ok=True)
+                    tmp.write_text(text, encoding="utf-8")
+                    os.replace(tmp, path)
+                    break
+                except OSError:
+                    if attempt == 4:
+                        raise
+                    time.sleep(0.05 * (attempt + 1))
+        except Exception as e:
+            log.error(f"Error saving {path.name}: {e}")
+        finally:
+            _write_queue.task_done()
+
+
+def flush_saves():
+    """Wait until every queued save has reached the disk (shutdown, tests, right before a load)."""
+    _write_queue.join()
+
 
 def load_data(name, default):
     """Load JSON data from file"""
+    flush_saves()
     try:
         filepath = DATA_DIR / f"{name}.json"
         with open(filepath, "r", encoding="utf-8") as f:
@@ -188,12 +256,15 @@ def load_data(name, default):
         return default
 
 def save_data(name, data):
-    """Save JSON data to file"""
+    """Save JSON data (serialised now, written by the writer thread)"""
+    global _writer_thread
     try:
-        filepath = DATA_DIR / f"{name}.json"
-        with open(filepath, "w", encoding="utf-8") as f:
-            json.dump(data, f, indent=2, ensure_ascii=False)
-        log.debug(f"Saved {name}.json successfully")
+        text = json.dumps(data, indent=2, ensure_ascii=False)
+        with _writer_lock:
+            if _writer_thread is None or not _writer_thread.is_alive():
+                _writer_thread = threading.Thread(target=_writer_loop, name="data-writer", daemon=True)
+                _writer_thread.start()
+        _write_queue.put((DATA_DIR / f"{name}.json", text))
     except Exception as e:
         log.error(f"Error saving {name}.json: {e}")
 
@@ -205,6 +276,9 @@ class AdvancedQTEBot:
         self.qte_player_role_id = int(os.getenv("QTE_PLAYER_ROLE_ID", "0"))
         self.admin_role_id = int(os.getenv("ADMIN_ROLE_ID", "0"))  # For restricted commands
         self.hp_bar_thread_id = int(os.getenv("HP_BAR_THREAD_ID", "0"))  # Initialize before loading config
+        self.event_guild_id = 0  # Server the event runs in (saved in channel_config.json)
+        self.auto_player_role = True  # give the participant role to whoever opens the Activity (saved in channel_config.json)
+        self._ready_once = False  # on_ready fires again after every reconnect; init work must run once
 
         # Validate configuration
         if not self.bot_token:
@@ -266,7 +340,7 @@ class AdvancedQTEBot:
         console.print(f"[gold1]✓ Loaded {len(self.boss_defeat_gifs)} boss defeat GIFs[/gold1]")
 
         # QTE State Management - Support multiple concurrent QTEs
-        self.active_qtes = {}  # Dictionary: qte_id -> qte_data
+        self.active_qtes = QteBook()  # qte_id -> qte_data (a dict that also tells the Discord Activity when a QTE starts/ends)
         self.qte_counter = 0   # Counter for unique QTE IDs
         self.afk_users = set()
         self.last_qte_completion = {}  # {user_id: timestamp} for anti-spam
@@ -284,21 +358,10 @@ class AdvancedQTEBot:
         self.max_hp = 100
         self.hp_bar_messages = {}  # Cache: {user_id_or_boss_name: message_id} - prevents slow history searches
         
-        # ========== QTE TIMING SYSTEM ==========
-        self.qte_timings = {
-            'easy': {'evade_window': 6.0, 'parry_start': 4.0, 'parry_end': 7.0, 'timeout': 10.0},
-            'medium': {'evade_window': 4.5, 'parry_start': 3.0, 'parry_end': 5.0, 'timeout': 7.0},
-            'hard': {'evade_window': 4.0, 'parry_start': 2.5, 'parry_end': 4.5, 'timeout': 5.0},
-            'impossible': {'evade_window': 1.5, 'parry_start': 0.8, 'parry_end': 1.7, 'timeout': 3.0}
-        }
-        
+        # QTE timing: self.qte_times / self.qte_timeout_durations (below) are what the handlers, /config qte and the Activity use
+
         # Variable damage per difficulty
-        self.damage_ranges = {
-            'easy': (1, 3),        # Random 1-3 damage
-            'medium': (1, 5),      # Random 1-5 damage
-            'hard': (1, 10),       # Random 1-10 damage
-            'impossible': (15, 15) # Fixed 15 damage
-        }
+        self.damage_ranges = dict(DEFAULT_DAMAGE_RANGES)
         
         # Load saved live config if exists
         self._load_live_config()
@@ -336,8 +399,14 @@ class AdvancedQTEBot:
         
         # ========== COUNTER MECHANIC ==========
         self.counter_enabled_players = {}  # {user_id: qte_id}
+        self.counter_deadlines = {}  # {user_id: time.time() when the counter window closes} (shown by the Discord Activity)
         self.counter_context = {}  # {user_id: {"qte_id": qte_id, "difficulty": difficulty}}
-        self.counter_window = 1.5  # LOWERED: 1.5 seconds from QTE start (was 2.0)
+        self.counter_window = 1.5  # evade faster than this (seconds from the QTE's start) to earn a counter-attack
+        self.counter_duration = 5.0  # how long the counter-attack then stays open (the Activity's counter bar uses it too)
+        self.feedback_mode = os.environ.get("EVENTOS_FEEDBACK", "auto").strip().lower()   # see feedback_quiet
+        if self.feedback_mode not in ("auto", "quiet", "chat"):
+            self.feedback_mode = "auto"
+        self.activity_notify = None  # set by the Discord Activity's bridge while it runs (has_player / notify)
         self.enemy_stunned = False
         self.stun_end_time = None
         self.counter_gif_dir = pathlib.Path("assets/counter_gifs")
@@ -385,7 +454,10 @@ class AdvancedQTEBot:
         # we batch updates and flush them periodically to reduce rate limits
         self._pending_hp_updates = {}  # {cache_key: embed} - pending updates
         self._hp_update_task = None  # Background task for flushing
-        self._hp_update_interval = 2.0  # Flush every 2 seconds (reduced from 0.5s for rate limits)
+        self._hp_update_interval = 0.4  # HP bar edits are coalesced for this long (the sender pool does the pacing)
+        self._tupper_seen = {}     # owner user id -> recent Tupperbox webhook messages
+        self.own_webhook_ids = set()  # webhooks this app registered to send faster (not Tupperbox: not players)
+        self._tupper_waiters = {}  # owner user id -> futures waiting for the next one
         # ===============================================
         
         # ========== GLOBAL MESSAGE QUEUE SYSTEM ==========
@@ -449,6 +521,8 @@ class AdvancedQTEBot:
         }
         # Current QTE mode - can be cycled with ALT+R or *qtemode*
         self.current_qte_mode = "standard"  # standard (evade/parry), combo, direction
+        self.qte_scene = None  # the scene the Activity's game masters chose (scenes.py): which QTEs come up on their own
+        self.launch_gesture = None  # set by the Activity: launches its swipe/drag/tap QTEs
         self.qte_mode_options = ["standard", "combo", "direction"]  # Cycles: normal -> combo -> arrows
         self.combo_qte_sequences = [
             ["evade", "parry"],
@@ -469,6 +543,7 @@ class AdvancedQTEBot:
         # ========== STATUS EFFECTS SYSTEM ==========
         # Active status effects on players/boss
         self.player_status_effects = {}  # {user_id: {effect_type: {stacks, damage_per_tick, tick_interval, end_time, source}}}
+        self.mirror_cooldowns = {}       # user id -> when their Mirror Shard can be invoked again
         self.boss_status_effects = {}    # Same structure but for boss
         self.status_effect_types = {
             "bleed": {
@@ -565,10 +640,9 @@ class AdvancedQTEBot:
         # =====================================
         
         # ========== BOSS DEFEAT SYSTEM ==========
-        self.boss_defeat_gifs = [
-            "https://media.tenor.com/your-boss-defeat-gif-1.gif",  # Placeholder
-            "https://media.tenor.com/your-boss-defeat-gif-2.gif"   # Placeholder
-        ]
+        # the GIFs were loaded from the saved data above: placeholders here used to overwrite them on every start
+        if not isinstance(getattr(self, "boss_defeat_gifs", None), list):
+            self.boss_defeat_gifs = []
         self.boss_defeat_messages = [
             "The tyrant falls... their reign ends here.",
             "Victory! The darkness recedes...",
@@ -604,28 +678,10 @@ class AdvancedQTEBot:
         self.latency_offset = 0.25
 
         # QTE timing configurations (+500ms for better balance)
-        self.qte_times = {
-            'easy': {
-                'evade_window': 6.0,      # Was 5.5, +0.5s
-                'parry_window': (4.0, 7.0),  # Was (3.5, 6.5), +0.5s
-                'perfect_parry': 5.5      # Center adjusted
-            },
-            'medium': {
-                'evade_window': 4.5,      # Was 4.0, +0.5s
-                'parry_window': (3.0, 5.0),  # Was (2.5, 4.5), +0.5s
-                'perfect_parry': 4.0
-            },
-            'hard': {
-                'evade_window': 4.0,      # Was 3.5, +0.5s
-                'parry_window': (2.5, 4.5),  # Was (2.0, 4.0), +0.5s
-                'perfect_parry': 3.5
-            },
-            'impossible': {
-                'evade_window': 1.5,      # Was 1.0, +0.5s
-                'parry_window': (0.8, 1.7),  # Was (0.3, 1.2), +0.5s
-                'perfect_parry': 1.25
-            }
-        }
+        self.qte_times = {d: dict(t) for d, t in DEFAULT_QTE_TIMES.items()}
+
+        # Seconds until an unanswered single/group QTE counts as failed (the Discord Activity draws its bar with these)
+        self.qte_timeout_durations = dict(DEFAULT_QTE_TIMEOUTS)
 
         # Difficulty emoji indicators
         self.difficulty_emoji = {
@@ -652,10 +708,16 @@ class AdvancedQTEBot:
 
         self.setup_events()
         self.setup_slash_commands()
-        if KEYBOARD_AVAILABLE:
-            self.setup_hotkeys()
-        else:
-            console.print("[yellow]⚠️  Keyboard hotkeys disabled (library not available or requires root)[/yellow]")
+        self.setup_hotkeys()
+
+    def answer_grace(self):
+        """Extra seconds a QTE stays open for answers already on their way from the Activity: the players' screens time them,
+        and a lag spike on the way back must not turn a press made in time into a timeout. 0 without the Activity."""
+        notify = getattr(self, "activity_notify", None)
+        try:
+            return float(notify.answer_grace()) if notify is not None else 0.0
+        except Exception:
+            return 0.0
 
     def save_all_data(self, force=False):
         """Save all persistent data to files with throttling to prevent disk spam"""
@@ -696,6 +758,12 @@ class AdvancedQTEBot:
                     self.hp_bar_thread_id = config["hp_bar_thread_id"]
                 if "qte_player_role_id" in config and config["qte_player_role_id"]:
                     self.qte_player_role_id = config["qte_player_role_id"]
+                if config.get("admin_role_id"):
+                    self.admin_role_id = config["admin_role_id"]
+                if config.get("guild_id"):
+                    self.event_guild_id = config["guild_id"]
+                if "auto_player_role" in config:
+                    self.auto_player_role = bool(config["auto_player_role"])
                 console.print("[cyan]✓ Loaded saved channel configuration[/cyan]")
         except Exception as e:
             console.print(f"[yellow]⚠ Could not load channel config: {e}[/yellow]")
@@ -703,28 +771,142 @@ class AdvancedQTEBot:
     def _save_channel_config(self):
         """Save channel configuration to file"""
         config = {
+            "guild_id": self.event_guild_id,
             "qte_channel_id": self.qte_channel_id,
             "hp_bar_thread_id": self.hp_bar_thread_id,
-            "qte_player_role_id": self.qte_player_role_id
+            "qte_player_role_id": self.qte_player_role_id,
+            "admin_role_id": self.admin_role_id,
+            "auto_player_role": getattr(self, "auto_player_role", True),
         }
         save_data("channel_config", config)
         console.print("[green]💾 Channel configuration saved[/green]")
     
+    HP_THREAD_NAME = "📊 HP Bars"
+
+    async def configure_event(self, channel, player_role_id=None, admin_role_id=None):
+        """Point the event at `channel`: find/create its HP thread, set roles, save, refresh players.
+
+        Shared by the /setchannel command and the desktop app's server/channel/role pickers.
+        player_role_id / admin_role_id: None keeps the current value, 0 clears it (admin only).
+        Raises discord.Forbidden if the bot may not manage threads in `channel`.
+        Returns {"thread", "thread_status", "created"}.
+        """
+        self.qte_channel_id = channel.id
+        self.event_guild_id = channel.guild.id
+        if player_role_id:
+            self.qte_player_role_id = player_role_id
+        if admin_role_id is not None:
+            self.admin_role_id = admin_role_id
+
+        existing_thread = None
+        for thread in channel.threads:
+            if thread.name == self.HP_THREAD_NAME:
+                existing_thread = thread
+                break
+        if not existing_thread:  # also look in archived threads and bring it back
+            async for thread in channel.archived_threads(limit=50):
+                if thread.name == self.HP_THREAD_NAME:
+                    existing_thread = thread
+                    await thread.edit(archived=False)
+                    break
+
+        created = existing_thread is None
+        if existing_thread:
+            hp_thread, thread_status = existing_thread, "Found existing"
+        else:
+            hp_thread = await channel.create_thread(
+                name=self.HP_THREAD_NAME,
+                type=discord.ChannelType.public_thread,
+                reason="Auto-created HP bar display thread"
+            )
+            thread_status = "Created new"
+            initial_embed = discord.Embed(
+                title="📊 HP Bar Display Thread",
+                description="This thread displays live HP bars for all players and bosses.\n\n"
+                           "**This thread is managed by the bot.**\n"
+                           "HP bars will automatically update during battles.",
+                color=discord.Color.blue()
+            )
+            initial_embed.set_footer(text="HP bars appear here when players register and battles begin")
+            await hp_thread.send(embed=initial_embed)
+
+        self.hp_bar_thread_id = hp_thread.id
+        self._save_channel_config()
+        self.last_cache_update = None  # new channel/role: rebuild the player list on next use
+        return {"thread": hp_thread, "thread_status": thread_status, "created": created}
+
+    def resolve_event_guild(self):
+        """The server the event belongs to: from the channel, the saved guild, a configured role, or the only server."""
+        channel = self.bot.get_channel(self.qte_channel_id) if self.qte_channel_id else None
+        if channel is not None:
+            return channel.guild
+        if self.event_guild_id:
+            guild = self.bot.get_guild(self.event_guild_id)
+            if guild is not None:
+                return guild
+        for role_id in (self.qte_player_role_id, self.admin_role_id):
+            if role_id:
+                for guild in self.bot.guilds:
+                    if guild.get_role(role_id):
+                        return guild
+        if len(self.bot.guilds) == 1:
+            return self.bot.guilds[0]
+        return None
+
+    def print_config_check(self):
+        """Show what the saved configuration resolves to (server, channel, thread, roles)."""
+        guild = self.resolve_event_guild()
+        table = Table(title="📋 Configuration Check", box=box.ROUNDED, border_style="cyan")
+        table.add_column("Setting", style="white")
+        table.add_column("ID", style="dim")
+        table.add_column("Name", style="green")
+        table.add_column("Status", style="bold")
+
+        def row(label, ident, found, name_fmt, required=True):
+            if found is not None:
+                table.add_row(label, str(ident), name_fmt.format(found.name), "✅")
+            elif ident:
+                table.add_row(label, str(ident), "NOT FOUND", "[red]❌[/red]")
+            else:
+                table.add_row(label, "Not set", "-", "[red]❌[/red]" if required else "[yellow]⚠️[/yellow]")
+
+        if guild is not None:
+            table.add_row("Server", str(guild.id), guild.name, "✅")
+        else:
+            table.add_row("Server", str(self.event_guild_id or "Not set"), "-", "[red]❌[/red]")
+        row("QTE Channel", self.qte_channel_id, self.bot.get_channel(self.qte_channel_id) if self.qte_channel_id else None, "#{}")
+        row("HP Bar Thread", self.hp_bar_thread_id, self.bot.get_channel(self.hp_bar_thread_id) if self.hp_bar_thread_id else None, "#{}", required=False)
+        row("QTE Player Role", self.qte_player_role_id, guild.get_role(self.qte_player_role_id) if guild and self.qte_player_role_id else None, "@{}")
+        row("Admin Role", self.admin_role_id, guild.get_role(self.admin_role_id) if guild and self.admin_role_id else None, "@{}", required=False)
+        console.print(table)
+
+    def save_live_config(self):
+        """Save the live configuration (what /config save writes and _load_live_config restores). Also used by the Activity's GM panel."""
+        save_data("live_config", {
+            "defaults": DEFAULTS_VERSION,
+            "damage_ranges": {k: list(v) for k, v in self.damage_ranges.items()},
+            "revenge_threshold": self.revenge_threshold,
+            "revenge_damage_multiplier": self.revenge_damage_multiplier,
+            "revenge_bf_bonus": self.revenge_bf_bonus,
+            "bf_timing_window": self.bf_timing_window,
+            "ultimate_base_cooldown": self.ultimate_base_cooldown,
+            "charge_per_damage_dealt": self.charge_per_damage_dealt,
+            "ultimate_max_damage": self.ultimate_max_damage
+        })
+
     def _load_live_config(self):
         """Load saved live configuration from file (set by /config save)"""
         try:
             config = load_data("live_config", None)
             if config:
                 # QTE Timings
-                if "qte_timings" in config:
-                    self.qte_timings.update(config["qte_timings"])
-                    console.print("[cyan]✓ Loaded saved QTE timings[/cyan]")
+                # (an old "qte_timings" entry is ignored: it never reached the game; the timings are kept in qte_settings)
                 
                 # Damage Ranges
                 if "damage_ranges" in config:
-                    for diff, dmg in config["damage_ranges"].items():
-                        if isinstance(dmg, list) and len(dmg) == 2:
-                            self.damage_ranges[diff] = tuple(dmg)
+                    for diff, dmg in chosen_damage_ranges(config["damage_ranges"], config.get("defaults")).items():
+                        if isinstance(dmg, tuple) and len(dmg) == 2:
+                            self.damage_ranges[diff] = dmg
                     console.print("[cyan]✓ Loaded saved damage ranges[/cyan]")
                 
                 # Revenge Mode
@@ -940,7 +1122,8 @@ Your response (1-2 sentences max):"""
         """Save QTE timing and damage settings to JSON"""
         settings = {
             'qte_times': self.qte_times,
-            'damage_ranges': self.damage_ranges
+            'damage_ranges': self.damage_ranges,
+            'defaults': DEFAULTS_VERSION
         }
         save_data("qte_settings", settings)
         console.print("[green]💾 QTE settings saved[/green]")
@@ -958,10 +1141,9 @@ Your response (1-2 sentences max):"""
                         if isinstance(self.qte_times[diff]['parry_window'], list):
                             self.qte_times[diff]['parry_window'] = tuple(self.qte_times[diff]['parry_window'])
             if 'damage_ranges' in settings:
-                for diff, dmg in settings['damage_ranges'].items():
+                for diff, dmg in chosen_damage_ranges(settings['damage_ranges'], settings.get('defaults')).items():
                     if diff in self.damage_ranges:
-                        # Convert list to tuple if needed
-                        self.damage_ranges[diff] = tuple(dmg) if isinstance(dmg, list) else dmg
+                        self.damage_ranges[diff] = dmg
             console.print("[cyan]✓ Loaded custom QTE settings[/cyan]")
     
     # ========== STATUS EFFECTS METHODS ==========
@@ -1177,6 +1359,33 @@ Your response (1-2 sentences max):"""
         weights = [self.qte_variations[v]["weight"] for v in variations]
         return random.choices(variations, weights=weights)[0]
     
+    def pick_scene_kind(self, scene) -> str:
+        """A kind of QTE drawn from a scene's weights (standard, evade, combo, direction, fake, flick, drag, mash)."""
+        kinds = [k for k, w in scene.get('weights', {}).items() if w > 0]
+        if not kinds:
+            return 'standard'
+        return random.choices(kinds, weights=[scene['weights'][k] for k in kinds])[0]
+
+    def scene_fallback_kind(self, scene) -> str:
+        """For somebody outside the Activity, instead of a swipe/drag/tap QTE: the closest one of the channel."""
+        weights = scene.get('weights', {})
+        if weights.get('direction', 0) > 0:
+            return 'direction'
+        return 'evade' if weights.get('evade', 0) > 0 or weights.get('standard', 0) == 0 else 'standard'
+
+    def scene_parry_ok(self) -> bool:
+        """Can a parry come up in the active scene? (it has the normal QTE or the combo; always, without a scene)"""
+        scene = getattr(self, 'qte_scene', None)
+        if not scene:
+            return True
+        weights = scene.get('weights', {})
+        return weights.get('standard', 0) > 0 or weights.get('combo', 0) > 0
+
+    def scene_counter_ok(self) -> bool:
+        """Does a good evade still earn a counter-attack in the active scene? (always, without a scene)"""
+        scene = getattr(self, 'qte_scene', None)
+        return not scene or bool(scene.get('counter', True))
+
     def cycle_qte_mode(self) -> str:
         """Cycle to next QTE mode and return new mode name"""
         current_index = self.qte_mode_options.index(self.current_qte_mode)
@@ -1236,7 +1445,7 @@ Your response (1-2 sentences max):"""
             
             emoji = self.difficulty_emoji.get(difficulty, '⚡')
             
-            await self.webhook_send(
+            await self.webhook_send(qte_id=qte_id, 
                 content=f"# 🔥 **COMBO QTE!** 🔥\n"
                        f"**{difficulty.upper()}** {emoji} | {target_member.mention}\n"
                        f"⚡ Complete **{combo_length} QTEs** in sequence!\n"
@@ -1258,7 +1467,7 @@ Your response (1-2 sentences max):"""
     
     async def combo_qte_timeout(self, qte_id: int, difficulty: str, target_member):
         """Handle combo QTE timeout"""
-        await asyncio.sleep(15)  # 15 seconds for full combo
+        await asyncio.sleep(15 + self.answer_grace())  # 15 seconds for full combo
         
         if qte_id not in self.active_qtes:
             return
@@ -1270,7 +1479,7 @@ Your response (1-2 sentences max):"""
             channel = self.bot.get_channel(self.qte_channel_id)
             
             if completed < total:
-                await channel.send(f"❌ **COMBO FAILED!** {target_member.mention} only completed {completed}/{total}!")
+                await self.feedback(target_member.id, "combo_failed", f"❌ **COMBO FAILED!** {target_member.mention} only completed {completed}/{total}!", done=completed, total=total)
                 await self.damage_player(target_member.id, difficulty)
     
     async def trigger_direction_qte(self, difficulty: str, target_member, is_targeted: bool = False):
@@ -1312,7 +1521,7 @@ Your response (1-2 sentences max):"""
             
             emoji = self.difficulty_emoji.get(difficulty, '⚡')
             
-            await self.webhook_send(
+            await self.webhook_send(qte_id=qte_id, 
                 content=f"# 🎯 **DIRECTION QTE!** 🎯\n"
                        f"**{difficulty.upper()}** {emoji} | {target_member.mention}\n"
                        f"# {shown_arrow}\n"
@@ -1335,7 +1544,7 @@ Your response (1-2 sentences max):"""
     async def direction_qte_timeout(self, qte_id: int, difficulty: str, target_member):
         """Handle direction QTE timeout"""
         timing = self.qte_times.get(difficulty, {'timeout': 3.0})
-        await asyncio.sleep(timing.get('timeout', 3.0) + 1.0)  # +1s for direction
+        await asyncio.sleep(timing.get('timeout', 3.0) + 1.0 + self.answer_grace())  # +1s for direction
         
         if qte_id not in self.active_qtes:
             return
@@ -1343,7 +1552,7 @@ Your response (1-2 sentences max):"""
         qte_data = self.active_qtes.pop(qte_id, None)
         if qte_data:
             channel = self.bot.get_channel(self.qte_channel_id)
-            await channel.send(f"❌ **DIRECTION QTE FAILED!** {target_member.mention} didn't respond!")
+            await self.feedback(target_member.id, "timeout", f"❌ **DIRECTION QTE FAILED!** {target_member.mention} didn't respond!")
             await self.damage_player(target_member.id, difficulty)
     
     async def trigger_fake_qte(self, difficulty: str, target_member, is_targeted: bool = False):
@@ -1373,7 +1582,7 @@ Your response (1-2 sentences max):"""
             
             # IMPORTANT: No mention/ping! Just a general QTE message
             # The target is tracked internally but not pinged
-            await self.webhook_send(
+            await self.webhook_send(qte_id=qte_id, 
                 content=f"⚡ **{difficulty.upper()} QTE** {emoji}"
             )
             
@@ -1391,9 +1600,9 @@ Your response (1-2 sentences max):"""
     
     async def fake_qte_timeout(self, qte_id: int, difficulty: str, target_member):
         """Handle fake QTE timeout - success if no one responded!"""
-        timing = self.qte_times.get(difficulty, {'timeout': 3.0})
-        await asyncio.sleep(timing.get('timeout', 3.0))
-        
+        # as long as a real QTE of its difficulty: one that ends sooner gives itself away (the Activity draws it this long too)
+        await asyncio.sleep(self.qte_timeout_durations.get(difficulty, 3.0) + self.answer_grace())
+
         if qte_id not in self.active_qtes:
             return  # Someone failed it already
         
@@ -1481,6 +1690,7 @@ Your response (1-2 sentences max):"""
             duration = domain_config.get("duration", 30)
             effect_value = domain_config.get("effect_value", 10)
             gif = domain_config.get("gif")
+            self.emit_event("boss_domain", name=boss_name)
             
             # Create domain embed
             embed = discord.Embed(
@@ -1775,7 +1985,13 @@ Your response (1-2 sentences max):"""
             console.print(f"[red]Error announcing domain interrupt: {e}[/red]")
 
     def prompt_reset_hp_and_charges(self):
-        """Ask operator whether to keep HP/charges or reset on startup"""
+        """Ask operator whether to keep HP/charges or reset on startup.
+
+        EVENTOS_RESET_ON_START=1/0 answers it without asking (the desktop app sets it).
+        """
+        preset = os.getenv("EVENTOS_RESET_ON_START")
+        if preset in ("0", "1"):
+            return "reset" if preset == "1" else "keep"
         try:
             choice = input("Keep existing HP/charges? (Y/n): ").strip().lower()
             if choice in ("n", "no"):  # reset
@@ -1824,8 +2040,71 @@ Your response (1-2 sentences max):"""
         # For now, just return the filepath - in production, you'd host these or embed them
         return filepath
     
-    async def webhook_send(self, content=None, embed=None, file=None):
-        """Send message to QTE channel with rate limit protection"""
+    # what an answer's feedback kind sounds like in the Activity (the sounds the game masters bind in the Audio tab)
+    FEEDBACK_EVENTS = {
+        "evade_ok": "evade_ok", "save_ok": "rescue_ok", "combo_step": "combo_step",
+        "evade_slow": "qte_fail", "timeout": "qte_fail", "parry_mistimed": "qte_fail", "adapt_mistimed": "qte_fail",
+        "direction_slow": "qte_fail", "combo_failed": "qte_fail", "combo_broken": "qte_fail",
+    }
+
+    def emit_event(self, event: str, /, **data) -> None:
+        """Tell the Discord Activity that something happened in the game (it plays the sound cues and the cinematics bound to it).
+        Never waits and never raises: the game does not depend on it."""
+        hook = getattr(self, "activity_notify", None)
+        fn = getattr(hook, "on_event", None) if hook is not None else None
+        if fn is None:
+            return
+        try:
+            fn(event, data)
+        except Exception:  # noqa: BLE001
+            log.exception("could not tell the Activity about %s", event)
+
+    # ========== ANSWER FEEDBACK: the channel, or the player's own Activity ==========
+    def feedback_quiet(self, user_id=None, users=None) -> bool:
+        """True when what happens to this player (or to all of `users`) is told in their Activity instead of the channel.
+
+        `feedback_mode`: "auto" (the Activity for who has it open, the channel for the rest), "quiet" (never the channel, as long as the
+        Activity is running) or "chat" (always the channel, as before the Activity existed)."""
+        notify = self.activity_notify
+        if self.feedback_mode == "chat" or notify is None:
+            return False
+        if self.feedback_mode == "quiet":
+            return True
+        ids = list(users) if users is not None else ([user_id] if user_id is not None else [])
+        try:
+            return bool(ids) and all(notify.has_player(i) for i in ids)
+        except Exception:  # noqa: BLE001 - never break the game for a cosmetic thing
+            return False
+
+    def cue_quiet(self, qte_id) -> bool:
+        """The reaction cues on a QTE message (star, exclamation) are for who has to answer it: quiet if all of them are in the Activity."""
+        data = self.active_qtes.get(qte_id) if qte_id is not None else None
+        if not data:
+            return self.feedback_mode == "quiet" and self.activity_notify is not None
+        who = list(data.get("participants") or {}) or ([data["target"].id] if data.get("target") is not None else [])
+        return self.feedback_quiet(users=who) if who else False
+
+    async def feedback(self, user_id, kind, content=None, embed=None, *, users=None, **data):
+        """What an answer led to (✅ evaded, ❌ too slow, Black Flash...). The player who is in the Activity gets a notification there
+        (`kind` and `data` say what happened; the screen words it) and the channel stays quiet; everybody else gets the message as always."""
+        if kind in ("black_flash", "chain_max", "fake_fail", "combo_done", "group_done"):
+            self.emit_event(kind, user=user_id, **data)
+        elif kind in self.FEEDBACK_EVENTS:
+            self.emit_event(self.FEEDBACK_EVENTS[kind], user=user_id, **data)
+        if self.feedback_quiet(user_id, users):
+            try:
+                self.activity_notify.notify(users if users is not None else user_id, kind, data)
+            except Exception:  # noqa: BLE001
+                log.exception("could not tell the Activity (%s)", kind)
+            return None
+        return await self.webhook_send(content=content, embed=embed)
+    # ==============================================================================
+
+    async def webhook_send(self, content=None, embed=None, file=None, qte_id=None):
+        """Send message to QTE channel with rate limit protection.
+
+        qte_id: remember the sent message on that QTE, so reaction times can use Discord's timestamps.
+        """
         profiler.start('webhook_send')
         try:
             channel = self.bot.get_channel(self.qte_channel_id)
@@ -1837,6 +2116,8 @@ Your response (1-2 sentences max):"""
                 else:
                     result = await self.safe_send(channel, content=content, embed=embed)
                 profiler.stop('webhook_send')
+                if qte_id is not None and result is not None and qte_id in self.active_qtes:
+                    self.active_qtes[qte_id]['message'] = result
                 return result
             profiler.stop('webhook_send')
             return None
@@ -2060,16 +2341,15 @@ Your response (1-2 sentences max):"""
             stats['black_flashes'] += 1
             self.session_stats['black_flashes_today'] += 1
             
-            # Increase luck for next time (capped)
-            if stats.get('black_flash_chance', 0) < self.black_flash_cap:
-                stats['black_flash_chance'] = min(
-                    stats.get('black_flash_chance', self.black_flash_base_chance) + self.black_flash_increment,
-                    self.black_flash_cap
-                )
-            
+            # Luck back to the base: it only builds up while the timing is right and the flash does not come
+            stats['black_flash_chance'] = self.black_flash_base_chance
+
             console.print(f"[bold magenta]⚡ BLACK FLASH! Timing: {timing_deviation:.3f}s, Chance: {bf_chance:.1%}[/bold magenta]")
             return True
 
+        # Bad luck with good timing: a bit more luck next time (capped), so nobody goes without one forever
+        stats['black_flash_chance'] = min(stats.get('black_flash_chance', self.black_flash_base_chance) + self.black_flash_increment,
+                                          self.black_flash_cap)
         console.print(f"[dim]BF roll failed - Timing: {timing_deviation:.3f}s (good!), Chance: {bf_chance:.1%} (bad luck)[/dim]")
         return False
 
@@ -2143,11 +2423,13 @@ Your response (1-2 sentences max):"""
             if origin_message:
                 asyncio.create_task(self.add_reaction_to_response(channel, user_id, origin_message, "⭐"))
             
-            # Add exclamation reaction to indicate chain opportunity
+            # Add exclamation reaction to indicate chain opportunity (not for who plays from the Activity: its widget says it)
             try:
+                if self.feedback_quiet(user_id):
+                    raise StopIteration
                 recent_msgs = [msg async for msg in channel.history(limit=5)]
                 for msg in recent_msgs:
-                    if msg.author.id == user_id or (hasattr(msg, 'webhook_id') and msg.webhook_id):
+                    if msg.author.id == user_id or (msg.webhook_id and msg.webhook_id not in self.own_webhook_ids):
                         await msg.add_reaction("❗")
                         break
             except:
@@ -2167,7 +2449,7 @@ Your response (1-2 sentences max):"""
     
     async def bf_chain_timeout(self, qte_id, user_id, channel, timeout):
         """Handle timeout for BF chain QTE"""
-        await asyncio.sleep(timeout)
+        await asyncio.sleep(timeout + self.answer_grace())
         
         if qte_id in self.active_qtes:
             qte_data = self.active_qtes.pop(qte_id, None)
@@ -2182,7 +2464,8 @@ Your response (1-2 sentences max):"""
                 if user_id in self.bf_chain_active:
                     del self.bf_chain_active[user_id]
                 
-                await self.webhook_send(content=f"⏱️ **Chain ended!** {qte_data['target'].mention} - Parry cooldown: **{cooldown_seconds}s**")
+                await self.feedback(user_id, "chain_end", f"⏱️ **Chain ended!** {qte_data['target'].mention} - Parry cooldown: **{cooldown_seconds}s**",
+                                    why="timeout", level=chain_level, cooldown=cooldown_seconds)
                 console.print(f"[yellow]⏱ BF Chain {chain_level} ended (timeout) - {cooldown_seconds}s parry cooldown[/yellow]")
     
     async def handle_bf_chain_response(self, qte_id, qte_data, message, user_id, content, response_time):
@@ -2232,7 +2515,7 @@ Your response (1-2 sentences max):"""
                         color=discord.Color.from_rgb(255, 0, 255)
                     )
                     embed.set_image(url=self.black_flash_gif)
-                    await self.webhook_send(embed=embed)
+                    await self.feedback(user_id, "black_flash", embed=embed, damage=damage, chain=chain_level, ms=round(response_time * 1000))
                     
                     # Add charge
                     self.add_charge_from_damage_dealt(user_id, damage)
@@ -2259,9 +2542,11 @@ Your response (1-2 sentences max):"""
                         if user_id in self.bf_chain_active:
                             del self.bf_chain_active[user_id]
                         
-                        await self.webhook_send(
-                            content=f"🏆 **MAXIMUM BLACK FLASH CHAIN COMPLETE!** {message.author.mention}\n"
-                            f"Total damage potential unleashed! Parry cooldown: **{cooldown_seconds}s**"
+                        await self.feedback(
+                            user_id, "chain_max",
+                            f"🏆 **MAXIMUM BLACK FLASH CHAIN COMPLETE!** {message.author.mention}\n"
+                            f"Total damage potential unleashed! Parry cooldown: **{cooldown_seconds}s**",
+                            cooldown=cooldown_seconds
                         )
                         console.print(f"[bold gold1]🏆 MAX BF CHAIN ACHIEVED! {message.author.name}[/bold gold1]")
                     
@@ -2281,9 +2566,11 @@ Your response (1-2 sentences max):"""
                     
                     self.active_qtes.pop(qte_id, None)
                     
-                    await self.webhook_send(
-                        content=f"{parry_indicator} {message.author.mention} **parried [{timing_feedback}] but no Black Flash!** Chain ends.\n"
-                        f"Parry cooldown: **{cooldown_seconds}s**"
+                    await self.feedback(
+                        user_id, "chain_end",
+                        f"{parry_indicator} {message.author.mention} **parried [{timing_feedback}] but no Black Flash!** Chain ends.\n"
+                        f"Parry cooldown: **{cooldown_seconds}s**",
+                        why="noflash", level=chain_level, cooldown=cooldown_seconds, tag=timing_feedback
                     )
                     console.print(f"[yellow]⚔ BF Chain ended (no flash, {timing_feedback}) - {message.author.name}[/yellow]")
                     self.save_all_data()
@@ -2298,9 +2585,11 @@ Your response (1-2 sentences max):"""
                 
                 self.active_qtes.pop(qte_id, None)
                 
-                await self.webhook_send(
-                    content=f"❌ {message.author.mention} **mistimed!** Chain ends. (No damage taken)\n"
-                    f"Parry cooldown: **{cooldown_seconds}s**"
+                await self.feedback(
+                    user_id, "chain_end",
+                    f"❌ {message.author.mention} **mistimed!** Chain ends. (No damage taken)\n"
+                    f"Parry cooldown: **{cooldown_seconds}s**",
+                    why="mistimed", level=chain_level, cooldown=cooldown_seconds
                 )
                 console.print(f"[yellow]❌ BF Chain ended (mistimed) - {message.author.name}[/yellow]")
                 self.save_all_data()
@@ -2338,58 +2627,19 @@ Your response (1-2 sentences max):"""
     def setup_events(self):
         @self.bot.event
         async def on_ready():
+            if self._ready_once:  # reconnect: don't re-sync commands or start a second save loop
+                console.print("[cyan]↻ Reconnected to Discord[/cyan]")
+                return
+            self._ready_once = True
+
             console.print(Panel.fit(
                 "[cyan bold]✓ Bot logged in as " + str(self.bot.user) + "[/cyan bold]\n"
                 "[green]✓ QTE System Ready![/green]",
                 title="[bold]QTE BOT ONLINE[/bold]",
                 border_style="green"
             ))
-            
-            # ========== CONFIGURATION VERIFICATION ==========
-            # Resolve and display actual names for troubleshooting
-            config_table = Table(title="📋 Configuration Check", box=box.ROUNDED, border_style="cyan")
-            config_table.add_column("Setting", style="white")
-            config_table.add_column("ID", style="dim")
-            config_table.add_column("Name", style="green")
-            config_table.add_column("Status", style="bold")
-            
-            # QTE Channel
-            qte_channel = self.bot.get_channel(self.qte_channel_id)
-            if qte_channel:
-                config_table.add_row("QTE Channel", str(self.qte_channel_id), f"#{qte_channel.name}", "✅")
-            else:
-                config_table.add_row("QTE Channel", str(self.qte_channel_id), "NOT FOUND", "[red]❌[/red]")
-            
-            # HP Bar Thread
-            hp_thread = self.bot.get_channel(self.hp_bar_thread_id) if self.hp_bar_thread_id else None
-            if hp_thread:
-                config_table.add_row("HP Bar Thread", str(self.hp_bar_thread_id), f"#{hp_thread.name}", "✅")
-            elif self.hp_bar_thread_id:
-                config_table.add_row("HP Bar Thread", str(self.hp_bar_thread_id), "NOT FOUND", "[red]❌[/red]")
-            else:
-                config_table.add_row("HP Bar Thread", "Not set", "-", "[yellow]⚠️[/yellow]")
-            
-            # QTE Player Role
-            qte_role = None
-            admin_role = None
-            if qte_channel:
-                qte_role = qte_channel.guild.get_role(self.qte_player_role_id)
-                admin_role = qte_channel.guild.get_role(self.admin_role_id) if self.admin_role_id else None
-            
-            if qte_role:
-                config_table.add_row("QTE Player Role", str(self.qte_player_role_id), f"@{qte_role.name}", "✅")
-            else:
-                config_table.add_row("QTE Player Role", str(self.qte_player_role_id), "NOT FOUND", "[red]❌[/red]")
-            
-            # Admin Role
-            if admin_role:
-                config_table.add_row("Admin Role", str(self.admin_role_id), f"@{admin_role.name}", "✅")
-            elif self.admin_role_id:
-                config_table.add_row("Admin Role", str(self.admin_role_id), "NOT FOUND", "[red]❌[/red]")
-            else:
-                config_table.add_row("Admin Role", "Not set", "-", "[yellow]⚠️[/yellow]")
-            
-            console.print(config_table)
+
+            self.print_config_check()
 
             # If reset was requested, clear HP thread messages once
             if self.hp_cleanup_needed:
@@ -2398,26 +2648,34 @@ Your response (1-2 sentences max):"""
             # ================================================
 
             # ========== OLLAMA AI INITIALIZATION ==========
-            try:
-                # Check Ollama connection and load elbot model
-                console.print("[cyan]🤖 Initializing Ollama AI...[/cyan]")
-                models = await self.ollama_list_models()
-                if models:
-                    console.print(f"[green]✓ Ollama connected! Available models: {', '.join(models[:5])}[/green]")
-                    # Check if elbot is available
-                    if any('elbot' in m.lower() for m in models):
-                        self.ai_model = "elbot"  # Use our custom model
-                        self.ai_enabled = True
-                        # Pre-load the model
-                        await self.ollama_load_model("elbot")
-                        console.print("[green]✓ El Bot AI loaded and ready![/green]")
+            # AI_ENABLED=0 skips Ollama entirely; AI_ENABLED=1 uses OLLAMA_MODEL (chosen in the app);
+            # unset (old headless setups) keeps the legacy behaviour of looking for an 'elbot' model.
+            ai_setting = os.getenv("AI_ENABLED")
+            if ai_setting == "0":
+                console.print("[dim]🤖 AI disabled in settings[/dim]")
+            else:
+                try:
+                    console.print("[cyan]🤖 Initializing Ollama AI...[/cyan]")
+                    models = await self.ollama_list_models()
+                    if not models:
+                        console.print("[yellow]⚠️ Ollama is not responding. AI features disabled.[/yellow]")
                     else:
-                        console.print("[yellow]⚠️ 'elbot' model not found. Run: ollama create elbot -f Modelfile[/yellow]")
-                else:
-                    console.print("[yellow]⚠️ Ollama not responding. AI features disabled.[/yellow]")
-            except Exception as e:
-                console.print(f"[yellow]⚠️ Ollama init error: {e}[/yellow]")
-            # ==============================================
+                        console.print(f"[green]✓ Ollama connected! {len(models)} models available[/green]")
+                        wanted = self.ai_model if ai_setting == "1" else "elbot"
+                        match = next((m for m in models if m == wanted), None) or next(
+                            (m for m in models if wanted.lower() in m.lower()), None)
+                        if match:
+                            self.ai_model = match
+                            self.ai_enabled = True
+                            await self.ollama_load_model(match)
+                            console.print(f"[green]✓ AI ready with model {match}[/green]")
+                        elif ai_setting == "1":
+                            console.print(f"[yellow]⚠️ Model '{wanted}' is not installed in Ollama. "
+                                          f"Pick another one in Configuration. Installed: {', '.join(models[:8])}[/yellow]")
+                        else:
+                            console.print("[yellow]⚠️ 'elbot' model not found. Run: ollama create elbot -f Modelfile[/yellow]")
+                except Exception as e:
+                    console.print(f"[yellow]⚠️ Ollama init error: {e}[/yellow]")
 
             try:
                 # Force sync slash commands to all guilds
@@ -2465,6 +2723,8 @@ Your response (1-2 sentences max):"""
 
         @self.bot.event
         async def on_message(message):
+            if message.webhook_id and message.webhook_id not in self.own_webhook_ids:
+                self._note_webhook_message(message)
             if message.author.bot:
                 return
             
@@ -2901,8 +3161,9 @@ Your response (1-2 sentences max):"""
                     
                     # QTE Timing
                     timing_text = ""
-                    for diff, timing in self.qte_timings.items():
-                        timing_text += f"**{diff.title()}**: Evade {timing['evade_window']}s, Parry {timing['parry_start']}-{timing['parry_end']}s\n"
+                    for diff, timing in self.qte_times.items():
+                        p_start, p_end = timing['parry_window']
+                        timing_text += f"**{diff.title()}**: Evade {timing['evade_window']}s, Parry {p_start}-{p_end}s, Timeout {self.qte_timeout_durations.get(diff, '?')}s\n"
                     embed.add_field(name="⏱️ QTE Timing", value=timing_text, inline=False)
                     
                     # Damage Ranges
@@ -2951,19 +3212,25 @@ Your response (1-2 sentences max):"""
                         return
                     
                     diff = param1.lower()
-                    if diff not in self.qte_timings:
+                    if diff not in self.qte_times:
                         await interaction.response.send_message(f"❌ Invalid difficulty: {diff}", ephemeral=True)
                         return
-                    
+
                     try:
-                        evade = float(param2) if param2 else self.qte_timings[diff]['evade_window']
-                        parry_start = float(param3) if param3 else self.qte_timings[diff]['parry_start']
-                        parry_end = float(param4) if param4 else self.qte_timings[diff]['parry_end']
-                        
-                        self.qte_timings[diff]['evade_window'] = evade
-                        self.qte_timings[diff]['parry_start'] = parry_start
-                        self.qte_timings[diff]['parry_end'] = parry_end
-                        
+                        # the table the QTE handlers, the Activity and its GM panel use (the old `qte_timings` never reached the game)
+                        old_start, old_end = self.qte_times[diff]['parry_window']
+                        evade = float(param2) if param2 else self.qte_times[diff]['evade_window']
+                        parry_start = float(param3) if param3 else old_start
+                        parry_end = float(param4) if param4 else old_end
+                        if not (0 < evade <= 30 and 0 <= parry_start < parry_end <= 30):
+                            raise ValueError
+
+                        self.qte_times[diff].update({'evade_window': evade, 'parry_window': (parry_start, parry_end),
+                                                     'perfect_parry': round((parry_start + parry_end) / 2, 3)})
+                        # the QTE has to last at least until its parry window closes
+                        self.qte_timeout_durations[diff] = max(self.qte_timeout_durations.get(diff, 0), parry_end)
+                        self.save_qte_settings()
+
                         await interaction.response.send_message(
                             f"✅ **{diff.title()} QTE timing updated:**\n"
                             f"Evade: {evade}s, Parry: {parry_start}-{parry_end}s",
@@ -3087,35 +3354,16 @@ Your response (1-2 sentences max):"""
                 
                 elif action == "save":
                     # Save current config to a JSON file
-                    config_data = {
-                        "qte_timings": self.qte_timings,
-                        "damage_ranges": {k: list(v) for k, v in self.damage_ranges.items()},
-                        "revenge_threshold": self.revenge_threshold,
-                        "revenge_damage_multiplier": self.revenge_damage_multiplier,
-                        "revenge_bf_bonus": self.revenge_bf_bonus,
-                        "bf_timing_window": self.bf_timing_window,
-                        "ultimate_base_cooldown": self.ultimate_base_cooldown,
-                        "charge_per_damage_dealt": self.charge_per_damage_dealt,
-                        "ultimate_max_damage": self.ultimate_max_damage
-                    }
-                    save_data("live_config", config_data)
+                    self.save_live_config()
                     await interaction.response.send_message("✅ Configuration saved to `live_config.json`!", ephemeral=True)
                     console.print(f"[green]💾 {interaction.user.name} saved live config[/green]")
                 
                 elif action == "reset":
                     # Reset to defaults
-                    self.qte_timings = {
-                        'easy': {'evade_window': 6.0, 'parry_start': 4.0, 'parry_end': 7.0, 'timeout': 10.0},
-                        'medium': {'evade_window': 4.5, 'parry_start': 3.0, 'parry_end': 5.0, 'timeout': 7.0},
-                        'hard': {'evade_window': 4.0, 'parry_start': 2.5, 'parry_end': 4.5, 'timeout': 5.0},
-                        'impossible': {'evade_window': 1.5, 'parry_start': 0.8, 'parry_end': 1.7, 'timeout': 3.0}
-                    }
-                    self.damage_ranges = {
-                        'easy': (1, 3),
-                        'medium': (1, 5),
-                        'hard': (1, 10),
-                        'impossible': (15, 15)
-                    }
+                    self.qte_times = {d: dict(t) for d, t in DEFAULT_QTE_TIMES.items()}
+                    self.qte_timeout_durations = dict(DEFAULT_QTE_TIMEOUTS)
+                    self.save_qte_settings()
+                    self.damage_ranges = dict(DEFAULT_DAMAGE_RANGES)
                     self.revenge_threshold = 0.20
                     self.revenge_damage_multiplier = 1.5
                     self.revenge_bf_bonus = 0.10
@@ -3181,6 +3429,38 @@ Your response (1-2 sentences max):"""
             except Exception as e:
                 log.error(f"Error in qte command: {e}")
                 await interaction.response.send_message("❌ An error occurred.", ephemeral=True)
+
+        @self.bot.tree.command(name="join", description="Join the event: get the participant role so the bot tracks you")
+        @app_commands.describe(member="(Admins) give the role to this person instead")
+        async def join_command(interaction: discord.Interaction, member: discord.Member = None):
+            try:
+                target = member or interaction.user
+                if member is not None and member.id != interaction.user.id and not self.is_admin(interaction.user):
+                    await interaction.response.send_message("❌ Only admins can give the participant role to someone else.", ephemeral=True)
+                    return
+                if getattr(target, "bot", False):
+                    await interaction.response.send_message("❌ Bots don't take part in the event.", ephemeral=True)
+                    return
+                result = await self.grant_player_role(target, f"/join by {interaction.user.name}")
+                if result in ("added", "had") and member is None and target.id in self.afk_users:
+                    self.afk_users.discard(target.id)       # joining yourself again means taking part again (as /qte would)
+                    await self.update_qte_player_cache()
+                if result == "added":
+                    text = (f"✅ {target.mention} now has the participant role." if member else
+                            "✅ You're in! You now have the participant role: the bot will track your HP and QTEs.")
+                elif result == "had":
+                    text = f"ℹ️ {target.mention} already has the participant role." if member else "ℹ️ You already have the participant role."
+                elif result == "no_role":
+                    text = "⚠️ The event has no participant role yet: an admin must choose it in the app (or with /setchannel)."
+                elif result == "forbidden":
+                    text = "⚠️ I can't give that role: I need the Manage Roles permission and my role must be above it."
+                else:
+                    text = "❌ An error occurred."
+                await interaction.response.send_message(text, ephemeral=True)
+            except Exception as e:
+                log.error(f"Error in join command: {e}")
+                if not interaction.response.is_done():
+                    await interaction.response.send_message("❌ An error occurred.", ephemeral=True)
 
         @self.bot.tree.command(
             name="register",
@@ -4078,6 +4358,8 @@ Your response (1-2 sentences max):"""
                 self.bot_instance.tupperbox_boss_mode = True
                 self.bot_instance.fight_active = True
                 self.bot_instance.fight_start_time = time.time()
+                self.bot_instance.emit_event("boss_spawn", name=boss_name)
+                self.bot_instance.emit_event("fight_start")
                 
                 # Resume cooldowns
                 self.bot_instance._resume_ultimate_cooldowns()
@@ -4715,6 +4997,8 @@ Your response (1-2 sentences max):"""
                 # Automatically start the fight when a boss is registered!
                 self.fight_active = True
                 self.fight_start_time = time.time()
+                self.emit_event("boss_spawn", name=name)
+                self.emit_event("fight_start")
                 
                 # Reset all players' fight-specific stats
                 for user_id in self.player_stats:
@@ -5845,58 +6129,9 @@ Your response (1-2 sentences max):"""
             await interaction.response.defer(ephemeral=True)
             
             try:
-                # Set QTE channel
                 old_channel_id = self.qte_channel_id
-                self.qte_channel_id = channel.id
-                
-                # Set player role if provided
-                if role:
-                    self.qte_player_role_id = role.id
-                
-                # Check if HP thread already exists in this channel
-                existing_thread = None
-                for thread in channel.threads:
-                    if thread.name == "📊 HP Bars":
-                        existing_thread = thread
-                        break
-                
-                # Also check archived threads
-                if not existing_thread:
-                    async for thread in channel.archived_threads(limit=50):
-                        if thread.name == "📊 HP Bars":
-                            existing_thread = thread
-                            # Unarchive it
-                            await thread.edit(archived=False)
-                            break
-                
-                if existing_thread:
-                    # Use existing thread
-                    self.hp_bar_thread_id = existing_thread.id
-                    hp_thread = existing_thread
-                    thread_status = "Found existing"
-                else:
-                    # Create new HP bar thread
-                    hp_thread = await channel.create_thread(
-                        name="📊 HP Bars",
-                        type=discord.ChannelType.public_thread,
-                        reason="Auto-created HP bar display thread"
-                    )
-                    self.hp_bar_thread_id = hp_thread.id
-                    thread_status = "Created new"
-                    
-                    # Send initial message to the thread
-                    initial_embed = discord.Embed(
-                        title="📊 HP Bar Display Thread",
-                        description="This thread displays live HP bars for all players and bosses.\n\n"
-                                   "**This thread is managed by the bot.**\n"
-                                   "HP bars will automatically update during battles.",
-                        color=discord.Color.blue()
-                    )
-                    initial_embed.set_footer(text="HP bars appear here when players register and battles begin")
-                    await hp_thread.send(embed=initial_embed)
-                
-                # Save configuration to file
-                self._save_channel_config()
+                result = await self.configure_event(channel, player_role_id=role.id if role else None)
+                hp_thread, thread_status = result["thread"], result["thread_status"]
                 
                 # Build response embed
                 embed = discord.Embed(
@@ -6289,13 +6524,16 @@ Your response (1-2 sentences max):"""
                 tracking = self.special_objects_manager.get_all_tracking(user_id, obj_id)
                 
                 field_value = ""
-                for difficulty in ['easy', 'medium', 'hard', 'impossible']:
+                all_thresholds = obj.get('thresholds') or {}
+                # an object with one counter («total») has a plain list of steps: it used to crash here
+                rows = ['total'] if isinstance(all_thresholds, list) else ['easy', 'medium', 'hard', 'impossible']
+                for difficulty in rows:
                     spins = tracking.get(difficulty, 0)
                     # Pass empty list for character names since we use inventory now
                     reduction = self.special_objects_manager.get_damage_reduction(user_id, [], difficulty)
                     
                     # Find next threshold
-                    thresholds = obj.get('thresholds', {}).get(difficulty, [])
+                    thresholds = all_thresholds if isinstance(all_thresholds, list) else all_thresholds.get(difficulty, [])
                     next_threshold = None
                     for t in thresholds:
                         if t['spins'] > spins:
@@ -6794,78 +7032,16 @@ Your response (1-2 sentences max):"""
         )
         async def mirrorinvoke_command(interaction: discord.Interaction):
             """Invoke a medium QTE against the boss using Mirror Shard at 20+ spins"""
-            user_id = interaction.user.id
-            
-            # Check if user has Mirror Shard
-            inventory = self.special_objects_manager.player_inventory.get(user_id, [])
-            has_mirror_shard = 'mirror_shard' in inventory
-            
-            # Also check unique ownership
-            if not has_mirror_shard:
-                owner_id = self.special_objects_manager.unique_object_owners.get('mirror_shard')
-                has_mirror_shard = owner_id == user_id
-            
-            if not has_mirror_shard:
-                await interaction.response.send_message("❌ You don't have the **Mirror Shard**!", ephemeral=True)
+            problem = self.mirror_invoke_problem(interaction.user.id)
+            if problem:
+                await interaction.response.send_message(problem, ephemeral=True)
                 return
-            
-            # Check spins
-            spins = self.special_objects_manager.get_tracking(user_id, 'mirror_shard', 'total')
-            if spins < 20:
-                await interaction.response.send_message(
-                    f"❌ Mirror Shard needs **20 total spins** to invoke QTE!\n"
-                    f"Your current spins: **{spins}/20**",
-                    ephemeral=True
-                )
-                return
-            
-            # Check if there's an active boss
-            if not self.active_boss:
-                await interaction.response.send_message(
-                    "❌ No active boss to invoke QTE against!\n"
-                    "Wait for a boss to appear in combat.",
-                    ephemeral=True
-                )
-                return
-            
-            # Invoke the medium QTE against the boss!
             await interaction.response.send_message(
                 f"🪞⚡ **Mirror Shard Invocation!**\n"
                 f"{interaction.user.mention} reflects a **MEDIUM QTE** back at **{self.active_boss['name']}**!",
             )
-            
-            # Create the boss QTE - the boss must evade
-            boss_name = self.active_boss['name']
-            
-            # For now, auto-resolve: boss takes damage since NPCs can't respond
-            # This simulates invoking a QTE that the boss "fails"
-            base_damage = 15  # Medium QTE damage
-            
-            # Apply boss damage
-            await self.damage_boss(boss_name, base_damage)
-            
-            embed = discord.Embed(
-                title="🪞💥 Mirror Shard - QTE Reflected!",
-                description=f"**{boss_name}** failed to evade the reflected attack!\n\n"
-                           f"💢 **{base_damage} damage** dealt!",
-                color=discord.Color.purple()
-            )
-            
-            # Check for black flash effect at 20 spins
-            mirror_effects = self.special_objects_manager.get_active_effects(user_id, 'medium')
-            if mirror_effects.get('on_boss_stunned', {}).get('black_flash', False):
-                embed.add_field(
-                    name="⚡ Black Flash Ready!",
-                    value="Boss stunned! Black Flash opportunity!",
-                    inline=False
-                )
-                # Stun the enemy
-                self.enemy_stunned = True
-                self.stun_end_time = time.time() + 2.0  # 2 second stun
-            
-            await self.webhook_send(embed=embed)
-            console.print(f"[magenta]🪞 MIRROR INVOKE - {interaction.user.name} reflected QTE at {boss_name} for {base_damage} damage[/magenta]")
-        
+            await self.mirror_invoke(interaction.user.id, interaction.user.name)
+
         # ========== END SPECIAL OBJECTS COMMANDS ==========
         
         @self.bot.tree.command(
@@ -7299,7 +7475,10 @@ Your response (1-2 sentences max):"""
             result_msg = f"⚡ Ultimate charge +**{value}%**!"
         
         elif effect_type == "cd_reduce":
-            # This would need cooldown tracking - for now just message
+            for key, end in list((self.power_cooldowns.get(actual_target) or {}).items()):
+                self.power_cooldowns[actual_target][key] = end - value
+            for key, rest in list((self.ultimate_fight_cooldowns.get(actual_target) or {}).items()):
+                self.ultimate_fight_cooldowns[actual_target][key] = max(0, rest - value)
             result_msg = f"⏱️ Cooldowns reduced by **{value}s**!"
         
         else:
@@ -7310,7 +7489,12 @@ Your response (1-2 sentences max):"""
     # ========== END BUFF SYSTEM ==========
 
     async def damage_player(self, user_id, difficulty):
-        """Deal damage to a player based on difficulty"""
+        """Deal damage to a player.
+
+        `difficulty` is a difficulty name ('easy'...'impossible', damage is rolled from its range) or a number
+        (exact damage, used by boss abilities and boss counters).
+        """
+        fixed_damage = isinstance(difficulty, (int, float)) and not isinstance(difficulty, bool)
         # ========== COURT TRIAL IMMUNITY ==========
         # Players in an active court trial cannot be damaged
         if self.is_player_in_court_trial(user_id):
@@ -7327,7 +7511,7 @@ Your response (1-2 sentences max):"""
             return False  # Player is already dead
 
         # Calculate variable damage
-        damage = self.calculate_damage(difficulty)
+        damage = int(difficulty) if fixed_damage else self.calculate_damage(difficulty)
         
         # ========== REFLECT DOMAIN CHECK (Time Cell Moon Palace) ==========
         # Check for domain-wide reflect (affects ALL players, not just caster)
@@ -7400,7 +7584,8 @@ Your response (1-2 sentences max):"""
         
         # ========== SPECIAL OBJECTS: DAMAGE REDUCTION ==========
         # Uses INVENTORY-based system now (no character names needed)
-        damage_reduction = self.special_objects_manager.get_damage_reduction(user_id, [], difficulty)
+        damage_reduction = self.special_objects_manager.get_damage_reduction(
+            user_id, [], "fixed" if fixed_damage else difficulty)
         
         if damage_reduction > 0:
             reduced_damage = int(damage * (1 - damage_reduction / 100))
@@ -7408,13 +7593,23 @@ Your response (1-2 sentences max):"""
             console.print(f"[cyan]🛡️ Damage reduction {damage_reduction:.0f}%: {damage} → {reduced_damage} (-{reduction_amount})[/cyan]")
             damage = reduced_damage
         # =======================================================
-        
+
+        # ========== POWER SHIELDS (shield / shield_team) ==========
+        shield = self.get_active_buff(user_id, "shield")
+        if shield and damage > 0:
+            damage = int(round(damage * (1 - min(90.0, float(shield["value"])) / 100)))
+        # ==========================================================
+
         # Apply damage
         old_hp = hp_data["current"]
         hp_data["current"] = max(0, hp_data["current"] - damage)
         actual_damage = old_hp - hp_data["current"]
 
         console.print(f"[red]💔 User {user_id} took {actual_damage} damage! HP: {hp_data['current']}/{hp_data['max']}[/red]")
+        if actual_damage > 0:
+            self.emit_event("player_hit", user=user_id, amount=actual_damage)
+            if hp_data["max"] and old_hp / hp_data["max"] > 0.25 >= hp_data["current"] / hp_data["max"] > 0:
+                self.emit_event("low_hp", user=user_id)
         
         # Reset counter streak on taking damage
         if user_id in self.counter_streaks:
@@ -7449,8 +7644,8 @@ Your response (1-2 sentences max):"""
                     asyncio.create_task(channel.send(f"⛩️ **SHRINE** interrupted! Duration -5s (remaining: **{new_duration}s**)"))
             # =====================================================
         
-        # Cancel domain expansion cast if in progress
-        if user_id in self.domain_casting:
+        # Cancel domain expansion cast if in progress (a hit a shield took whole does not break it)
+        if actual_damage > 0 and user_id in self.domain_casting:
             casting_data = self.domain_casting.pop(user_id)
             console.print(f"[red]🌌 DOMAIN INTERRUPTED - {user_id} took damage during cast![/red]")
             # Notify in channel
@@ -7518,6 +7713,7 @@ Your response (1-2 sentences max):"""
         
         if actual_heal > 0:
             console.print(f"[green]💚 User {user_id} healed {actual_heal} HP! HP: {hp_data['current']}/{hp_data['max']}[/green]")
+            self.emit_event("heal", user=user_id, amount=actual_heal)
             await self.update_hp_bar_display(user_id)
             return True
         return False
@@ -7525,6 +7721,7 @@ Your response (1-2 sentences max):"""
     async def trigger_checkpoint_heal(self, checkpoint_name):
         """Trigger HP regeneration for all living players at a checkpoint"""
         try:
+            self.emit_event("checkpoint", name=checkpoint_name)
             channel = self.bot.get_channel(self.qte_channel_id)
             healed_players = []
             
@@ -7560,8 +7757,21 @@ Your response (1-2 sentences max):"""
                 return True
         return False
 
+    def end_revenge_if_healed(self, user_id) -> bool:
+        """REVENGE lasts while the player is at or below the threshold: healed above it, it ends (and comes back if they drop again)."""
+        hp = self.player_hp.get(user_id)
+        if not hp or not hp.get("revenge_mode") or not hp.get("max"):
+            return False
+        if hp["current"] / hp["max"] <= self.revenge_threshold:
+            return False
+        hp["revenge_mode"] = False
+        console.print(f"[yellow]⚡ REVENGE over for {user_id}: healed to {hp['current']}/{hp['max']}[/yellow]")
+        return True
+
     async def update_hp_bar_display(self, user_id_or_boss_name, is_boss=False):
         """Update HP bar in dedicated thread - OPTIMIZED with message caching"""
+        if not is_boss:
+            self.end_revenge_if_healed(user_id_or_boss_name)     # every change of a player's HP comes through here
         try:
             if self.hp_bar_thread_id == 0:
                 return
@@ -7689,39 +7899,39 @@ Your response (1-2 sentences max):"""
             self._hp_update_task = asyncio.create_task(self._flush_hp_updates())
     
     async def _flush_hp_updates(self):
-        """Flush all pending HP updates after a short delay - batches rapid updates"""
+        """Flush all pending HP updates after a short delay - batches rapid updates.
+
+        Edits run concurrently, straight on the message id (no fetch first, no sleeps in between): the
+        sender pool routes each edit to the bot that wrote that message and paces every bot.
+        """
         await asyncio.sleep(self._hp_update_interval)
-        
+
         # Copy and clear pending updates
         updates = dict(self._pending_hp_updates)
         self._pending_hp_updates.clear()
-        
-        # Process updates with small delays between each to avoid rate limits
-        update_delay = 0.3  # 300ms between HP bar edits
-        
-        for cache_key, (thread, embed) in updates.items():
+
+        async def update_one(cache_key, thread, embed):
             try:
-                # Try to use cached message ID
-                if cache_key in self.hp_bar_messages:
+                message_id = self.hp_bar_messages.get(cache_key)
+                if message_id:
                     try:
-                        message = await thread.fetch_message(self.hp_bar_messages[cache_key])
-                        await self.safe_edit_message(message, embed=embed)
-                        await asyncio.sleep(update_delay)  # Throttle between edits
-                        continue
+                        await discord.PartialMessage(channel=thread, id=message_id).edit(embed=embed)
+                        return
                     except discord.NotFound:
-                        # Message was deleted, remove from cache
-                        del self.hp_bar_messages[cache_key]
-                    except Exception:
-                        pass
-                
+                        # Message was deleted, remove from cache and send a new one
+                        self.hp_bar_messages.pop(cache_key, None)
+                    except discord.HTTPException as e:
+                        log.warning(f"HP bar edit failed ({e.status}); keeping the message for next time")
+                        return
+
                 # No cached message, send new one and cache the ID
                 new_message = await self.safe_send(thread, embed=embed)
                 if new_message:
                     self.hp_bar_messages[cache_key] = new_message.id
-                await asyncio.sleep(update_delay)  # Throttle between sends
-                
             except Exception as e:
                 log.error(f"Error in HP bar flush: {e}")
+
+        await asyncio.gather(*(update_one(key, thread, embed) for key, (thread, embed) in updates.items()))
 
     async def trigger_death(self, user_id):
         """Handle player death or FAITH resurrection - single embed for rate limiting"""
@@ -7737,6 +7947,7 @@ Your response (1-2 sentences max):"""
 
             # Mark as dead
             hp_data["alive"] = False
+            self.emit_event("player_down", user=user_id)
 
             # Get channel and member
             channel = self.bot.get_channel(self.qte_channel_id)
@@ -7818,6 +8029,7 @@ Your response (1-2 sentences max):"""
     async def send_success_with_counter(self, channel, author_mention, response_time, user_id, qte_id, difficulty):
         """Send SUCCESS + COUNTER message merged into one - saves rate limit"""
         self.counter_enabled_players[user_id] = qte_id
+        self.counter_deadlines[user_id] = time.time() + self.counter_duration
         # Store difficulty for accurate adaptation tracking during counter
         self.counter_context[user_id] = {"qte_id": qte_id, "difficulty": difficulty}
         
@@ -7826,15 +8038,18 @@ Your response (1-2 sentences max):"""
             self.counter_messages = {}
         
         # MERGED: Success + Counter window in ONE message
-        counter_msg = await self.webhook_send(
-            content=f"✅ {author_mention} **evaded!** ({response_time:.2f}s) "
-            f"| ⚡ **COUNTER** `*attack*` <t:{int(time.time() + 5)}:R>"
+        counter_msg = await self.feedback(
+            user_id, "evade_ok",
+            f"✅ {author_mention} **evaded!** ({response_time:.2f}s) "
+            f"| ⚡ **COUNTER** `*attack*` <t:{int(time.time() + self.counter_duration)}:R>",
+            ms=round(response_time * 1000), counter=True
         )
         
-        self.counter_messages[user_id] = counter_msg
+        if counter_msg is not None:      # in the Activity there is no message: the counter button says it
+            self.counter_messages[user_id] = counter_msg
         
         # Set counter window timeout (will delete message when expired)
-        asyncio.create_task(self.counter_window_timeout(user_id, qte_id, 5.0))
+        asyncio.create_task(self.counter_window_timeout(user_id, qte_id, self.counter_duration))
     
     def get_parry_visual_indicator(self, response_time: float, difficulty: str, user_id: int) -> str:
         """Get visual indicator for parry timing - shows Black Flash zones (GUARANTEED if in window!)"""
@@ -7941,12 +8156,15 @@ Your response (1-2 sentences max):"""
             actual_damage = old_hp - boss['hp_current']
             
             console.print(f"[red]💥 Boss {boss_name} took {actual_damage} damage! HP: {boss['hp_current']}/{boss['hp_max']}[/red]")
+            if actual_damage > 0:
+                self.emit_event("boss_hit", name=boss_name, amount=actual_damage)
             
             # Update HP bar display
             await self.update_hp_bar_display(boss_name, is_boss=True)
             
             # Check if boss defeated
             if boss['hp_current'] == 0:
+                self.emit_event("boss_defeated", name=boss_name)
                 # ========== END FIGHT - PAUSE COOLDOWNS ==========
                 self._pause_ultimate_cooldowns()
                 self.fight_active = False
@@ -8140,6 +8358,7 @@ Your response (1-2 sentences max):"""
         
         # 2% per 5 damage taken = 0.4% per damage
         charge_gain = (damage_amount / 5.0) * self.charge_per_damage_taken
+        charge_gain *= self.get_ult_charge_modifier(user_id)      # cursed: less charge
         
         # Add to both powers
         for power_key in ["power1", "power2"]:
@@ -8158,6 +8377,7 @@ Your response (1-2 sentences max):"""
         
         # 1% per 10 damage dealt = 0.1% per damage
         charge_gain = (damage_amount / 10.0) * self.charge_per_damage_dealt
+        charge_gain *= self.get_ult_charge_modifier(user_id)      # cursed: less charge
         
         # Add to both powers
         for power_key in ["power1", "power2"]:
@@ -8176,6 +8396,7 @@ Your response (1-2 sentences max):"""
         
         # Use configured charge value (default 3%)
         charge_gain = self.charge_per_counter
+        charge_gain *= self.get_ult_charge_modifier(user_id)      # cursed: less charge
         
         # Add to both powers (they charge independently but from same actions)
         for power_key in ["power1", "power2"]:
@@ -8233,6 +8454,29 @@ Your response (1-2 sentences max):"""
     # ==============================================
 
 
+    async def grant_player_role(self, member, reason="Joined the event"):
+        """Give `member` the event's participant role: QTEs, HP tracking and the dashboards follow whoever has it.
+
+        Returns "added", "had" (already had it), "no_role" (no role set or it no longer exists), "forbidden" (the bot may not
+        manage roles, or the role is above its own) or "error"."""
+        try:
+            guild = getattr(member, "guild", None)
+            role = guild.get_role(self.qte_player_role_id) if guild is not None and self.qte_player_role_id else None
+            if role is None:
+                return "no_role"
+            if any(getattr(r, "id", None) == role.id for r in (getattr(member, "roles", None) or [])):
+                return "had"
+            await member.add_roles(role, reason=reason)
+        except discord.Forbidden:
+            console.print("[yellow]⚠ Could not give the participant role: the bot needs Manage Roles, above that role[/yellow]")
+            return "forbidden"
+        except Exception as e:
+            log.error(f"Error giving the participant role: {e}")
+            return "error"
+        console.print(f"[green]✓ {getattr(member, 'name', member)} got the participant role ({reason})[/green]")
+        await self.update_qte_player_cache()
+        return "added"
+
     async def update_qte_player_cache(self):
         """Update the cache of QTE players"""
         try:
@@ -8273,14 +8517,7 @@ Your response (1-2 sentences max):"""
             channel = self.bot.get_channel(self.qte_channel_id)
             
             # Total timeout based on difficulty (no intermediate emoji sends)
-            timeout_durations = {
-                'easy': 6.75,
-                'medium': 5.0,
-                'hard': 5.75,
-                'impossible': 3.5
-            }
-            
-            await asyncio.sleep(timeout_durations.get(difficulty, 5.0))
+            await asyncio.sleep(self.qte_timeout_durations.get(difficulty, 5.0) + self.answer_grace())
             
             if qte_id in self.active_qtes:
                 await self.finish_qte_failure(qte_id, channel, mode, target)
@@ -8299,7 +8536,7 @@ Your response (1-2 sentences max):"""
                 return  # Another task handled it
 
             if mode == 'single' and target:
-                await self.webhook_send(content=f"💥 {target.mention} **failed to respond in time!**")
+                await self.feedback(target.id, "timeout", f"💥 {target.mention} **failed to respond in time!**")
                 await self.damage_player(target.id, qte_data['difficulty'])
                 console.print(f"[red]✗ Single QTE TIMEOUT - {target.name} failed[/red]")
 
@@ -8312,7 +8549,7 @@ Your response (1-2 sentences max):"""
                 failed = [p['member'] for p in participants.values() if not p['responded']]
                 if failed:
                     mentions = " ".join([m.mention for m in failed])
-                    await self.webhook_send(content=f"💥 {mentions} **failed to respond in time!**")
+                    await self.feedback(None, "timeout", f"💥 {mentions} **failed to respond in time!**", users=[m.id for m in failed])
                     console.print(f"[red]✗ Group QTE TIMEOUT - {len(failed)} players failed[/red]")
 
                     # Damage each failed player
@@ -8394,7 +8631,21 @@ Your response (1-2 sentences max):"""
                 return  # QTE handled, don't actually trigger it
 
             # ========== SELECT QTE VARIATION ==========
-            qte_variation = self.select_qte_variation()
+            # The scene the game masters chose (the Activity's «Escenas») decides; without one, the classic QTE mode does
+            no_parry = False
+            scene = getattr(self, 'qte_scene', None)
+            if scene:
+                qte_variation = self.pick_scene_kind(scene)
+                if qte_variation in ('flick', 'drag', 'mash'):
+                    launch = getattr(self, 'launch_gesture', None)
+                    if launch is not None and await launch(qte_variation, difficulty, target_member):
+                        self.session_stats['qtes_triggered'] += 1
+                        return          # a swipe, drag or tap QTE in the Activity
+                    qte_variation = self.scene_fallback_kind(scene)
+                if qte_variation == 'evade':
+                    qte_variation, no_parry = 'standard', True
+            else:
+                qte_variation = self.select_qte_variation()
             
             # Handle special variation types
             if qte_variation == "combo":
@@ -8419,7 +8670,8 @@ Your response (1-2 sentences max):"""
                 'target': target_member,
                 'participants': {},
                 'responses': set(),
-                'is_targeted': is_targeted  # Flag: this QTE only accepts evade/adapt, not parry
+                'is_targeted': is_targeted,  # Flag: this QTE only accepts evade/adapt, not parry
+                'no_parry': no_parry  # the scene has no parry: evade only (no Black Flash)
             }
 
             self.session_stats['qtes_triggered'] += 1
@@ -8459,6 +8711,8 @@ Your response (1-2 sentences max):"""
     async def send_parry_and_bf_warning(self, qte_message, parry_start, bf_start, qte_id=None):
         """Add parry warning star, then replace with exclamation when BF window opens"""
         try:
+            if self.cue_quiet(qte_id):
+                return
             # Wait until parry window starts
             if parry_start > 0:
                 await asyncio.sleep(parry_start)
@@ -8496,6 +8750,8 @@ Your response (1-2 sentences max):"""
         """Add parry warning star reaction to QTE message (legacy fallback)"""
         try:
             await asyncio.sleep(delay)
+            if self.cue_quiet(None):
+                return
             await self.safe_add_reaction(qte_message, "⭐")
         except Exception:
             pass
@@ -8609,7 +8865,8 @@ Your response (1-2 sentences max):"""
                 'target': player,
                 'participants': {},
                 'responses': set(),
-                'batch_mode': True  # Mark as batch QTE
+                'batch_mode': True,  # Mark as batch QTE
+                'no_parry': not self.scene_parry_ok()  # a chase or a dodge scene: evade only
             }
             
             self.player_current_qte[user_id] = qte_id
@@ -8620,7 +8877,7 @@ Your response (1-2 sentences max):"""
             remaining = len(self.player_qte_queues.get(user_id, []))
             remaining_text = f" ({remaining} remaining)" if remaining > 0 else ""
             
-            await self.webhook_send(content=f"⚡ **{difficulty.upper()} QTE** {emoji} | {player.mention}{remaining_text}")
+            await self.webhook_send(content=f"⚡ **{difficulty.upper()} QTE** {emoji} | {player.mention}{remaining_text}", qte_id=qte_id)
             
             # Send parry warning
             parry_min = self.qte_times[difficulty]['parry_window'][0]
@@ -8646,12 +8903,12 @@ Your response (1-2 sentences max):"""
                 'impossible': 4.0
             }
             
-            await asyncio.sleep(timeout_durations.get(difficulty, 5.0))
+            await asyncio.sleep(timeout_durations.get(difficulty, 5.0) + self.answer_grace())
             
             if qte_id in self.active_qtes:
                 # Timeout occurred
                 channel = self.bot.get_channel(self.qte_channel_id)
-                await self.webhook_send(content=f"💥 {target.mention} **failed to respond in time!**")
+                await self.feedback(target.id, "timeout", f"💥 {target.mention} **failed to respond in time!**")
                 await self.damage_player(target.id, difficulty)
                 await self.update_player_stats(target.id, 'evade', False, timeout_durations.get(difficulty, 5.0))
                 
@@ -8727,7 +8984,7 @@ Your response (1-2 sentences max):"""
             role = channel.guild.get_role(self.qte_player_role_id)
             emoji = self.difficulty_emoji.get(difficulty, '⚡')
 
-            await channel.send(f"🚨 **GROUP {difficulty.upper()} QTE** {emoji} | {role.mention}")
+            self.active_qtes[qte_id]['message'] = await channel.send(f"🚨 **GROUP {difficulty.upper()} QTE** {emoji} | {role.mention}")
 
             # Rich console output
             table = Table(show_header=False, box=box.ROUNDED, border_style="red")
@@ -8744,8 +9001,13 @@ Your response (1-2 sentences max):"""
         except Exception as e:
             console.print(f"[red]✗ Error triggering group QTE: {e}[/red]")
 
-    async def handle_qte_response(self, message):
-        """Handle player responses to QTE events - OPTIMIZED"""
+    async def handle_qte_response(self, message, measured=None, only=None):
+        """Handle player responses to QTE events - OPTIMIZED
+
+        measured: seconds the player took, when the Discord Activity timed it on the player's own screen;
+        None = measure it from Discord's timestamps, as for a chat message.
+        only: answer just this QTE (the Activity's buttons say which one); None = the first that takes it, as in the chat.
+        """
         profiler.start('handle_qte_response')
         try:
             # Early exits for performance
@@ -8793,11 +9055,13 @@ Your response (1-2 sentences max):"""
 
             # Iterate over copy of keys to allow safe deletion
             for qte_id in list(self.active_qtes.keys()):
+                if only is not None and qte_id != only:
+                    continue
                 qte_data = self.active_qtes.get(qte_id)
                 if not qte_data:
                     continue
                     
-                response_time = (now - qte_data['start']).total_seconds() - self.latency_offset
+                response_time = measured if measured is not None else self.qte_response_time(message, qte_data, now)
 
                 timing = self.qte_times[qte_data['difficulty']]
                 evade_window = timing['evade_window']
@@ -8853,8 +9117,24 @@ Your response (1-2 sentences max):"""
         finally:
             profiler.stop('handle_qte_response')
 
+    def qte_response_time(self, message, qte_data, now):
+        """Seconds between the QTE message appearing and the player's reply appearing.
+
+        Both timestamps come from Discord, so our own send latency, rate-limit waits, gateway delay and
+        event-loop queueing don't count against the player. When the QTE message isn't known (some QTE
+        variants) it falls back to the bot's own clock, as before.
+        """
+        shown = getattr(qte_data.get('message'), 'created_at', None)
+        replied = getattr(message, 'created_at', None)
+        if shown is not None and replied is not None:
+            return max(0.0, (replied - shown).total_seconds())
+        return (now - qte_data['start']).total_seconds() - self.latency_offset
+
     def resolve_user_id(self, message):
         """Resolve user ID, handling Tupperbox characters"""
+        activity_user = getattr(message, 'activity_user_id', None)   # pressed in the Discord Activity: already known
+        if activity_user is not None:
+            return activity_user
         author_name = message.author.display_name
         if author_name in self.character_registry:
             return self.character_registry[author_name]
@@ -9072,37 +9352,48 @@ Your response (1-2 sentences max):"""
         
         return actual_heal
 
-    async def find_tupper_message(self, channel, user_id, original_message, timeout=1.0):
-        """Find the Tupper webhook message that replaces the user's original message.
-        
-        Tupper deletes the original message and sends a webhook message.
-        This function waits briefly and looks for a recent webhook message
-        from a registered character owned by this user.
-        
-        OPTIMIZED for heavy load: Reduced wait time and limit checks.
+    def _note_webhook_message(self, message):
+        """Tupperbox answers a player with a webhook message; remember it and wake whoever waits for it."""
+        owner = self.character_registry.get(message.author.display_name)
+        if not owner:
+            return
+        self._tupper_seen.setdefault(owner, collections.deque(maxlen=5)).append(message)
+        for waiter in self._tupper_waiters.pop(owner, []):
+            if not waiter.done():
+                waiter.set_result(message)
+
+    async def find_tupper_message(self, channel, user_id, original_message, timeout=0.5):
+        """The message that should receive the reaction: the Tupper webhook message that replaced the
+        player's own, or the original.
+
+        Players without registered characters get the original immediately. For the others the bot
+        already sees Tupper's webhook message arrive (on_message), so it waits for that event instead of
+        sleeping and then asking Discord for the channel history (an extra request per reply).
         """
+        if not self.get_user_characters(user_id):
+            return original_message
+        limit = original_message.created_at
+        for seen in reversed(self._tupper_seen.get(user_id, ())):
+            if 0 <= (seen.created_at - limit).total_seconds() < 10:
+                return seen
+        waiter = asyncio.get_running_loop().create_future()
+        self._tupper_waiters.setdefault(user_id, []).append(waiter)
         try:
-            await asyncio.sleep(0.15)  # Reduced from 0.3s for faster response under load
-            
-            # Look through recent messages for a webhook from a registered character
-            # Reduced limit from 5 to 3 for performance
-            async for msg in channel.history(limit=3, after=original_message):
-                # Webhook messages have webhook_id attribute
-                if msg.webhook_id:
-                    char_name = msg.author.display_name
-                    # Check if this character is registered to this user
-                    if char_name in self.character_registry:
-                        if self.character_registry[char_name] == user_id:
-                            return msg
-            
-            # Fallback: return original message if no Tupper message found
+            return await asyncio.wait_for(waiter, timeout)
+        except asyncio.TimeoutError:
             return original_message
-        except Exception as e:
-            log.debug(f"Error finding Tupper message: {e}")
-            return original_message
+        finally:
+            waiters = self._tupper_waiters.get(user_id)
+            if waiters and waiter in waiters:
+                waiters.remove(waiter)
 
     async def add_reaction_to_response(self, channel, user_id, original_message, emoji):
-        """Add reaction to the correct message (Tupper webhook or original)."""
+        """Add reaction to the correct message (Tupper webhook or original). Not for who plays from the Activity: it tells them there."""
+        if self.feedback_quiet(user_id):
+            keep = getattr(original_message, "record_reaction", None)
+            if keep is not None:                      # a press from the Activity: no reaction on any message, but the verdict is kept for its screen
+                keep(emoji)
+            return
         try:
             target_msg = await self.find_tupper_message(channel, user_id, original_message)
             await target_msg.add_reaction(emoji)
@@ -9127,7 +9418,7 @@ Your response (1-2 sentences max):"""
             # ========== BOSS DOMAIN STUN: AUTO-FAIL QTEs ==========
             if self.has_status_effect(user_id, "stunned"):
                 # Player is stunned from boss domain - auto-fail any QTE response
-                await self.webhook_send(content=f"🔒 {message.author.mention} is **STUNNED** and cannot react! (Boss Domain)")
+                await self.feedback(user_id, "stunned", f"🔒 {message.author.mention} is **STUNNED** and cannot react! (Boss Domain)")
                 await self.damage_player(user_id, difficulty)
                 responses.add(user_id)
                 
@@ -9174,13 +9465,13 @@ Your response (1-2 sentences max):"""
                                     self.player_hp[user_id]['current'] + heal_amount
                                 )
                                 new_hp = self.player_hp[user_id]['current']
-                                await self.webhook_send(content=f"🪞✨ **Mirror Shard** healed {message.author.mention}! ({old_hp} → {new_hp} HP)")
+                                await self.feedback(user_id, "mirror_heal", f"🪞✨ **Mirror Shard** healed {message.author.mention}! ({old_hp} → {new_hp} HP)", old=old_hp, new=new_hp)
                                 console.print(f"[green]🪞 Mirror Shard heal: {old_hp} → {new_hp} (+{heal_amount})[/green]")
                         
                         # Enable counter window if evaded fast enough OR has guaranteed_counter OR has Soul Manipulator
                         has_guaranteed_counter = mirror_effects.get('guaranteed_counter', False)
                         soul_manipulator_active = self.player_stats.get(user_id, {}).get('soul_manipulator_active', False)
-                        if response_time < self.counter_window or has_guaranteed_counter or soul_manipulator_active:
+                        if self.scene_counter_ok() and (response_time < self.counter_window or has_guaranteed_counter or soul_manipulator_active):
                             await self.send_success_with_counter(channel, message.author.mention, response_time, user_id, qte_id, difficulty)
                             if has_guaranteed_counter:
                                 console.print(f"[yellow]⚡🪞 COUNTER ENABLED (Mirror Shard guaranteed) for {message.author.name}[/yellow]")
@@ -9198,7 +9489,7 @@ Your response (1-2 sentences max):"""
                             await self.process_next_player_qte(target)
                         return True
                     else:
-                        await self.webhook_send(content=f"❌ {message.author.mention} **evade too slow!** ({response_time:.2f}s)")
+                        await self.feedback(user_id, "evade_slow", f"❌ {message.author.mention} **evade too slow!** ({response_time:.2f}s)", ms=round(response_time * 1000))
                         await self.damage_player(user_id, difficulty)
                         await self.update_player_stats(user_id, 'evade', False, response_time)
                         console.print(f"[red]✗ EVADE FAILED (too slow) - {message.author.name}[/red]")
@@ -9217,11 +9508,16 @@ Your response (1-2 sentences max):"""
                         return True
 
                 elif '*parry*' in content:
+                    # A scene without parry (a chase, a dodge): this QTE is evade only
+                    if qte_data.get('no_parry'):
+                        await self.feedback(user_id, "scene_no_parry", f"🏃 {message.author.mention} **No parry here!** Use *evade*")
+                        return False
+
                     # Check parry cooldown from BF chain
                     if user_id in self.player_parry_cooldown:
                         if time.time() < self.player_parry_cooldown[user_id]:
                             remaining = int(self.player_parry_cooldown[user_id] - time.time())
-                            await self.webhook_send(content=f"⏱️ {message.author.mention} **Parry on cooldown!** {remaining}s remaining")
+                            await self.feedback(user_id, "parry_cooldown", f"⏱️ {message.author.mention} **Parry on cooldown!** {remaining}s remaining", seconds=remaining)
                             return False
                     
                     # Get adjusted parry window for REVENGE mode
@@ -9296,7 +9592,7 @@ Your response (1-2 sentences max):"""
                                 embed.set_footer(text=f"Black Flash Chance: {bf_chance:.1f}% | Response Time: {response_time:.2f}s")
                             
                             embed.set_image(url=self.black_flash_gif)
-                            await self.safe_send(channel, embed=embed)
+                            await self.feedback(user_id, "black_flash", embed=embed, damage=(mirror_damage if mirror_shard_bf else base_damage), ms=round(response_time * 1000), mirror=bool(mirror_shard_bf))
                             
                             # Add exclamation reaction
                             asyncio.create_task(self.add_reaction_to_response(channel, user_id, message, "❗"))
@@ -9326,6 +9622,7 @@ Your response (1-2 sentences max):"""
                             return True
                         else:
                             # PARRY SUCCESS (no Black Flash) - Show visual with BF timing indicator
+                            self.emit_event("parry_ok", user=user_id, ms=round(response_time * 1000))
                             parry_indicator = self.get_parry_visual_indicator(response_time, difficulty, user_id)
                             timing_feedback = self.get_parry_timing_feedback(response_time, difficulty, user_id)
                             
@@ -9333,8 +9630,9 @@ Your response (1-2 sentences max):"""
                             bf_chance = self.player_stats.get(user_id, {}).get('black_flash_chance', 0)
                             if bf_chance > 0 and parry_indicator != "✅":
                                 # Show visual indicator for BF window
-                                await self.webhook_send(
-                                    content=f"{parry_indicator} {message.author.mention} **parried!** [{timing_feedback}] ({response_time:.2f}s)"
+                                await self.feedback(
+                                    user_id, "parry_ok", f"{parry_indicator} {message.author.mention} **parried!** [{timing_feedback}] ({response_time:.2f}s)",
+                                    ms=round(response_time * 1000), tag=timing_feedback
                                 )
                             
                             console.print(f"[cyan]⚔ PARRY SUCCESS - {message.author.name} in {response_time:.2f}s ({timing_feedback})[/cyan]")
@@ -9364,7 +9662,7 @@ Your response (1-2 sentences max):"""
                             await self.process_next_player_qte(target)
                         return True
                     else:
-                        await self.webhook_send(content=f"❌ {message.author.mention} **parry mistimed!** ({response_time:.2f}s)")
+                        await self.feedback(user_id, "parry_mistimed", f"❌ {message.author.mention} **parry mistimed!** ({response_time:.2f}s)", ms=round(response_time * 1000))
                         await self.damage_player(user_id, difficulty)
                         await self.update_player_stats(user_id, 'parry', False, response_time)
                         console.print(f"[red]✗ PARRY FAILED (mistimed) - {message.author.name}[/red]")
@@ -9401,7 +9699,7 @@ Your response (1-2 sentences max):"""
                     
                     # Adaptation uses parry timing
                     if not (adj_parry_min <= response_time <= adj_parry_max):
-                        await self.webhook_send(content=f"❌ {message.author.mention} **adapt mistimed!** ({response_time:.2f}s)")
+                        await self.feedback(user_id, "adapt_mistimed", f"❌ {message.author.mention} **adapt mistimed!** ({response_time:.2f}s)", ms=round(response_time * 1000))
                         await self.damage_player(user_id, difficulty)
                         console.print(f"[red]✗ ADAPT FAILED (mistimed) - {message.author.name} at {response_time:.2f}s[/red]")
                         
@@ -9437,8 +9735,9 @@ Your response (1-2 sentences max):"""
                             spins = self.special_objects_manager.get_tracking(user_id, obj_id, difficulty)
                             spin_info.append(f"**{obj['name']}**: {spins} {difficulty} spins")
                         
-                        await self.webhook_send(
-                            content=f"🔮 {message.author.mention} **adapted!** ({response_time:.2f}s)\n" + "\n".join(spin_info)
+                        await self.feedback(
+                            user_id, "adapt_ok", f"🔮 {message.author.mention} **adapted!** ({response_time:.2f}s)\n" + "\n".join(spin_info),
+                            ms=round(response_time * 1000), info=[s.replace("**", "") for s in spin_info]
                         )
                     
                     console.print(f"[magenta]🔮 ADAPT SUCCESS - {message.author.name}[/magenta]")
@@ -9458,12 +9757,12 @@ Your response (1-2 sentences max):"""
                 if '*save*' in content and target:
                     # Check save rate limit (2 per minute)
                     if not self.can_save_qte(user_id):
-                        await self.webhook_send(content=f"⏱️ {message.author.mention} **Save limit exceeded!** Max 2 saves per minute")
+                        await self.feedback(user_id, "save_limit", f"⏱️ {message.author.mention} **Save limit exceeded!** Max 2 saves per minute")
                         return False
                     
                     if response_time <= evade_window:
                         responses.add(user_id)
-                        await self.webhook_send(content=f"🛡️ {message.author.mention} **saved {target.mention}!** ({response_time:.2f}s)")
+                        await self.feedback(user_id, "save_ok", f"🛡️ {message.author.mention} **saved {target.mention}!** ({response_time:.2f}s)", target=target.display_name, ms=round(response_time * 1000))
                         await self.update_player_stats(user_id, 'save', True, response_time)
                         await self.update_player_stats(target.id, 'saved', True, response_time)
                         console.print(f"[magenta]🛡 SAVE SUCCESS - {message.author.name} saved {target.name}[/magenta]")
@@ -9473,7 +9772,7 @@ Your response (1-2 sentences max):"""
                         self.save_all_data()
                         return True
                     else:
-                        await self.webhook_send(content=f"❌ {message.author.mention} **save too slow!** ({response_time:.2f}s)")
+                        await self.feedback(user_id, "save_slow", f"❌ {message.author.mention} **save too slow!** ({response_time:.2f}s)", ms=round(response_time * 1000))
                         await self.damage_player(user_id, difficulty)
                         await self.update_player_stats(user_id, 'save', False, response_time)
                         console.print(f"[red]✗ SAVE FAILED (too slow) - {message.author.name}[/red]")
@@ -9531,30 +9830,30 @@ Your response (1-2 sentences max):"""
                                 self.player_hp[user_id]['current'] + heal_amount
                             )
                             new_hp = self.player_hp[user_id]['current']
-                            await self.webhook_send(content=f"🪞✨ **Mirror Shard** healed {message.author.mention}! ({old_hp} → {new_hp} HP)")
+                            await self.feedback(user_id, "mirror_heal", f"🪞✨ **Mirror Shard** healed {message.author.mention}! ({old_hp} → {new_hp} HP)", old=old_hp, new=new_hp)
                             console.print(f"[green]🪞 Mirror Shard heal: {old_hp} → {new_hp} (+{heal_amount})[/green]")
                     
                     # Enable counter window if evaded fast enough OR has guaranteed_counter
                     has_guaranteed_counter = mirror_effects.get('guaranteed_counter', False)
-                    if response_time < self.counter_window or has_guaranteed_counter:
+                    if self.scene_counter_ok() and (response_time < self.counter_window or has_guaranteed_counter):
                         await self.send_success_with_counter(channel, message.author.mention, response_time, user_id, qte_id, difficulty)
                         if has_guaranteed_counter:
                             console.print(f"[yellow]⚡🪞 COUNTER ENABLED (Mirror Shard guaranteed) for {message.author.name}[/yellow]")
                         else:
                             console.print(f"[yellow]⚡ COUNTER ENABLED for {message.author.name}[/yellow]")
                     else:
-                        await self.webhook_send(content=f"✅ {message.author.mention} evaded! ({response_time:.2f}s)")
+                        await self.feedback(user_id, "evade_ok", f"✅ {message.author.mention} evaded! ({response_time:.2f}s)", ms=round(response_time * 1000))
                     
                     self.last_qte_completion[user_id] = current_time
                 else:
-                    await self.webhook_send(content=f"❌ {message.author.mention} evade too slow! ({response_time:.2f}s)")
+                    await self.feedback(user_id, "evade_slow", f"❌ {message.author.mention} evade too slow! ({response_time:.2f}s)", ms=round(response_time * 1000))
                     await self.damage_player(user_id, difficulty)
                     console.print(f"[red]✗ {message.author.name} - EVADE FAILED - {response_time:.2f}s[/red]")
                     self.last_qte_completion[user_id] = current_time
 
             elif '*parry*' in content:
                 # Block parry in GROUP QTEs
-                await self.webhook_send(content=f"❌ {message.author.mention} **Cannot parry in group QTEs!** Use *evade* instead")
+                await self.feedback(user_id, "group_no_parry", f"❌ {message.author.mention} **Cannot parry in group QTEs!** Use *evade* instead")
                 return False
                 
                 action = 'parry'
@@ -9596,7 +9895,7 @@ Your response (1-2 sentences max):"""
                             color=discord.Color.from_rgb(138, 43, 226)
                         )
                         embed.set_image(url=self.black_flash_gif)
-                        await self.webhook_send(embed=embed)
+                        await self.feedback(user_id, "black_flash", embed=embed, damage=base_damage)
                         
                         # Add exclamation reaction
                         asyncio.create_task(self.add_reaction_to_response(channel, user_id, message, "❗"))
@@ -9641,7 +9940,7 @@ Your response (1-2 sentences max):"""
             successful = sum(1 for p in participants.values() if p['success'])
             total = len(participants)
 
-            await self.safe_send(channel, content=f"📊 **Group QTE Complete!** {successful}/{total} succeeded")
+            await self.feedback(None, "group_done", f"📊 **Group QTE Complete!** {successful}/{total} succeeded", users=list(participants), ok=successful, total=total)
 
             console.print(Panel.fit(
                 f"[cyan]📊 GROUP QTE FINISHED (ID: {qte_id})[/cyan]\n"
@@ -9688,9 +9987,11 @@ Your response (1-2 sentences max):"""
                     if combo_index + 1 >= combo_length:
                         # COMBO COMPLETE!
                         self.active_qtes.pop(qte_id, None)
-                        await channel.send(
+                        await self.feedback(
+                            user_id, "combo_done",
                             f"# 🔥 **COMBO COMPLETE!** 🔥\n"
-                            f"{message.author.mention} completed all **{combo_length}** hits!"
+                            f"{message.author.mention} completed all **{combo_length}** hits!",
+                            length=combo_length
                         )
                         console.print(f"[green]🔥 COMBO QTE COMPLETE - {message.author.name}[/green]")
                         
@@ -9699,19 +10000,19 @@ Your response (1-2 sentences max):"""
                     else:
                         # Next in sequence
                         next_action = combo_sequence[combo_index + 1]
-                        await channel.send(f"✅ **{combo_index + 1}/{combo_length}!** Next: `*{next_action}*`")
+                        await self.feedback(user_id, "combo_step", f"✅ **{combo_index + 1}/{combo_length}!** Next: `*{next_action}*`", index=combo_index + 1, length=combo_length, next=next_action)
                     
                     return True
                 else:
                     # Too slow
                     self.active_qtes.pop(qte_id, None)
-                    await channel.send(f"❌ **COMBO BROKEN!** {message.author.mention} was too slow!")
+                    await self.feedback(user_id, "combo_broken", f"❌ **COMBO BROKEN!** {message.author.mention} was too slow!", why="slow")
                     await self.damage_player(user_id, difficulty)
                     return True
             else:
                 # Wrong action
                 self.active_qtes.pop(qte_id, None)
-                await channel.send(f"❌ **COMBO BROKEN!** {message.author.mention} used wrong action! Expected `*{expected_action}*`")
+                await self.feedback(user_id, "combo_broken", f"❌ **COMBO BROKEN!** {message.author.mention} used wrong action! Expected `*{expected_action}*`", why="wrong", expected=expected_action)
                 await self.damage_player(user_id, difficulty)
                 return True
             
@@ -9755,24 +10056,28 @@ Your response (1-2 sentences max):"""
             evade_window = timing['evade_window']
             
             if response_time > evade_window + 1.0:  # +1s for direction
-                await channel.send(f"❌ {message.author.mention} too slow! ({response_time:.2f}s)")
+                await self.feedback(user_id, "direction_slow", f"❌ {message.author.mention} too slow! ({response_time:.2f}s)", ms=round(response_time * 1000))
                 await self.damage_player(user_id, difficulty)
                 return True
             
             # Check if correct (OPPOSITE)
             if input_direction == correct_arrow:
-                await channel.send(
+                await self.feedback(
+                    user_id, "direction_ok",
                     f"✅ **DIRECTION CORRECT!** {message.author.mention}\n"
-                    f"_Shown: {shown_arrow} → Input: {input_direction} (opposite)_"
+                    f"_Shown: {shown_arrow} → Input: {input_direction} (opposite)_",
+                    ms=round(response_time * 1000)
                 )
                 console.print(f"[green]🎯 Direction QTE correct - {message.author.name}[/green]")
                 
                 # Grant counter window
                 await self.send_success_with_counter(channel, message.author.mention, response_time, user_id, qte_id, difficulty)
             else:
-                await channel.send(
+                await self.feedback(
+                    user_id, "direction_wrong",
                     f"❌ **WRONG DIRECTION!** {message.author.mention}\n"
-                    f"_Shown: {shown_arrow} → You input: {input_direction} (needed {correct_arrow})_"
+                    f"_Shown: {shown_arrow} → You input: {input_direction} (needed {correct_arrow})_",
+                    shown=str(shown_arrow), needed=str(correct_arrow)
                 )
                 await self.damage_player(user_id, difficulty)
             
@@ -9796,7 +10101,8 @@ Your response (1-2 sentences max):"""
             
             self.active_qtes.pop(qte_id, None)
             
-            await channel.send(
+            await self.feedback(
+                user_id, "fake_fail",
                 f"# 👻 **FAKE QTE!** 👻\n"
                 f"❌ {message.author.mention} fell for it!\n"
                 f"_There was no real attack!_"
@@ -9960,7 +10266,9 @@ Your response (1-2 sentences max):"""
             # ============================================
             
             # Apply power effect (will set cooldown internally based on damage)
-            await self.apply_power_effect(message.author, power, channel, power_key)
+            self.emit_event("power_used", user=user_id, character=character_name, slot=power_slot, name=power.get("name", ""),
+                            type=power.get("type", ""), effect=str(power.get("effect", "")))
+            await self.apply_power_effect(message.author, power, channel, power_key, user_id=user_id, character=character_name)
             
             console.print(f"[purple]⚡ {message.author.name} used {power['name']}[/purple]")
             
@@ -10127,6 +10435,7 @@ Your response (1-2 sentences max):"""
                 "start_time": time.time(),
                 "task": cast_task
             }
+            self.emit_event("domain_cast", user=user_id, domain=domain_id)
             
         except Exception as e:
             console.print(f"[red]✗ Error handling domain expansion: {e}[/red]")
@@ -10149,6 +10458,7 @@ Your response (1-2 sentences max):"""
             
             # Remove from casting (successful)
             self.domain_casting.pop(user_id, None)
+            self.emit_event("domain", user=user_id, domain=domain_id)
             
             # Phase 2: Domain expands!
             domain_text = domain_config.get("domain_text", "DOMAIN EXPANSION")
@@ -12233,111 +12543,143 @@ Responde SOLAMENTE con un numero del 1 al 10."""
     
     # ========== END DOMAIN TYPE HANDLERS ==========
 
-    async def apply_power_effect(self, user, power, channel, power_key=None):
-        """Apply power effects based on effect string"""
+    async def apply_power_effect(self, user, power, channel, power_key=None, user_id=None, character=None):
+        """Apply a power's effects (see eventos_app/powers.py for the effect string). `user_id` is the player who used it
+        (for a Tupperbox message `user` is the webhook, so the caller passes the resolved player)."""
         try:
-            effect = power["effect"]
+            uid = user_id if user_id is not None else user.id
             power_name = power["name"]
-            
-            # Create activation embed
-            embed = discord.Embed(
-                title=f"⚡ {power_name.upper()} ⚡",
-                description=power["description"],
-                color=self.get_power_color(power["type"])
-            )
-            
-            # Parse effect string
-            if effect.startswith("damage:"):
-                raw_damage = int(effect.split(":")[1])
-                
-                # ========== CAP DAMAGE AT 500 ==========
-                damage = min(raw_damage, self.ultimate_max_damage)
-                was_capped = raw_damage > self.ultimate_max_damage
-                # ======================================
-                
-                if was_capped:
-                    embed.add_field(
-                        name="Effect", 
-                        value=f"💥 **{damage} damage** to enemy! (capped from {raw_damage})", 
-                        inline=False
-                    )
-                else:
-                    embed.add_field(name="Effect", value=f"💥 **{damage} damage** to enemy!", inline=False)
-                
-                # ===== PHASE 5: ADD CHARGE FROM POWER DAMAGE (only if self-recharge enabled) =====
-                if self.ultimate_self_recharge:
-                    self.add_charge_from_damage_dealt(user.id, damage)
-                # =================================================
-                
-                # Apply damage to boss if active
-                if self.active_boss:
-                    await self.damage_boss(self.active_boss['name'], damage)
-                
-            elif effect.startswith("heal:"):
-                heal_amount = int(effect.split(":")[1])
-                if user.id in self.player_hp:
-                    old_hp = self.player_hp[user.id]["current"]
-                    self.player_hp[user.id]["current"] = min(
-                        self.player_hp[user.id]["current"] + heal_amount,
-                        self.player_hp[user.id]["max"]
-                    )
-                    new_hp = self.player_hp[user.id]["current"]
-                    healed = new_hp - old_hp
-                    await self.update_hp_bar_display(user.id)
-                    embed.add_field(name="Effect", value=f"💚 Healed **{healed} HP**!", inline=False)
-            
-            elif effect == "stun":
-                self.enemy_stunned = True
-                self.stun_end_time = time.time() + 3.0  # 3 second stun
-                embed.add_field(name="Effect", value="🌀 Enemy stunned for **3 seconds**!", inline=False)
-            
-            elif effect.startswith("buff:"):
-                buff_parts = effect.split(":")
-                buff_type = buff_parts[1]
-                buff_value = float(buff_parts[2]) if len(buff_parts) > 2 else 0.1
-                buff_duration = float(buff_parts[3]) if len(buff_parts) > 3 else 30.0
-                # Apply actual buff
-                self.apply_buff(user.id, buff_type, buff_value, buff_duration)
-                embed.add_field(name="Effect", value=f"✨ **{buff_type.capitalize()}** buff applied! (+{buff_value*100:.0f}% for {buff_duration:.0f}s)", inline=False)
-            
-            else:
-                embed.add_field(name="Effect", value=f"⚡ {effect}", inline=False)
-            
+            embed = discord.Embed(title=f"⚡ {power_name.upper()} ⚡", description=power["description"],
+                                  color=self.get_power_color(power["type"]))
+            try:
+                parts = power_effects.parse(power.get("effect"))
+            except power_effects.PowerError:
+                parts = []
+            hp = self.player_hp.get(uid) or {}
+            boost = self.get_active_buff(uid, "damage_boost")
+            multiplier = power_effects.damage_multiplier(self.get_weapon_damage_multiplier(uid), float(boost["value"]) if boost else 0.0,
+                                                         bool(hp.get("revenge_mode")))
+            multiplier *= self.get_damage_modifier(uid)                                 # weakened: less damage
+            standing = [p for p, d in self.player_hp.items() if d.get("alive")]
+            report = {"user": uid, "character": character, "name": power_name, "damage": 0, "healed": 0}
+            for part in parts:
+                kind, amount, seconds = part["kind"], part["amount"], part["seconds"]
+                if kind in ("damage", "damage_all"):
+                    damage = power_effects.boss_damage(amount, multiplier, self.ultimate_max_damage)
+                    if self.ultimate_self_recharge:
+                        self.add_charge_from_damage_dealt(uid, damage)
+                    if self.active_boss:
+                        await self.damage_boss(self.active_boss['name'], damage)
+                        report["damage"] += damage
+                    if kind == "damage_all":
+                        self.emit_event("power_aoe", user=uid, amount=int(round(amount * multiplier)))
+                elif kind in ("heal", "heal_team"):
+                    for target in ([uid] if kind == "heal" else standing):
+                        before = (self.player_hp.get(target) or {}).get("current", 0)
+                        await self.heal_player(target, int(amount))
+                        report["healed"] += (self.player_hp.get(target) or {}).get("current", 0) - before
+                elif kind in ("shield", "shield_team"):
+                    for target in ([uid] if kind == "shield" else standing or [uid]):
+                        self.apply_buff(target, "shield", amount, seconds)
+                elif kind == "stun":
+                    self.enemy_stunned = True
+                    self.stun_end_time = max(getattr(self, "stun_end_time", 0) or 0, time.time() + seconds)
+                    self.emit_event("boss_stunned", user=uid, seconds=seconds)
+                elif kind == "buff":
+                    self.apply_buff(uid, part["buff"], amount, seconds)
+                elif kind == "charge_team":
+                    for target in standing:
+                        if target == uid:
+                            continue
+                        charges = self.power_charges.setdefault(target, {"power1": 0, "power2": 0})
+                        for slot in ("power1", "power2"):
+                            charges[slot] = min(100, float(charges.get(slot, 0) or 0) + amount)
+                elif kind == "afflict" and self.active_boss:
+                    await self.apply_status_effect(self.active_boss['name'], part["status"], seconds, 1, source="power")
+                elif kind in ("cleanse", "cleanse_team"):
+                    for target in ([uid] if kind == "cleanse" else list(self.player_status_effects.keys())):
+                        self.player_status_effects.pop(target, None)
+            if boost and boost.get("expires", 0) == 0 and any(p["kind"] in ("damage", "damage_all") for p in parts):
+                self.consume_buff(uid, "damage_boost")
+            lines = power_effects.describe(parts, multiplier, self.ultimate_max_damage) if parts else [f"⚡ {power.get('effect', '')}"]
+            if multiplier > 1.0 and any(p["kind"] in ("damage", "damage_all") for p in parts):
+                lines.append(f"🗡️ Damage ×{multiplier:.2f} (weapon, boosts and revenge)")
+            embed.add_field(name="Effect", value="\n".join(lines)[:1024], inline=False)
+            self.emit_event("power_effect", **report)
+
             # ========== APPLY COOLDOWN FOR ALL POWER TYPES ==========
-            # Use power's custom cooldown if set, otherwise use base cooldown
             power_cooldown = power.get("cooldown", self.ultimate_base_cooldown)
-            
-            # ===== JACKPOT CHECK - Reduce cooldowns during jackpot =====
-            if user.id in self.player_stats and self.player_stats[user.id].get('jackpot_active'):
-                jackpot_end = self.player_stats[user.id].get('jackpot_end_time', 0)
+            if uid in self.player_stats and self.player_stats[uid].get('jackpot_active'):
+                jackpot_end = self.player_stats[uid].get('jackpot_end_time', 0)
                 if time.time() < jackpot_end:
-                    # During jackpot: 10s cooldown only!
-                    power_cooldown = self.player_stats[user.id].get('jackpot_ult_cooldown', 10)
+                    power_cooldown = self.player_stats[uid].get('jackpot_ult_cooldown', 10)
                     console.print(f"[purple]🎰 JACKPOT ACTIVE - Cooldown reduced to {power_cooldown}s![/purple]")
-                    # Also refill charges to 100% (unlimited ult charge)
-                    if user.id not in self.power_charges:
-                        self.power_charges[user.id] = {}
-                    self.power_charges[user.id]["power1"] = 100
-                    self.power_charges[user.id]["power2"] = 100
-            # ===========================================================
-            
-            if power_key and user.id:
-                if user.id not in self.power_cooldowns:
-                    self.power_cooldowns[user.id] = {}
-                self.power_cooldowns[user.id][power_key] = time.time() + power_cooldown
+                    if uid not in self.power_charges:
+                        self.power_charges[uid] = {}
+                    self.power_charges[uid]["power1"] = 100
+                    self.power_charges[uid]["power2"] = 100
+            if power_key and uid:
+                if uid not in self.power_cooldowns:
+                    self.power_cooldowns[uid] = {}
+                self.power_cooldowns[uid][power_key] = time.time() + power_cooldown
                 cooldown_display = f"{power_cooldown // 60}m {power_cooldown % 60}s" if power_cooldown >= 60 else f"{power_cooldown}s"
                 embed.add_field(name="Cooldown", value=f"⏱️ **{cooldown_display}** (fight-time only!)", inline=False)
                 console.print(f"[yellow]⏱️ Set {power_key} cooldown: {cooldown_display} (fight-time)[/yellow]")
             # =========================================================
-            
-            # Add power image (custom if set, otherwise default ultimate GIF)
+
             power_image = power.get("image_url") or self.ultimate_gif
             embed.set_image(url=power_image)
             embed.set_footer(text=f"Type: {power['type'].capitalize()} | 💡 Cooldowns tick during fights only!")
             await channel.send(embed=embed)
-            
+
         except Exception as e:
             log.error(f"Error applying power effect: {e}")
+
+    MIRROR_COOLDOWN = 60.0           # seconds between two Mirror Shard invocations of the same player
+
+    def mirror_invoke_problem(self, user_id):
+        """Why this player cannot invoke the Mirror Shard now (a message), or None when they can."""
+        inventory = self.special_objects_manager.player_inventory.get(user_id, [])
+        has_mirror_shard = 'mirror_shard' in inventory or self.special_objects_manager.unique_object_owners.get('mirror_shard') == user_id
+        if not has_mirror_shard:
+            return "❌ You don't have the **Mirror Shard**!"
+        spins = self.special_objects_manager.get_tracking(user_id, 'mirror_shard', 'total')
+        if spins < 20:
+            return (f"❌ Mirror Shard needs **20 total spins** to invoke QTE!\n"
+                    f"Your current spins: **{spins}/20**")
+        if not self.active_boss:
+            return ("❌ No active boss to invoke QTE against!\n"
+                    "Wait for a boss to appear in combat.")
+        left = self.mirror_cooldowns.get(user_id, 0) - time.time()
+        if left > 0:
+            return f"⏱️ The Mirror Shard is recharging: **{int(left) + 1}s** left."
+        return None
+
+    async def mirror_invoke(self, user_id, name="?"):
+        """The Mirror Shard reflects a medium QTE at the boss: 15 damage, and a 2 s stun when its effects allow it. Returns the damage."""
+        self.mirror_cooldowns[user_id] = time.time() + self.MIRROR_COOLDOWN
+        boss_name = self.active_boss['name']
+        base_damage = 15  # Medium QTE damage (the boss "fails" the reflected QTE)
+        await self.damage_boss(boss_name, base_damage)
+        embed = discord.Embed(
+            title="🪞💥 Mirror Shard - QTE Reflected!",
+            description=f"**{boss_name}** failed to evade the reflected attack!\n\n"
+                       f"💢 **{base_damage} damage** dealt!",
+            color=discord.Color.purple()
+        )
+        mirror_effects = self.special_objects_manager.get_active_effects(user_id, 'medium')
+        if mirror_effects.get('on_boss_stunned', {}).get('black_flash', False):
+            embed.add_field(
+                name="⚡ Black Flash Ready!",
+                value="Boss stunned! Black Flash opportunity!",
+                inline=False
+            )
+            self.enemy_stunned = True
+            self.stun_end_time = time.time() + 2.0  # 2 second stun
+        await self.webhook_send(embed=embed)
+        self.emit_event("mirror_invoke", user=user_id, damage=base_damage)
+        console.print(f"[magenta]🪞 MIRROR INVOKE - {name} reflected QTE at {boss_name} for {base_damage} damage[/magenta]")
+        return base_damage
 
     def get_power_color(self, power_type):
         """Get embed color based on power type"""
@@ -12454,6 +12796,7 @@ Responde SOLAMENTE con un numero del 1 al 10."""
             del self.counter_enabled_players[user_id]
             
             channel = message.channel
+            mention = message.author.mention
             
             # Increment counter streak
             if user_id not in self.counter_streaks:
@@ -12474,6 +12817,11 @@ Responde SOLAMENTE con un numero del 1 al 10."""
                 console.print(f"[gold1]🗡️ WEAPON BONUS: Damage multiplied by {weapon_multiplier}x![/gold1]")
             # ===============================================
             
+            # ========== DAMAGE BOOST (powers, /support) ==========
+            counter_damage = self.apply_damage_buff(user_id, counter_damage)
+            counter_damage = int(counter_damage * self.get_damage_modifier(user_id))      # weakened: less damage
+            # =====================================================
+
             # ========== TRANSFIGURATION (Soul Manipulator) ==========
             transfig_multiplier = self.get_soul_manipulator_multiplier(user_id)
             if transfig_multiplier > 1.0:
@@ -12501,13 +12849,7 @@ Responde SOLAMENTE con un numero del 1 al 10."""
             if random.random() < crit_chance:
                 is_critical = True
                 counter_damage = int(counter_damage * 2.0)  # Double damage on crit!
-                # Increase luck for next time (capped)
-                stats = self.player_stats.get(user_id, {})
-                if stats.get('black_flash_chance', 0) < self.black_flash_cap:
-                    stats['black_flash_chance'] = min(
-                        stats.get('black_flash_chance', self.black_flash_base_chance) + self.black_flash_increment,
-                        self.black_flash_cap
-                    )
+                stats = self.player_stats.get(user_id, {})   # (the luck is the Black Flash's: a critical counter reads it, never changes it)
                 
                 # ========== ACHIEVEMENT: CRITICAL COUNTER IN FIGHT ==========
                 # Track critical counters during active boss fights for "Restless Gambler"
@@ -12520,6 +12862,7 @@ Responde SOLAMENTE con un numero del 1 al 10."""
             
             # Add charge from counter
             self.add_charge_from_damage_dealt(user_id, counter_damage)
+            self.emit_event("counter", user=user_id, damage=counter_damage)
             self.add_charge_from_counter(user_id)
             
             # Apply damage to boss if active
@@ -12736,7 +13079,7 @@ Responde SOLAMENTE con un numero del 1 al 10."""
                     
                     # Calculate response time
                     now = datetime.now(timezone.utc)
-                    response_time = (now - qte_data['start']).total_seconds() - self.latency_offset
+                    response_time = self.qte_response_time(message, qte_data, now)
                     difficulty = qte_data['difficulty']
                     
                     # Check if within valid window (parry window for adaptation)
@@ -12786,8 +13129,9 @@ Responde SOLAMENTE con un numero del 1 al 10."""
                                 spins = self.special_objects_manager.get_tracking(user_id, obj_id, difficulty)
                                 spin_info.append(f"**{obj['name']}**: {spins} {difficulty} spins")
                         
-                        await self.webhook_send(
-                            content=f"🔮 {message.author.mention} **adapted!** ({response_time:.2f}s)\n" + "\n".join(spin_info)
+                        await self.feedback(
+                            user_id, "adapt_ok", f"🔮 {message.author.mention} **adapted!** ({response_time:.2f}s)\n" + "\n".join(spin_info),
+                            ms=round(response_time * 1000), info=[s.replace("**", "") for s in spin_info]
                         )
                     
                     console.print(f"[magenta]🔮 ADAPT SUCCESS (during QTE) - {message.author.name}[/magenta]")
@@ -12936,10 +13280,11 @@ Responde SOLAMENTE con un numero del 1 al 10."""
             console.print(f"[red]✗ Error updating player stats: {e}[/red]")
 
     def setup_hotkeys(self):
-        """Setup keyboard hotkeys from config (requires keyboard library and root on Linux)"""
-        if not KEYBOARD_AVAILABLE:
-            console.print("[yellow]⚠️  Cannot setup hotkeys - keyboard library not available[/yellow]")
-            return
+        """Build the GM quick actions and, if possible, bind them to global hotkeys.
+
+        The actions are always created (the desktop app exposes them as buttons).
+        Global hotkeys need the `keyboard` library (and root on Linux).
+        """
         # Load keybinds from config
         config_path = 'config.json'
         keybinds = {
@@ -13065,12 +13410,34 @@ Responde SOLAMENTE con un numero del 1 al 10."""
             else:
                 trigger_single_impossible()
 
+        self.keybinds = keybinds
+        self.quick_actions = {
+            "single_easy": add_batch_easy,
+            "single_medium": add_batch_medium,
+            "single_hard": add_batch_hard,
+            "single_impossible": add_batch_impossible,
+            "group_easy": trigger_group_easy,
+            "group_medium": trigger_group_medium,
+            "group_hard": trigger_group_hard,
+            "group_impossible": trigger_group_impossible,
+            "checkpoint": trigger_checkpoint,
+            "sync_commands": sync_commands,
+            "batch_toggle": toggle_batch_easy,
+        }
+
+        if not KEYBOARD_AVAILABLE:
+            console.print("[yellow]⚠️  Global hotkeys unavailable (keyboard library missing) - use the buttons[/yellow]")
+            return
+        if os.getenv("EVENTOS_HOTKEYS", "1") == "0":
+            console.print("[yellow]⚠️  Global hotkeys disabled in settings[/yellow]")
+            return
+
         # Register hotkeys using config
         keyboard.add_hotkey(keybinds['single_easy'], add_batch_easy)
         keyboard.add_hotkey(keybinds['single_medium'], add_batch_medium)
         keyboard.add_hotkey(keybinds['single_hard'], add_batch_hard)
         keyboard.add_hotkey(keybinds['single_impossible'], add_batch_impossible)
-        
+    
         # Batch mode toggle (Alt+F9)
         keyboard.add_hotkey('alt+f9', toggle_batch_easy)
 
@@ -13078,7 +13445,7 @@ Responde SOLAMENTE con un numero del 1 al 10."""
         keyboard.add_hotkey(keybinds['group_medium'], trigger_group_medium)
         keyboard.add_hotkey(keybinds['group_hard'], trigger_group_hard)
         keyboard.add_hotkey(keybinds['group_impossible'], trigger_group_impossible)
-        
+    
         keyboard.add_hotkey(keybinds['checkpoint'], trigger_checkpoint)
         keyboard.add_hotkey(keybinds['sync_commands'], sync_commands)
 
@@ -13100,6 +13467,14 @@ Responde SOLAMENTE con un numero del 1 al 10."""
         hotkey_table.add_row("Sync Cmds", f"{keybinds['sync_commands']} (Force sync slash commands)", "", "", "")
 
         console.print(hotkey_table)
+
+    def teardown_hotkeys(self):
+        """Release global hotkeys so a restarted bot doesn't get double triggers"""
+        if KEYBOARD_AVAILABLE:
+            try:
+                keyboard.unhook_all_hotkeys()
+            except Exception as e:
+                log.warning(f"Could not unhook hotkeys: {e}")
 
     async def force_sync_commands(self):
         """Force sync all slash commands"""
@@ -13134,10 +13509,16 @@ Responde SOLAMENTE con un numero del 1 al 10."""
             console.print(f"[red]✗ Fatal error running bot: {e}[/red]")
         finally:
             self.save_all_data()
+            flush_saves()
             console.print("[yellow]Bot shutdown complete[/yellow]")
 
 if __name__ == "__main__":
     try:
+        try:                                                    # Spanish messages unless EVENTOS_LANG=en (see eventos_app/lang)
+            from eventos_app import lang as _lang
+            _lang.activate(os.environ.get("EVENTOS_LANG", "es"))
+        except ImportError:
+            pass
         bot = AdvancedQTEBot()
         bot.run()
     except KeyboardInterrupt:

@@ -1,0 +1,5 @@
+# Extra dependencies for the desktop app (Windows build). The bot itself needs requirements.txt.
+customtkinter>=5.2.2
+pillow>=10.0.0
+pyinstaller>=6.6.0
+keyboard>=0.13.5; sys_platform == "win32"
