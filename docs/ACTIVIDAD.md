@@ -313,6 +313,42 @@ maldición la carga.
 - Las imágenes descargadas no pueden redirigir a la red de casa; tokens inventados no se llevan a Discord sin límite.
 - Una pantalla lenta no frena a las demás; las peticiones largas terminan aunque tarden.
 
+## Novedades de la 2.1
+### Estilo y distribución
+*Ajustes → Estilo*: galería de estilos con vista previa, **Personalizar** (cualquier color, paneles, letra, esquinas, fondo) y
+**Distribución** (normal, centrada, espejo, compacta; la centrada y el espejo solo en pantallas anchas). Un GM con la casilla
+*Dirigir en vivo* puede poner su estilo **para todo el evento**; cada jugador decide si lo sigue.
+
+### Agenda
+*Menú → Agenda*: tu semana (puedo / quizá) en tu hora local, el **mapa del equipo** con las mejores franjas y las **votaciones de
+fecha** del GM. Al cerrar una votación, el menú muestra el **próximo evento** con su cuenta atrás. Se guarda en
+`data/activity_agenda.json` (hora UTC; cada uno la ve en la suya).
+
+### Resultados
+Al derrotar al jefe sale la pantalla de resultados de esa ronda (podio, premios repartidos, tabla). *GM → Resultados* crea y edita
+pantallas por bloques y las cambia **en directo**; *Mostrar* la abre a todos de nuevo. Se guardan en `data/activity_results.json`.
+
+### Resúmenes con IA
+*GM → Resúmenes*: dirección, clave y modelo de una API compatible con OpenAI (con preajustes y botón *Probar*). La clave se guarda en
+`data/activity_ai.json`, que git ignora, y la Actividad solo ve sus 4 últimas letras. El resumen lee los mensajes del tramo elegido y
+el guion de las cinemáticas que salieron en él (los tramos largos se resumen por partes). Publicado, aparece en *Menú → Resúmenes*
+con sus cinemáticas para volver a verlas; también se puede mandar al canal.
+
+### Equipo de GM
+*GM → Equipo*: casillas por persona o por rol de Discord, con preajustes. Las pestañas, la búsqueda y cada petición al servidor
+siguen las casillas.
+
+### Cinemáticas de los jugadores
+*Mi panel → Cinemáticas*: el mismo editor que el del GM, sin sonidos de la biblioteca ni mensajes al canal, hasta 20 s y 10 por
+jugador (y unas pocas imágenes por hora). Se liga a un poder (personaje y Poder 1/2) o a una acción, con una espera mínima entre
+usos (1 min a 1 h). *Enviar al GM* la pasa a *GM → Solicitudes* (casilla *Solicitudes*), que avisa a quien la tenga; aprobar o
+devolver avisa al jugador. Aprobada, va **antes** que las del GM para ese momento, solo cuando lo hace ese jugador.
+
+### Mecánicas
+Ver las notas de la 2.1.0: venganza que se quita al curarse, suerte de Black Flash anti-mala-suerte, más daño al fallar un QTE,
+tiempos ordenados por dificultad y arreglos de `/config qte`, del QTE trampa y de la ventana de contraataque. Los archivos de ajustes
+guardan la versión de sus valores por defecto: un valor viejo que nadie eligió da paso al nuevo; lo que un GM eligió se respeta.
+
 ## Puesta en marcha (una sola vez)
 En <https://discord.com/developers/applications> → tu aplicación (la del bot principal):
 1. **Activities**: actívalas («Enable Activities»). Discord crea el comando de entrada «Launch».
@@ -432,6 +468,12 @@ ajustes) y `python activity_client/preview.py <carpeta> [escenario…]` lo abre 
 Las pruebas del panel del GM comprueban las operaciones (`test_activity_gm.py`), el acceso por rol de cada acción
 (`test_activity_gm_socket.py`), el navegador (`test_activity_gm_browser.py`) y que cada atributo y método del bot que usa el panel
 exista y se llame como el bot lo declara (`test_activity_gm_contract.py`).
+
+**En local con un bot simulado (2.1):** `python activity_client/devserver.py` abre la Actividad en `http://127.0.0.1:8799` hasta Ctrl+C,
+con datos de prueba que se borran al pararla. `?dev=Ana&gm=1` entra como GM y `?dev=Mina` como jugadora (abre dos pestañas para ver
+las dos pantallas). Desde la consola del navegador: `await window.__eventos.rpc("dev.fight")` simula un combate (para los
+resultados) y `await window.__eventos.rpc("dev.power", {slot: "1"})` hace que quien la llama use un poder (para las cinemáticas
+de los jugadores). Sin clave de IA, los resúmenes usan una IA de prueba.
 
 ## Qué falta comprobar en esta versión (con Discord real)
 - Cómo se ve y se siente el botón flotante en **móviles reales** dentro de Discord (tamaños, posiciones, zona del pulgar) y con
