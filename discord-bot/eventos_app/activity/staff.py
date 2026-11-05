@@ -60,7 +60,7 @@ PRESETS: dict[str, tuple[str, str, tuple[str, ...]]] = {
 # which box each request of the panel needs; a request that is not here needs only to be on the team (any box)
 OP_PERMS: dict[str, str] = {}
 for _perm, _ops in {
-    "event": "launch batch fight checkpoint sync qte_mode",
+    "event": "launch batch fight checkpoint sync qte_mode scenes scene_save scene_delete scene_use scene_presets",
     "boss": "boss boss_config boss_hp boss_mode boss_register boss_remove boss_spawn ability_remove ability_save ability_use "
             "domain_clear domain_expand domain_save gif_add gif_remove",
     "mobs": "mobs mob_delete mob_hp mob_pause mob_remove mob_save mob_spawn",

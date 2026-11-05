@@ -313,7 +313,15 @@ class Mobs:
         target = random.choice(pool)
         kind = mob["attack"]
         if kind == "random":
-            kind = random.choice(("flick", "drag", "mash", "single"))
+            scene = getattr(self.b.app, "qte_scene", None)          # the active scene says which kinds fit the moment (scenes.py)
+            if scene:
+                weights = scene["weights"]
+                kinds = [k for k in ("flick", "drag", "mash") if weights.get(k, 0) > 0]
+                if any(weights.get(k, 0) > 0 for k in ("standard", "evade", "combo", "direction", "fake")):
+                    kinds.append("single")
+                kind = random.choice(kinds or ["single"])
+            else:
+                kind = random.choice(("flick", "drag", "mash", "single"))
         mob["attacking"] = getattr(target, "display_name", None) or getattr(target, "name", "?")
         await self.announce()
         self.b.on_event("mob_attack", {"name": mob["name"], "user": target.id})

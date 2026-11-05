@@ -13,6 +13,7 @@ const KINDS = {
   adapt_ok: (d) => ({ tone: "ok", text: `Adaptado en ${SECONDS(d.ms)} s${d.info && d.info.length ? ` · ${d.info.join(" · ")}` : ""}` }),
   adapt_mistimed: (d) => ({ tone: "bad", text: `Adaptación a destiempo (${SECONDS(d.ms)} s).` }),
   save_limit: () => ({ tone: "warn", text: "Límite de rescates: máximo 2 por minuto." }),
+  scene_no_parry: () => ({ tone: "warn", text: "En esta escena no hay parry: esquiva." }),
   group_no_parry: () => ({ tone: "warn", text: "En un QTE grupal no se puede hacer parry: esquiva." }),
   group_done: (d) => ({ tone: d.ok === d.total ? "ok" : "info", text: `QTE grupal: lo lograron ${d.ok} de ${d.total}.` }),
   combo_done: (d) => ({ tone: "ok", text: `¡Combo completo! ${d.length} golpes.` }),

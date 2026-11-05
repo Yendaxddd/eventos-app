@@ -145,7 +145,9 @@ def describe(qte_id, data: dict, times: dict, now_ms: float, *, timeouts: dict |
     windows: dict | None = {"evade": [0.0, evade], "parry": [round(parry[0], 3), round(parry[1], 3)]}
     commands = ["evade", "parry", "adapt"]
     extra: dict = {}
-    if mode == "single":
+    if mode == "single" and data.get("no_parry"):                # a scene without parry (scenes.py): evade only, no Black Flash
+        commands, windows, window = ["evade", "save", "adapt"], {"evade": [0.0, evade]}, 0.0
+    elif mode == "single":
         commands = ["evade", "parry", "save", "adapt"]            # `save` is for a QTE that is somebody else's
     elif mode == "group":
         # the bot refuses a parry in a group QTE ("Cannot parry in group QTEs"), so there is only the evade window

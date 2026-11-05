@@ -7372,5 +7372,11 @@
 "kind": "console",
 "en": "[yellow]⚡ REVENGE over for {1}: healed to {2}/{3}[/yellow]",
 "es": "[yellow]⚡ Fin de la VENGANZA de {1}: curado a {2}/{3}[/yellow]"
+},
+{
+"id": "98de1efbf95b",
+"kind": "user",
+"en": "🏃 {1} **No parry here!** Use *evade*",
+"es": "🏃 {1} **¡Aquí no hay parry!** Usa *evade*"
 }
 ]

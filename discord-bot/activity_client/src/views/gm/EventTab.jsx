@@ -5,6 +5,8 @@ import { usePanel } from "../../panel/data.js";
 import { parseNumber, plural } from "../../panel/format.js";
 import { Card, Chips, DIFFICULTIES, DIFFICULTY_ES, NumberInput, Bar } from "./ui.jsx";
 import { useDo, useDraft, useLive } from "./hooks.js";
+import { ScenesCard } from "./Scenes.jsx";
+import { scene } from "../../state.js";
 
 const MODES = [
   ["single", "Individual", "Un QTE para una persona."], ["group", "Grupal", "Un QTE para todo el grupo."], ["combo", "Combo", "Cinco QTE seguidos para una persona."],
@@ -162,6 +164,7 @@ function AutoMode({ s, replace }) {
             </label>
           ))}
         </div>
+        {scene.value && <p class="gm-hint" data-testid="automode-scene">Ahora manda la escena «{scene.value.name}»: esto vuelve a contar con «Sin escena».</p>}
         <p class="faint gm-hint">{draft.mode === "random" ? (total === 0 ? "Alguna probabilidad debe ser mayor que 0." : "Se reparten según el peso de cada uno (no hace falta que sumen 100).") : "Las probabilidades solo cuentan en el modo «Al azar»."}</p>
         <div><button class="btn btn-primary" type="button" onClick={save} disabled={busy !== null || (draft.mode === "random" && total === 0)} data-testid="gm-qtemode-save">Guardar</button></div>
       </div>
@@ -194,6 +197,7 @@ export function EventTab() {
         {(s) => (
           <>
             <Status s={s} />
+            <ScenesCard />
             <Launch s={s} replace={q.replace} />
             <Running s={s} />
             <Batch s={s} replace={q.replace} />

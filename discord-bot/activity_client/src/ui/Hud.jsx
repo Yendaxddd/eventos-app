@@ -1,11 +1,23 @@
 import { useState } from "preact/hooks";
 import { Crown, Flame, Skull, Swords, UserRound } from "lucide-preact";
 import { GmDeck } from "./GmDeck.jsx";
-import { activeAs, charAvatars, game, me, myHp, perms, users, you } from "../state.js";
+import { activeAs, charAvatars, game, me, myHp, perms, scene, users, you } from "../state.js";
 import { clamp, cx, store } from "../util.js";
 import { Avatar } from "./Avatar.jsx";
 import { Actions } from "./Actions.jsx";
 import { EffectChips, EffectIcons, Pops } from "./Effects.jsx";
+
+// the scene the game masters chose (scenes.py): its name, and what does not work in it
+export function SceneChip({ compact = false }) {
+  const s = scene.value;
+  if (!s) return null;
+  const off = [!s.parry && "sin parry", !s.counter && "sin contraataque"].filter(Boolean).join(" · ");
+  return (
+    <span class={cx("scene-chip", compact && "compact")} style={{ "--scene": s.color }} title={s.note || `Escena: ${s.name}`} data-testid="scene-chip">
+      <i aria-hidden="true" /><b>{s.name}</b>{off && <small>{off}</small>}
+    </span>
+  );
+}
 
 const levelOf = (hp, max) => {
   const pct = max ? hp / max : 0;
@@ -65,6 +77,7 @@ export function MeCard() {
   const avatar = as === "me" ? who && who.avatar : charAvatars.value[as];
   return (
     <div class="me-card" data-testid="me-card">
+      <SceneChip />
       <div class="me-id">
         <Avatar url={avatar} name={name} size="lg" />
         <div class="names">
@@ -169,6 +182,7 @@ export function MiniHud() {
           {who && <Pops target={String(who.id)} />}
         </div>
         {m && ((m.effects && m.effects.length) || (m.buffs && m.buffs.length)) ? <EffectChips effects={m.effects} buffs={m.buffs} compact /> : null}
+        <SceneChip compact />
         {m && m.charges && (
           <div class="mh-row">
             <Bar kind="charge" thin value={m.charges.power1} max={m.cost || 100} ready={m.charges.power1 >= (m.cost || 100)} />

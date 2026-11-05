@@ -33,6 +33,7 @@ from .look import LookBook, LookRpc
 from .agenda import AgendaBook, AgendaRpc
 from .results import ResultsBook, ResultsRpc, RoundTracker
 from .summary import AiConfig, CinemaLog, SummaryBook, SummaryRpc
+from .scenes import SceneBook, SceneRpc, public as scene_public
 from .cinema_requests import CinemaRequestRpc
 from .fx import FxBook, FxDirector
 from .arena import ArenaQtes
@@ -134,7 +135,7 @@ VERDICT_WAITS, VERDICT_STEP = 15, 0.02     # up to about a quarter of a second f
 CURRENT_OP: contextvars.ContextVar[str] = contextvars.ContextVar("activity_rpc_op", default="")    # the request being answered (each runs in its own task)
 
 
-class ActivityBridge(PanelRpc, GmRpc, TupperRpc, AudioRpc, CinemaRpc, FxRpc, QuickRpc, MobsRpc, StaffRpc, LookRpc, AgendaRpc, ResultsRpc, SummaryRpc, CinemaRequestRpc):
+class ActivityBridge(PanelRpc, GmRpc, TupperRpc, AudioRpc, CinemaRpc, FxRpc, QuickRpc, MobsRpc, StaffRpc, LookRpc, AgendaRpc, ResultsRpc, SummaryRpc, CinemaRequestRpc, SceneRpc):
     def __init__(self, hub: Hub, app: Any, pool: Callable[[], Any] | None = None, avatar_file: Path | None = None,
                  prefs_file: Path | None = None, latency_file: Path | None = None, data_dir: Path | None = None,
                  gm_log_file: Path | None = None, values_file: Path | None = None, files: MediaStore | None = None,
@@ -171,6 +172,7 @@ class ActivityBridge(PanelRpc, GmRpc, TupperRpc, AudioRpc, CinemaRpc, FxRpc, Qui
         self.cine_log = CinemaLog(base / "activity_cinema_log.json" if base else None)      # when each cinematic played
         self.summaries = SummaryBook(base / "activity_summaries.json" if base else None)
         self.cinema.on_played = self.cine_log.played
+        self.scenes = SceneBook(base / "activity_scenes.json" if base else None)   # which QTEs come up in each kind of moment (scenes.py)
         self.staff = StaffBook(staff_file if staff_file is not None else (Path(data_dir) / "gm_staff.json" if data_dir else None))   # who is on the team, and with which boxes (staff.py)
 
     # ---- wiring ---------------------------------------------------------------------------------
@@ -188,6 +190,7 @@ class ActivityBridge(PanelRpc, GmRpc, TupperRpc, AudioRpc, CinemaRpc, FxRpc, Qui
         self.hub.loader = self.load_backlog
         self.hub.on_tick = self.push_comps
         self.gm.apply_saved()                        # the numbers the game masters changed in the panel come back after a restart
+        self.apply_scene()                           # the active scene, for the bot's QTEs (scenes.py)
         self.sync_channel()
         try:
             self._state_task = asyncio.get_running_loop().create_task(self._state_loop())
@@ -556,7 +559,7 @@ class ActivityBridge(PanelRpc, GmRpc, TupperRpc, AudioRpc, CinemaRpc, FxRpc, Qui
         return {"perms": await self.perms_frame(conn), "prefs": self.prefs.get(conn.user_id) if self.prefs.has(conn.user_id) else None,
                 "calib": self.latency.get(conn.user_id),
                 "comp": comp, "rules": self.rules(), "charAvatars": self.char_avatars(conn.user_id), "audio": self.audio.welcome(),
-                "cine": self.cinema.current(), "mobs": self.mobs.public(), "look": self.look.value, "agendaNext": self.agenda.next_event(),
+                "cine": self.cinema.current(), "mobs": self.mobs.public(), "look": self.look.value, "agendaNext": self.agenda.next_event(), "scene": scene_public(self.scenes.current()),
                 "results": self.results.get(self.results.showing)}
 
     async def save_prefs(self, conn: Conn, raw) -> dict:

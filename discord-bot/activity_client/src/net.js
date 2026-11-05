@@ -5,7 +5,7 @@ import { initSdk, afterAuth, sdk, SdkTimeout } from "./discord.js";
 import { inDiscord, devName, devGm, devHost, base, store } from "./util.js";
 import { SyncEstimator, qualityOf } from "./clock.js";
 import {
-  conn, banner, you, perms, eventLook, agendaNext, agendaRev, resultsScreen, resultsOpen, summariesRev, creqRev, channelName, users, canWrite, version, messages, game, me, characters, charAvatars, activeAs,
+  conn, banner, you, perms, eventLook, agendaNext, agendaRev, resultsScreen, resultsOpen, summariesRev, creqRev, scene, channelName, users, canWrite, version, messages, game, me, characters, charAvatars, activeAs,
   rules, link, comp, calib, prefs, toast, flash, myHp, sayRefused,
 } from "./state.js";
 import { DEFAULT_PREFS, sanitizePrefs, saveLocalPrefs } from "./prefs.js";
@@ -191,6 +191,7 @@ function onFrame(frame, arrival) {
         perms.value = { gm: false, can: [], host: false, ...(frame.perms || {}) };
         eventLook.value = frame.look || null;
         agendaNext.value = frame.agendaNext || null;
+        scene.value = frame.scene || null;
         if (frame.results) { resultsScreen.value = frame.results; resultsOpen.value = true; }
         channelName.value = frame.channel || "Evento";
         users.value = frame.users || [];
@@ -227,6 +228,14 @@ function onFrame(frame, arrival) {
         if (!was || was.id !== frame.screen.id || frame.reopen) resultsOpen.value = true;   // a live edit does not reopen it for who closed it
         resultsScreen.value = frame.screen;
       } else resultsOpen.value = false;
+      break;
+    }
+    case "scene": {                                                        // the game masters switched the scene (which QTEs come up)
+      const was = scene.value;
+      scene.value = frame.scene || null;
+      if (frame.scene && (!was || was.id !== frame.scene.id)) {
+        toast(`Escena: ${frame.scene.name}${frame.scene.parry ? "" : " · sin parry"}${frame.scene.counter ? "" : " · sin contraataque"}`, "info", 4000);
+      }
       break;
     }
     case "creq": creqRev.value++; break;                                  // a cinematic request was sent or decided

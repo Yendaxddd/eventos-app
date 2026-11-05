@@ -520,6 +520,8 @@ class AdvancedQTEBot:
         }
         # Current QTE mode - can be cycled with ALT+R or *qtemode*
         self.current_qte_mode = "standard"  # standard (evade/parry), combo, direction
+        self.qte_scene = None  # the scene the Activity's game masters chose (scenes.py): which QTEs come up on their own
+        self.launch_gesture = None  # set by the Activity: launches its swipe/drag/tap QTEs
         self.qte_mode_options = ["standard", "combo", "direction"]  # Cycles: normal -> combo -> arrows
         self.combo_qte_sequences = [
             ["evade", "parry"],
@@ -1353,6 +1355,33 @@ Your response (1-2 sentences max):"""
         weights = [self.qte_variations[v]["weight"] for v in variations]
         return random.choices(variations, weights=weights)[0]
     
+    def pick_scene_kind(self, scene) -> str:
+        """A kind of QTE drawn from a scene's weights (standard, evade, combo, direction, fake, flick, drag, mash)."""
+        kinds = [k for k, w in scene.get('weights', {}).items() if w > 0]
+        if not kinds:
+            return 'standard'
+        return random.choices(kinds, weights=[scene['weights'][k] for k in kinds])[0]
+
+    def scene_fallback_kind(self, scene) -> str:
+        """For somebody outside the Activity, instead of a swipe/drag/tap QTE: the closest one of the channel."""
+        weights = scene.get('weights', {})
+        if weights.get('direction', 0) > 0:
+            return 'direction'
+        return 'evade' if weights.get('evade', 0) > 0 or weights.get('standard', 0) == 0 else 'standard'
+
+    def scene_parry_ok(self) -> bool:
+        """Can a parry come up in the active scene? (it has the normal QTE or the combo; always, without a scene)"""
+        scene = getattr(self, 'qte_scene', None)
+        if not scene:
+            return True
+        weights = scene.get('weights', {})
+        return weights.get('standard', 0) > 0 or weights.get('combo', 0) > 0
+
+    def scene_counter_ok(self) -> bool:
+        """Does a good evade still earn a counter-attack in the active scene? (always, without a scene)"""
+        scene = getattr(self, 'qte_scene', None)
+        return not scene or bool(scene.get('counter', True))
+
     def cycle_qte_mode(self) -> str:
         """Cycle to next QTE mode and return new mode name"""
         current_index = self.qte_mode_options.index(self.current_qte_mode)
@@ -8543,7 +8572,21 @@ Your response (1-2 sentences max):"""
                 return  # QTE handled, don't actually trigger it
 
             # ========== SELECT QTE VARIATION ==========
-            qte_variation = self.select_qte_variation()
+            # The scene the game masters chose (the Activity's «Escenas») decides; without one, the classic QTE mode does
+            no_parry = False
+            scene = getattr(self, 'qte_scene', None)
+            if scene:
+                qte_variation = self.pick_scene_kind(scene)
+                if qte_variation in ('flick', 'drag', 'mash'):
+                    launch = getattr(self, 'launch_gesture', None)
+                    if launch is not None and await launch(qte_variation, difficulty, target_member):
+                        self.session_stats['qtes_triggered'] += 1
+                        return          # a swipe, drag or tap QTE in the Activity
+                    qte_variation = self.scene_fallback_kind(scene)
+                if qte_variation == 'evade':
+                    qte_variation, no_parry = 'standard', True
+            else:
+                qte_variation = self.select_qte_variation()
             
             # Handle special variation types
             if qte_variation == "combo":
@@ -8568,7 +8611,8 @@ Your response (1-2 sentences max):"""
                 'target': target_member,
                 'participants': {},
                 'responses': set(),
-                'is_targeted': is_targeted  # Flag: this QTE only accepts evade/adapt, not parry
+                'is_targeted': is_targeted,  # Flag: this QTE only accepts evade/adapt, not parry
+                'no_parry': no_parry  # the scene has no parry: evade only (no Black Flash)
             }
 
             self.session_stats['qtes_triggered'] += 1
@@ -8762,7 +8806,8 @@ Your response (1-2 sentences max):"""
                 'target': player,
                 'participants': {},
                 'responses': set(),
-                'batch_mode': True  # Mark as batch QTE
+                'batch_mode': True,  # Mark as batch QTE
+                'no_parry': not self.scene_parry_ok()  # a chase or a dodge scene: evade only
             }
             
             self.player_current_qte[user_id] = qte_id
@@ -9367,7 +9412,7 @@ Your response (1-2 sentences max):"""
                         # Enable counter window if evaded fast enough OR has guaranteed_counter OR has Soul Manipulator
                         has_guaranteed_counter = mirror_effects.get('guaranteed_counter', False)
                         soul_manipulator_active = self.player_stats.get(user_id, {}).get('soul_manipulator_active', False)
-                        if response_time < self.counter_window or has_guaranteed_counter or soul_manipulator_active:
+                        if self.scene_counter_ok() and (response_time < self.counter_window or has_guaranteed_counter or soul_manipulator_active):
                             await self.send_success_with_counter(channel, message.author.mention, response_time, user_id, qte_id, difficulty)
                             if has_guaranteed_counter:
                                 console.print(f"[yellow]⚡🪞 COUNTER ENABLED (Mirror Shard guaranteed) for {message.author.name}[/yellow]")
@@ -9404,6 +9449,11 @@ Your response (1-2 sentences max):"""
                         return True
 
                 elif '*parry*' in content:
+                    # A scene without parry (a chase, a dodge): this QTE is evade only
+                    if qte_data.get('no_parry'):
+                        await self.feedback(user_id, "scene_no_parry", f"🏃 {message.author.mention} **No parry here!** Use *evade*")
+                        return False
+
                     # Check parry cooldown from BF chain
                     if user_id in self.player_parry_cooldown:
                         if time.time() < self.player_parry_cooldown[user_id]:
@@ -9726,7 +9776,7 @@ Your response (1-2 sentences max):"""
                     
                     # Enable counter window if evaded fast enough OR has guaranteed_counter
                     has_guaranteed_counter = mirror_effects.get('guaranteed_counter', False)
-                    if response_time < self.counter_window or has_guaranteed_counter:
+                    if self.scene_counter_ok() and (response_time < self.counter_window or has_guaranteed_counter):
                         await self.send_success_with_counter(channel, message.author.mention, response_time, user_id, qte_id, difficulty)
                         if has_guaranteed_counter:
                             console.print(f"[yellow]⚡🪞 COUNTER ENABLED (Mirror Shard guaranteed) for {message.author.name}[/yellow]")

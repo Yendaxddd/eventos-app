@@ -227,3 +227,20 @@
 .creq-review, .creq-note { display: block; margin: 4px 0 0; font-size: .8rem; color: var(--text-dim); font-style: italic; }
 .creq-gm { display: flex; flex-direction: column; gap: var(--sp-2); padding: var(--sp-3); border-radius: var(--r-md); background: var(--surface); border: 1px solid var(--line-soft); }
 .creq-gm + .creq-gm { margin-top: var(--sp-2); }
+
+/* ── Scenes (which QTEs come up) ─────────────────────────────────────────────────────────────────────────────────── */
+.scene-chip { display: inline-flex; align-items: center; gap: 6px; max-width: 100%; padding: 3px 10px 3px 8px; border-radius: 999px; font-size: .78rem;
+  background: color-mix(in srgb, var(--scene, var(--primary)) 16%, var(--surface)); border: 1px solid color-mix(in srgb, var(--scene, var(--primary)) 45%, transparent); }
+.scene-chip i { width: 8px; height: 8px; border-radius: 50%; background: var(--scene, var(--primary)); flex: none; }
+.scene-chip b { white-space: nowrap; }
+.scene-chip small { color: var(--text-dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.me-card > .scene-chip { margin-bottom: var(--sp-2); }
+.scene-chip.compact { font-size: .7rem; padding: 1px 8px 1px 6px; align-self: flex-start; }
+.scene-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: var(--sp-2); }
+.scene-card { position: relative; display: flex; flex-direction: column; gap: 4px; text-align: left; padding: var(--sp-3); border-radius: var(--r-md);
+  background: var(--surface); border: 1px solid var(--line-soft); border-left: 4px solid var(--scene, var(--primary)); cursor: pointer; color: inherit; font: inherit; }
+.scene-card[aria-pressed="true"] { background: color-mix(in srgb, var(--scene, var(--primary)) 14%, var(--surface)); border-color: var(--scene, var(--primary)); }
+.scene-card .faint { font-size: .75rem; }
+.scene-kinds { display: flex; flex-wrap: wrap; gap: 4px; }
+.scene-kinds span { font-size: .68rem; padding: 1px 6px; border-radius: 6px; background: var(--surface-2, var(--line-soft)); }
+.scene-weights { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: var(--sp-2); }
